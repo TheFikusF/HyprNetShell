@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="wlr_layer_shell_unstable_v1">
+  <copyright>
+    Copyright 2017 Drew DeVault
+
+    Permission to use, copy, modify, distribute, and sell this software and its
+    documentation for any purpose is hereby granted without fee, provided that
+    the above copyright notice appear in all copies and that both that copyright
+    notice and this permission notice appear in supporting documentation.
+  </copyright>
+
+  <interface name="xdg_popup" version="1">
+    <description summary="minimal xdg_popup declaration for protocol generation">
+      This project does not create popups, but layer-shell v1 includes a
+      get_popup request that references xdg_popup. Declaring the interface keeps
+      generated request opcodes compatible without vendoring full xdg-shell.
+    </description>
+  </interface>
+
+  <interface name="zwlr_layer_shell_v1" version="5">
+    <description summary="create surfaces that are layers of the desktop">
+      Clients can use this interface to assign the surface_layer role to
+      wl_surfaces. Such surfaces are rendered above or below normal application
+      windows by the compositor and can reserve exclusive screen space.
+    </description>
+
+    <request name="get_layer_surface">
+      <arg name="id" type="new_id" interface="zwlr_layer_surface_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="output" type="object" interface="wl_output" allow-null="true"/>
+      <arg name="layer" type="uint" enum="layer"/>
+      <arg name="namespace" type="string"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+
+    <enum name="layer">
+      <entry name="background" value="0"/>
+      <entry name="bottom" value="1"/>
+      <entry name="top" value="2"/>
+      <entry name="overlay" value="3"/>
+    </enum>
+  </interface>
+
+  <interface name="zwlr_layer_surface_v1" version="5">
+    <description summary="layer metadata interface">
+      An interface that may be implemented by a wl_surface for surfaces that
+      should be placed into a compositor layer.
+    </description>
+
+    <request name="set_size">
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+    </request>
+
+    <request name="set_anchor">
+      <arg name="anchor" type="uint" enum="anchor"/>
+    </request>
+
+    <request name="set_exclusive_zone">
+      <arg name="zone" type="int"/>
+    </request>
+
+    <request name="set_margin">
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+      <arg name="left" type="int"/>
+    </request>
+
+    <request name="set_keyboard_interactivity">
+      <arg name="keyboard_interactivity" type="uint"/>
+    </request>
+
+    <request name="get_popup">
+      <arg name="popup" type="object" interface="xdg_popup"/>
+    </request>
+
+    <request name="ack_configure">
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="set_layer" since="2">
+      <arg name="layer" type="uint"/>
+    </request>
+
+    <request name="set_exclusive_edge" since="5">
+      <arg name="edge" type="uint" enum="anchor"/>
+    </request>
+
+    <event name="configure">
+      <arg name="serial" type="uint"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+    </event>
+
+    <event name="closed"/>
+
+    <enum name="anchor" bitfield="true">
+      <entry name="top" value="1"/>
+      <entry name="bottom" value="2"/>
+      <entry name="left" value="4"/>
+      <entry name="right" value="8"/>
+    </enum>
+
+    <enum name="keyboard_interactivity">
+      <entry name="none" value="0"/>
+      <entry name="exclusive" value="1"/>
+      <entry name="on_demand" value="2" since="4"/>
+    </enum>
+
+    <enum name="error">
+      <entry name="invalid_surface_state" value="0"/>
+      <entry name="invalid_size" value="1"/>
+      <entry name="invalid_anchor" value="2"/>
+      <entry name="invalid_keyboard_interactivity" value="3" since="4"/>
+      <entry name="invalid_exclusive_edge" value="4" since="5"/>
+    </enum>
+  </interface>
+</protocol>

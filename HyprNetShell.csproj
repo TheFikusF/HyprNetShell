@@ -1,0 +1,67 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <DefineConstants Condition="'$(PublishAot)' == 'true'">$(DefineConstants);HYPRNETSHELL_STATIC_NATIVE</DefineConstants>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+        <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">linux-x64</RuntimeIdentifier>
+        <SelfContained>true</SelfContained>
+        <StripSymbols>false</StripSymbols>
+        <NativeDebugSymbols>false</NativeDebugSymbols>
+        <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' == 'true'">
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="Core/**/*.cs" />
+        <Compile Remove="GUI/**/*.cs" />
+        <Compile Remove="Rendering/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="Core/HyprNetShell.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true'">
+        <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
+        <DirectPInvoke Include="__Internal" />
+        <LinkerArg Include="-lwayland-client" />
+        <LinkerArg Include="-lwayland-egl" />
+        <LinkerArg Include="-lEGL" />
+    </ItemGroup>
+
+    <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+        <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot; --reconfigure" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
+        <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot;" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
+        <Exec Command="meson compile -C &quot;$(MSBuildProjectDirectory)/Native/build&quot;" />
+    </Target>
+
+    <Target Name="RemovePublishDebugArtifacts" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
+        <ItemGroup>
+            <PublishDebugArtifact Include="$(PublishDir)*.pdb" />
+            <PublishDebugArtifact Include="$(PublishDir)*.dbg" />
+        </ItemGroup>
+
+        <Delete Files="@(PublishDebugArtifact)" />
+    </Target>
+
+    <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
+        <ItemGroup>
+            <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
+        </ItemGroup>
+
+        <Copy SourceFiles="@(HyprLayerNativeLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+
+        <Warning Text="Native/build/libhypr_layer.so was not found. Build it with: cd Native &amp;&amp; meson setup build &amp;&amp; meson compile -C build" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
+    </Target>
+
+</Project>

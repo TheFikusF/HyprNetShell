@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/GUI/">
+    <Project Path="GUI/HyprNetShell.GUI.csproj" />
+  </Folder>
+  <Folder Name="/Rendering/" />
+  <Project Path="Core\HyprNetShell.Core.csproj" />
+  <Project Path="HyprNetShell.csproj" />
+  <Project Path="Rendering\HyprNetShell.Rendering.csproj" />
+</Solution>
