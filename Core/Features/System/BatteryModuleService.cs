@@ -11,26 +11,16 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
         var capacityText = Read(Path.Combine(basePath, "capacity"));
         if (!int.TryParse(capacityText, out var capacity))
         {
+            state.Battery = BatterySnapshot.Empty;
             return ValueTask.CompletedTask;
         }
 
         var status = Read(Path.Combine(basePath, "status"));
-        var moduleState = capacity <= 15 && !status.Equals("Charging", StringComparison.OrdinalIgnoreCase)
-            ? ModuleState.Critical
-            : status.Equals("Charging", StringComparison.OrdinalIgnoreCase)
-                ? ModuleState.Active
-                : ModuleState.Normal;
-
-        state.AddRightModule(new BarModuleSnapshot(
-            "battery",
-            $"BAT {capacity}%",
-            moduleState,
-            new PopupSnapshot("battery", "Battery", [
-                new PopupRowSnapshot($"Device: {device}", PopupRowKind.Header),
-                new PopupRowSnapshot($"Capacity: {capacity}%"),
-                new PopupRowSnapshot($"Status: {(string.IsNullOrWhiteSpace(status) ? "Unknown" : status)}"),
-            ]),
-            Percentage: Math.Clamp(capacity, 0, 100)));
+        state.Battery = new BatterySnapshot(
+            true,
+            device,
+            Math.Clamp(capacity, 0, 100),
+            string.IsNullOrWhiteSpace(status) ? "Unknown" : status);
 
         return ValueTask.CompletedTask;
     }

@@ -24,6 +24,7 @@
     <ItemGroup>
         <Compile Remove="Core/**/*.cs" />
         <Compile Remove="GUI/**/*.cs" />
+        <Compile Remove="Generators/**/*.cs" />
         <Compile Remove="Rendering/**/*.cs" />
     </ItemGroup>
 

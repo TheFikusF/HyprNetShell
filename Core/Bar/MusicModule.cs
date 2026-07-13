@@ -23,10 +23,12 @@ internal sealed class MusicModule(
     private const int IMAGE_SIZE = 34;
     private const int POPUP_WIDTH = 512;
     private const int POPUP_IMAGE_SIZE = 128;
+
     private readonly ModulesCommon.NodeWithPopup _node = new()
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };
+
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
     private readonly RefBool _progressDragging = new();
     private readonly SeekUpdateQueue _seekQueue = new();
@@ -195,7 +197,7 @@ internal sealed class MusicModule(
                     18,
                     ratio,
                     theme.Panel,
-                    music.Playing ? theme.Active : theme.Muted,
+                    music.Playing ? Color.Orange : Color.Orange with { A = 0.8f },
                     theme.Text,
                     value => Seek(music, value),
                     _progressDragging),

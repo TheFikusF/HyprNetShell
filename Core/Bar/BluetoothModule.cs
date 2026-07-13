@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -28,16 +29,25 @@ internal sealed class BluetoothModule(
     private Node BuildStateModule(BluetoothSnapshot bluetooth)
     {
         var connectedCount = bluetooth.Devices.Count(EffectiveConnected);
-        var label = !bluetooth.Available ? "󰂲" : connectedCount == 0 ? "󰂯" : $"󰂱 {connectedCount}";
+        var icon = !bluetooth.Available
+            ? Icons.BluetoothOff
+            : connectedCount == 0 ? Icons.Bluetooth : Icons.BluetoothConnected;
         return new BoxNode
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left: false, right: false) with
             {
-                BorderWidth = new Insets(1, theme.BorderWidth)
+                BorderWidth = new Insets(1, theme.BorderWidth),
+                Spacing = 6,
             },
-            Children = [new TextNode(label, 14.0f, theme.Text)],
+            Children =
+            [
+                new ImageNode(icon, 18, 18, theme.Text),
+                ..(connectedCount > 0
+                    ? new Node[] { new TextNode(connectedCount.ToString(), 13.0f, theme.Text) }
+                    : Array.Empty<Node>()),
+            ],
         };
     }
 

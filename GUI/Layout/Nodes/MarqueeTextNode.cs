@@ -5,8 +5,8 @@ namespace HyprNetShell.GUI.Layout.Nodes;
 
 public class MarqueeTextNode : Node
 {
-    private const int GapCharacters = 6;
-    private const double CharactersPerSecond = 8.0;
+    private const int GAP_CHARACTERS = 6;
+    private const double CHARACTERS_PER_SECOND = 8.0;
 
     private readonly string _text;
     private readonly float _fontSize;
@@ -44,9 +44,9 @@ public class MarqueeTextNode : Node
             return _text;
         }
 
-        var gap = new string(' ', GapCharacters);
+        var gap = new string(' ', GAP_CHARACTERS);
         var tape = _text + gap;
-        var offset = (int)(Environment.TickCount64 / 1000.0 * CharactersPerSecond) % tape.Length;
+        var offset = (int)(Environment.TickCount64 / 1000.0 * CHARACTERS_PER_SECOND) % tape.Length;
         return string.Create(_visibleCharacters, (tape, offset), static (span, state) =>
         {
             var (source, start) = state;

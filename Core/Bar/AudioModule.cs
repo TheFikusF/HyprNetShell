@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -31,19 +32,24 @@ internal sealed class AudioModule(
     private Node BuildStateModule(AudioSnapshot audio)
     {
         var output = audio.ActiveOutput;
-        var label = !audio.Available || output is null
-            ? "🔇"
-            : EffectiveMuted(output) || EffectiveVolume(output) == 0
-                ? "🔇"
-                : $"🔊 {EffectiveVolume(output)}%";
+        var volume = output is null ? 0 : EffectiveVolume(output);
+        var icon = !audio.Available || output is null
+            ? Icons.VolumeOff
+            : EffectiveMuted(output) ? Icons.VolumeMuted : VolumeIcon(volume);
 
         return new BoxNode(75)
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel, right: false),
-            Children = [new TextNode(label, 14.0f, theme.Text)],
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel, right: false) with { Spacing = 6 },
+            Children =
+            [
+                new ImageNode(icon, 18, 18, theme.Text),
+                ..(output is not null
+                    ? new Node[] { new TextNode($"{volume}%", 13.0f, theme.Text) }
+                    : Array.Empty<Node>()),
+            ],
         };
     }
 
@@ -135,7 +141,7 @@ internal sealed class AudioModule(
                             theme.Panel,
                             device.Active ? null : () => _ = AudioModuleService.SetDefaultAsync(device.Id)),
                         BuildActionButton(
-                            EffectiveMuted(device) ? "🔇" : "🔊",
+                            EffectiveMuted(device) ? Icons.VolumeMuted : VolumeIcon(volume),
                             EffectiveMuted(device) ? theme.Warning : theme.Panel,
                             () => SetMuted(device, !EffectiveMuted(device))),
                     ]
@@ -178,6 +184,29 @@ internal sealed class AudioModule(
             },
             Children = [new TextNode(icon, 13.0f, Color.FromRgb(255, 255, 255))],
         };
+
+    private static Node BuildActionButton(SvgAsset icon, Color fill, Action? onClick) =>
+        new BoxNode(30, 28)
+        {
+            Direction = Direction.Horizontal,
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = onClick,
+            Style = new Style
+            {
+                BackgroundColor = fill,
+                BorderRadius = 6,
+            },
+            Children = [new ImageNode(icon, 16, 16, Color.White)],
+        };
+
+    private static SvgAsset VolumeIcon(int volume) =>
+        Icons.VolumeLevels[volume switch
+        {
+            <= 0 => 0,
+            <= 50 => 1,
+            _ => 2,
+        }];
 
     private Node BuildPlainRow(string text) =>
         new BoxNode

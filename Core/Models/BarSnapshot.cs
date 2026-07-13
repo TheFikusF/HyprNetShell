@@ -1,34 +1,20 @@
 namespace HyprNetShell.Core.Models;
 
 public sealed record BarSnapshot(
-    IReadOnlyList<WorkspaceSnapshot> Workspaces,
-    IReadOnlyList<MonitorWorkspaceSnapshot> MonitorWorkspaces,
-    string FocusedTitle,
-    string FocusedClassName,
-    int FocusedWorkspaceId,
     SystemStatsSnapshot SystemStats,
     NetworkSnapshot Network,
     AudioSnapshot Audio,
     BluetoothSnapshot Bluetooth,
+    BatterySnapshot Battery,
     NotificationsSnapshot Notifications,
-    IReadOnlyList<BarModuleSnapshot> CenterModules,
-    IReadOnlyList<BarModuleSnapshot> RightModules,
-    IReadOnlyList<TrayItemSnapshot> TrayItems,
-    PopupSnapshot? OpenPopup)
+    IReadOnlyList<TrayItemSnapshot> TrayItems)
 {
     public static BarSnapshot Empty { get; } = new(
-        [],
-        [],
-        "Desktop",
-        "",
-        1,
         SystemStatsSnapshot.Empty,
         NetworkSnapshot.Empty,
         AudioSnapshot.Empty,
         BluetoothSnapshot.Empty,
+        BatterySnapshot.Empty,
         NotificationsSnapshot.Empty,
-        [],
-        [],
-        [],
-        null);
+        []);
 }

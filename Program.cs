@@ -3,7 +3,7 @@ using HyprNetShell.Core.Bar;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 
-const int BAR_HEIGHT = 46;
+const int BAR_HEIGHT = 52;
 
 try
 {

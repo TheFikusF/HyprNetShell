@@ -2,6 +2,9 @@
   <Folder Name="/GUI/">
     <Project Path="GUI/HyprNetShell.GUI.csproj" />
   </Folder>
+  <Folder Name="/Generators/">
+    <Project Path="Generators/HyprNetShell.Generators.csproj" />
+  </Folder>
   <Folder Name="/Rendering/" />
   <Project Path="Core\HyprNetShell.Core.csproj" />
   <Project Path="HyprNetShell.csproj" />

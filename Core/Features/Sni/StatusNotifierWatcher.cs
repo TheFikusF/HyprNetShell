@@ -279,9 +279,32 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     private async Task<bool> HasItemInterfaceAsync(string busName, string objectPath)
     {
         var xml = await TryIntrospectAsync(busName, objectPath);
-        if (xml is null) return false;
-        try { return XDocument.Parse(xml).Descendants("interface").Any(IsItemInterface); }
-        catch { return false; }
+        if (xml is not null)
+        {
+            try
+            {
+                if (XDocument.Parse(xml).Descendants("interface").Any(IsItemInterface)) return true;
+            }
+            catch { }
+        }
+
+        // Electron/Chromium tray items can expose the SNI properties while
+        // returning empty or incomplete introspection XML. Probe GetAll just
+        // like the reference implementation so those items are not rejected.
+        foreach (var itemInterface in new[] { "org.kde.StatusNotifierItem", "org.ayatana.NotificationItem" })
+        {
+            try
+            {
+                var properties = await Dbus.CallAsync(
+                    _connection, busName, objectPath, "org.freedesktop.DBus.Properties", "GetAll",
+                    reader => reader.ReadDictionaryOfStringToVariantValue(),
+                    "s", (ref MessageWriter writer) => writer.WriteString(itemInterface))
+                    .WaitAsync(TimeSpan.FromSeconds(2));
+                if (properties.Count > 0) return true;
+            }
+            catch { }
+        }
+        return false;
     }
 
     private static bool IsItemInterface(XElement element) =>

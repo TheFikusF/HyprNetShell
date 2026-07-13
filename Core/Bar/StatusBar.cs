@@ -32,12 +32,15 @@ public sealed class StatusBar : IDisposable
     private readonly NetworkModule _networkModule;
     private readonly AudioModule _audioModule;
     private readonly BluetoothModule _bluetoothModule;
+    private readonly BatteryModule _batteryModule;
     private readonly CenterModule _centerModule;
     private readonly MusicModule _musicModule;
     private readonly TrayModule _trayModule;
     private readonly SniTrayService _trayService = new();
 
     private readonly List<IBarDataService> _dataServices;
+
+    private readonly Insets _layoutInsets = new Insets(6, 6, 0, 6);
 
     private BarSnapshot _snapshot = BarSnapshot.Empty;
     private DateTime _lastRefresh = DateTime.MinValue;
@@ -62,6 +65,7 @@ public sealed class StatusBar : IDisposable
         _networkModule = new NetworkModule(() => _snapshot.Network, StatusBarTheme.Default);
         _audioModule = new AudioModule(() => _snapshot.Audio, StatusBarTheme.Default);
         _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, StatusBarTheme.Default);
+        _batteryModule = new BatteryModule(() => _snapshot.Battery, StatusBarTheme.Default);
         _centerModule = new CenterModule(() => _snapshot.Notifications, StatusBarTheme.Default);
         _musicModule = new MusicModule(() => _musicService.Snapshot, StatusBarTheme.Default);
         _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, StatusBarTheme.Default);
@@ -88,9 +92,7 @@ public sealed class StatusBar : IDisposable
 
     private void DrawLeftRight()
     {
-        var theme = StatusBarTheme.Default;
-
-        using var layout = new Layout(_renderer, _renderer.Width, _barHeight, new Style { Padding = new Insets(6, 0) });
+        using var layout = new Layout(_renderer, _renderer.Width, _barHeight, new Style { Padding = _layoutInsets });
         layout.AddNode(new BoxNode
         {
             Direction = Direction.Horizontal,
@@ -118,16 +120,15 @@ public sealed class StatusBar : IDisposable
                 },
                 _systemStatsModule.Draw(),
                 _languageModule.Draw(),
-                .._snapshot.RightModules
-                    .Select(x => BuildModule(x, 14.0f, theme.Panel, theme)),
-                    _trayModule.Draw(),
+                _batteryModule.Draw(),
+                _trayModule.Draw(),
             ],
         });
     }
 
     private void DrawCenter()
     {
-        using var layout = new Layout(_renderer, _renderer.Width, _barHeight, new Style { Padding = new Insets(6, 0) });
+        using var layout = new Layout(_renderer, _renderer.Width, _barHeight, new Style { Padding = _layoutInsets });
         layout.AddNode(_centerModule.Draw());
     }
 
@@ -161,57 +162,4 @@ public sealed class StatusBar : IDisposable
         }
     }
 
-    private static Node BuildTextModule(string text, float fontSize, Color fill, StatusBarTheme theme) =>
-        new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, fill),
-            Children =
-            {
-                new TextNode(text, fontSize, theme.Text),
-            },
-        };
-
-    private static Node BuildModule(BarModuleSnapshot module, float fontSize, Color fill, StatusBarTheme theme)
-    {
-        if (module.Id == "battery" && module.Percentage is { } percentage)
-        {
-            var (left, right) = BatteryGradient(percentage);
-            return new GradientBoxNode(left, right, static () => 0.0f)
-            {
-                Direction = Direction.Horizontal,
-                VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(theme, fill),
-                Children = { new TextNode(module.Label, fontSize, theme.Text) },
-            };
-        }
-
-        if (string.IsNullOrWhiteSpace(module.ImagePath))
-        {
-            return BuildTextModule(module.Label, fontSize, fill, theme);
-        }
-
-        return new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, fill) with { Spacing = 8 },
-            Children =
-            {
-                new ImageNode(module.ImagePath, 22, 22),
-                new TextNode(module.Label, fontSize, theme.Text),
-            },
-        };
-    }
-
-    private static (Color Left, Color Right) BatteryGradient(int percentage)
-    {
-        var red = Color.FromRgb(231, 76, 60, 0.92f);
-        var green = Color.FromRgb(46, 204, 113, 0.92f);
-        var charge = Math.Clamp(percentage, 0, 100);
-        return charge < 50
-            ? (Color.Lerp(red, green, charge / 50.0f), red)
-            : (green, Color.Lerp(red, green, (charge - 50) / 50.0f));
-    }
 }

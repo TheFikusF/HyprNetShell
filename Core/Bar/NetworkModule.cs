@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
@@ -35,17 +36,27 @@ internal sealed class NetworkModule(
         return _node.Draw([BuildStateModule(network)], () => BuildPopup(network));
     }
 
-    private Node BuildStateModule(NetworkSnapshot network) =>
-        new BoxNode
+    private Node BuildStateModule(NetworkSnapshot network)
+    {
+        var icon = !network.Connected
+            ? Icons.WifiOff
+            : network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
+                ? Icons.WifiStrength[^1]
+                : network.Type.Equals("ethernet", StringComparison.OrdinalIgnoreCase)
+                    ? Icons.Ethernet
+                    : Icons.Globe;
+
+        return new BoxNode
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left: false),
             Children =
             [
-                new TextNode(BuildStateLabel(network), 14.0f, theme.Text),
+                new ImageNode(icon, 18, 18, theme.Text),
             ],
         };
+    }
 
     private BoxNode BuildPopup(NetworkSnapshot network) =>
         new(360)
@@ -142,9 +153,9 @@ internal sealed class NetworkModule(
             },
             Children =
             [
-                new TextNode(wifi.Active ? "✅" : "🛜", 14.0f, theme.Text),
+                wifi.Active ? new ImageNode(Icons.Check, 14, 14, theme.Text) : new BoxNode(16, 16),
+                new ImageNode(WifiIcon(wifi.Signal), 16, 16, theme.Text),
                 new TextNode(Trim(ssid, 22), 14.0f, theme.Text),
-                new TextNode(signal, 14.0f, theme.Text),
                 new TextNode(security, 14.0f, theme.Text),
             ],
         };
@@ -169,7 +180,7 @@ internal sealed class NetworkModule(
             },
             Children =
             [
-                new TextNode("📋", 14.0f, theme.Text),
+                new ImageNode(Icons.Copy, 16, 16, theme.Text),
                 new TextNode(ipAddress, 14.0f, theme.Text),
             ],
         };
@@ -349,16 +360,16 @@ internal sealed class NetworkModule(
         return state;
     }
 
-    private static string BuildStateLabel(NetworkSnapshot network)
+    private static SvgAsset WifiIcon(int? signal)
     {
-        if (!network.Connected)
+        var index = signal switch
         {
-            return "📴";
-        }
-
-        return network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-            ? "🛜"
-            : "🌐";
+            null or <= 25 => 0,
+            <= 50 => 1,
+            <= 75 => 2,
+            _ => 3,
+        };
+        return Icons.WifiStrength[index];
     }
 
     private static string Trim(string text, int maxLength) =>

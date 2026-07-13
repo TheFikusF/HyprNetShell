@@ -41,7 +41,7 @@ internal sealed class TrayModule(
 
         var icon = string.IsNullOrWhiteSpace(item.IconPath)
             ? ModulesCommon.BuildBadge(ModulesCommon.AppBadge(item.Title), 14.0f, theme.Panel, theme)
-            : new ImageNode(item.IconPath, 20, 20);
+            : new ImageNode(item.IconPath, 18, 18);
 
         return node.Draw([
             new BoxNode(32, 32)
@@ -51,7 +51,7 @@ internal sealed class TrayModule(
                 VerticalAlignment = ItemsAlignment.Center,
                 Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
                 {
-                    Padding = new Insets(4),
+                    Padding = new Insets(4, right ? 8 : 4, 4, left ? 8 : 4),
                 },
                 Children = [icon],
             }

@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -44,34 +45,45 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Stat
             [
                 new BoxNode(WIDTH)
                 {
+                    Direction = Direction.Horizontal,
+                    VerticalAlignment = ItemsAlignment.Center,
                     HorizontalAlignment = ItemsAlignment.Center,
-                    Style = ModulesCommon.ModuleStyle(theme, ColorFromCpuPercent(stats.CpuPercent ?? 0), right: false),
+                    Style = ModulesCommon.ModuleStyle(
+                        theme, ColorFromCpuPercent(stats.CpuPercent ?? 0), right: false) with { Spacing = 6 },
                     Children =
                     [
-                        new TextNode($"⚙ {FormatPercent(stats.CpuPercent)}", 14.0f, theme.Text),
+                        new ImageNode(Icons.Cpu, 17, 17, theme.Text),
+                        new TextNode(FormatPercent(stats.CpuPercent), 14.0f, theme.Text),
                     ]
                 },
                 new BoxNode(WIDTH)
                 {
+                    Direction = Direction.Horizontal,
+                    VerticalAlignment = ItemsAlignment.Center,
                     HorizontalAlignment = ItemsAlignment.Center,
                     Style =
                         ModulesCommon.ModuleStyle(theme, ColorFromRamPercent(stats.RamPercent ?? 0), false, false) with
                         {
                             BorderWidth = new Insets(1, theme.BorderWidth),
+                            Spacing = 6,
                         },
                     Children =
                     [
-                        new TextNode($"💾 {FormatPercent(stats.RamPercent)}", 14.0f, theme.Text),
+                        new ImageNode(Icons.Memory, 17, 17, theme.Text),
+                        new TextNode(FormatPercent(stats.RamPercent), 14.0f, theme.Text),
                     ]
                 },
                 new BoxNode(WIDTH)
                 {
+                    Direction = Direction.Horizontal,
+                    VerticalAlignment = ItemsAlignment.Center,
                     HorizontalAlignment = ItemsAlignment.Center,
                     Style = ModulesCommon.ModuleStyle(theme, ColorFromTempPercent(stats.TemperatureCelsius ?? 0),
-                        left: false),
+                        left: false) with { Spacing = 6 },
                     Children =
                     [
-                        new TextNode($"🌡 {FormatTemperature(stats.TemperatureCelsius)}", 14.0f, theme.Text),
+                        new ImageNode(Icons.Temperature, 17, 17, theme.Text),
+                        new TextNode(FormatTemperature(stats.TemperatureCelsius), 14.0f, theme.Text),
                     ]
                 }
             ],

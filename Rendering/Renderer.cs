@@ -1,6 +1,8 @@
 using HyprNetShell.Rendering.Primitives;
 using ImageMagick;
+using SkiaSharp;
 using Silk.NET.OpenGL;
+using Svg.Skia;
 
 namespace HyprNetShell.Rendering;
 
@@ -16,7 +18,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly uint _textureVbo;
     private readonly int _textureViewportLocation;
     private readonly int _textureLocation;
+    private readonly uint _svgTextureProgram;
+    private readonly int _svgTextureViewportLocation;
+    private readonly int _svgTextureLocation;
+    private readonly int _svgTextureColorLocation;
     private readonly Dictionary<string, ImageTexture> _textures = new(StringComparer.Ordinal);
+    private readonly Dictionary<SvgAsset, uint> _svgTextures = [];
     private readonly FontRenderer _font;
     private bool _disposed;
     private int _frameWidth;
@@ -36,6 +43,11 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _textureProgram = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "texture");
         _textureViewportLocation = _gl.GetUniformLocation(_textureProgram, "uViewport");
         _textureLocation = _gl.GetUniformLocation(_textureProgram, "uTexture");
+        _svgTextureProgram = GlShaders.CreateProgram(
+            _gl, GlShaders.TEXTURED_VERTEX, GlShaders.SVG_TEXTURE_FRAGMENT, "SVG texture");
+        _svgTextureViewportLocation = _gl.GetUniformLocation(_svgTextureProgram, "uViewport");
+        _svgTextureLocation = _gl.GetUniformLocation(_svgTextureProgram, "uTexture");
+        _svgTextureColorLocation = _gl.GetUniformLocation(_svgTextureProgram, "uColor");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -268,6 +280,53 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
     }
 
+    public void DrawImage(SvgAsset asset, Rect rect, Color color)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var texture = GetTexture(asset);
+        if (texture is null)
+        {
+            return;
+        }
+
+        var x = rect.X;
+        var y = rect.Y;
+        var width = rect.Width;
+        var height = rect.Height;
+        Span<float> vertices =
+        [
+            x, y, 0.0f, 0.0f,
+            x + width, y, 1.0f, 0.0f,
+            x + width, y + height, 1.0f, 1.0f,
+            x, y, 0.0f, 0.0f,
+            x + width, y + height, 1.0f, 1.0f,
+            x, y + height, 0.0f, 1.0f,
+        ];
+
+        _gl.UseProgram(_svgTextureProgram);
+        _gl.Uniform2(_svgTextureViewportLocation, (float)_frameWidth, (float)_frameHeight);
+        _gl.Uniform1(_svgTextureLocation, 0);
+        _gl.Uniform4(_svgTextureColorLocation, color.R, color.G, color.B, color.A);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texture.Value);
+        _gl.BindVertexArray(_textureVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _textureVbo);
+        fixed (float* data = vertices)
+        {
+            _gl.BufferData(
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(vertices.Length * sizeof(float)),
+                data,
+                BufferUsageARB.DynamicDraw);
+        }
+
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+    }
+
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
     {
         _gl.UseProgram(_program);
@@ -402,21 +461,98 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
+    private uint? GetTexture(SvgAsset asset)
+    {
+        if (_svgTextures.TryGetValue(asset, out var cached))
+        {
+            return cached;
+        }
+
+        try
+        {
+            var raster = asset.Rasterize();
+            var texture = _gl.GenTexture();
+            _gl.BindTexture(TextureTarget.Texture2D, texture);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+            fixed (byte* data = raster.Pixels.Span)
+            {
+                _gl.TexImage2D(
+                    TextureTarget.Texture2D,
+                    0,
+                    InternalFormat.Rgba,
+                    (uint)raster.Width,
+                    (uint)raster.Height,
+                    0,
+                    PixelFormat.Rgba,
+                    PixelType.UnsignedByte,
+                    data);
+            }
+
+            _svgTextures[asset] = texture;
+            return texture;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static DecodedImage? LoadImage(string path)
+    {
+        return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+               Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
+            ? LoadSvg(path)
+            : LoadRasterImage(path);
+    }
+
+    private static DecodedImage? LoadSvg(string path)
+    {
+        try
+        {
+            using var svg = new SKSvg();
+            var picture = svg.Load(path);
+            if (picture is null || picture.CullRect.Width <= 0 || picture.CullRect.Height <= 0) return null;
+
+            const float maxDimension = 512.0f;
+            var scale = MathF.Min(1.0f, maxDimension / MathF.Max(picture.CullRect.Width, picture.CullRect.Height));
+            using var stream = new MemoryStream();
+            using var colorSpace = SKColorSpace.CreateSrgb();
+            picture.ToImage(
+                stream, SKColors.Transparent, SKEncodedImageFormat.Png, 100, scale, scale,
+                SKColorType.Rgba8888, SKAlphaType.Premul, colorSpace);
+            stream.Position = 0;
+            using var image = new MagickImage(stream);
+            return DecodeMagickImage(image);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static DecodedImage? LoadRasterImage(string path)
     {
         try
         {
             using var image = new MagickImage(path);
-            image.Format = MagickFormat.Rgba;
-            var pixels = image.ToByteArray();
-            return pixels.Length == image.Width * image.Height * 4
-                ? new DecodedImage((int)image.Width, (int)image.Height, pixels)
-                : null;
+            return DecodeMagickImage(image);
         }
         catch (MagickException)
         {
             return null;
         }
+    }
+
+    private static DecodedImage? DecodeMagickImage(MagickImage image)
+    {
+        image.Format = MagickFormat.Rgba;
+        var pixels = image.ToByteArray();
+        return pixels.Length == image.Width * image.Height * 4
+            ? new DecodedImage((int)image.Width, (int)image.Height, pixels)
+            : null;
     }
 
     public void Dispose()
@@ -432,9 +568,14 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DeleteVertexArray(_textureVao);
         _gl.DeleteProgram(_program);
         _gl.DeleteProgram(_textureProgram);
+        _gl.DeleteProgram(_svgTextureProgram);
         foreach (var texture in _textures.Values)
         {
             _gl.DeleteTexture(texture.Id);
+        }
+        foreach (var texture in _svgTextures.Values)
+        {
+            _gl.DeleteTexture(texture);
         }
         _font.Dispose();
         _disposed = true;
