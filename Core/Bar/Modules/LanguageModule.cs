@@ -2,10 +2,9 @@ using System.Diagnostics;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class LanguageModule : IDrawableModule
 {
@@ -13,17 +12,18 @@ internal sealed class LanguageModule : IDrawableModule
 
     private static readonly TimeSpan ChangePopupDuration = TimeSpan.FromSeconds(2);
 
-    private readonly IReadOnlyDictionary<string, string> _aliases = new Dictionary<string, string>
-    {
-        ["English (US)"] = "🇺🇸🦅🗽",
-        ["Ukrainian"] = "🇺🇦 UKR",
-        ["Russian"] = "🛡 RVC"
-    };
+    private readonly IReadOnlyDictionary<string, string> _aliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["English (US)"] = "🇺🇸🦅🗽",
+            ["Ukrainian"] = "🇺🇦 UKR",
+            ["Russian"] = "🛡 RVC"
+        };
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _languagesRowStates = [];
 
     private readonly HyprlandService _hyprland;
-    private readonly StatusBarTheme _theme;
+    private readonly Theme _theme;
     private readonly ModulesCommon.NodeWithPopup _node;
 
     private string _lastLayoutName = "";
@@ -31,7 +31,7 @@ internal sealed class LanguageModule : IDrawableModule
 
     public bool IsShown => _showUntil > DateTime.UtcNow;
 
-    public LanguageModule(HyprlandService hyprland, StatusBarTheme theme)
+    public LanguageModule(HyprlandService hyprland, Theme theme)
     {
         _hyprland = hyprland;
         _theme = theme;
@@ -69,14 +69,7 @@ internal sealed class LanguageModule : IDrawableModule
                     CreateNoWindow = true,
                     ArgumentList = { "switchxkblayout", snapshot.KeyboardName, "next" },
                 }),
-                Style = new Style
-                {
-                    BackgroundColor = Color.Lerp(Color.FromHex("#0CC665"), Color.Black, 0.8f) with { A = 0.8f },
-                    BorderColor = _theme.Border,
-                    BorderRadius = _theme.Radius,
-                    BorderWidth = _theme.BorderWidth,
-                    Padding = new Insets(8, 6)
-                },
+                Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
                 Children =
                 [
                     new TextNode(alias, 14.0f, _theme.Text),
@@ -99,7 +92,7 @@ internal sealed class LanguageModule : IDrawableModule
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),

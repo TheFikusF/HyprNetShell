@@ -71,11 +71,13 @@ public static class ModulesCommon
 
     private static readonly AppIconResolver IconResolver = new();
 
+    public static Color ToBackground(Theme theme, Color color) => Color.Lerp(theme.Panel, color, 0.2f) with { A = 0.75f };
+
     public static Node BuildDivider(Color color, int? width = null, int height = 24) =>
         new BoxNode(width, height)
         {
             Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Spread,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             Children =
             [
@@ -86,19 +88,19 @@ public static class ModulesCommon
             ]
         };
 
-    public static Node BuildBadge(string text, float fontSize, Color fill, StatusBarTheme theme)
+    public static Node BuildBadge(string text, float fontSize, Color fill, Theme theme)
     {
         return new BoxNode
         {
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.Radius) },
+            Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.BorderRadius) },
             Children = { new TextNode(text, fontSize, theme.Text) },
         };
     }
 
-    public static Node BuildAppBadge(string className, int iconSize, Color fill, StatusBarTheme theme)
+    public static Node BuildAppBadge(string className, int iconSize, Color fill, Theme theme)
     {
         var imagePath = IconResolver.TryResolve(className);
         if (imagePath is null)
@@ -109,14 +111,14 @@ public static class ModulesCommon
         return new ImageNode(imagePath, iconSize, iconSize);
     }
 
-    public static Style ModuleStyle(StatusBarTheme theme, Color fill, bool left = true, bool right = true)
+    public static Style ModuleStyle(Theme theme, Color fill, bool left = true, bool right = true)
     {
         return new Style
         {
             BackgroundColor = fill,
             BorderColor = theme.Border,
-            BorderRadius = new BorderRadius(left ? theme.Radius : 0, right ? theme.Radius : 0,
-                right ? theme.Radius : 0, left ? theme.Radius : 0),
+            BorderRadius = new BorderRadius(left ? theme.BorderRadius : 0, right ? theme.BorderRadius : 0,
+                right ? theme.BorderRadius : 0, left ? theme.BorderRadius : 0),
             BorderWidth = new Insets(theme.BorderWidth, right ? theme.BorderWidth : 0,
                 theme.BorderWidth, left ? theme.BorderWidth : 0),
             Padding = new Insets(8, 6)

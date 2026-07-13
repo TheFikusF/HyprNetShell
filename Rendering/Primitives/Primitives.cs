@@ -14,6 +14,7 @@ public readonly record struct Color(float R, float G, float B, float A)
         : throw new FormatException();
 
     public static Color Lighten(Color color, float amount) => PrimitivesMath.Lighten(color, amount);
+    public static Color Darken(Color color, float amount) => PrimitivesMath.Darken(color, amount);
     public static Color Lerp(Color a, Color b, float t) => PrimitivesMath.Lerp(a, b, t);
 
     public static Color LerpSmooth(Color a, Color b, float decay, float dt) =>

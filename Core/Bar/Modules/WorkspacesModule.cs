@@ -1,24 +1,22 @@
-using System.Runtime.CompilerServices;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class WorkspacesModule : IDrawableModule
 {
     private readonly Dictionary<int, ModulesCommon.BoxState> _popupWorkspaceStates = [];
-    private readonly StatusBarTheme _theme;
+    private readonly Theme _theme;
     private readonly Func<bool> _blockPopup;
     private readonly ModulesCommon.NodeWithPopup _node;
     private HyprlandService _hyprland;
     private SuperKeyStateService _superKey;
 
-    public WorkspacesModule(HyprlandService hyprland, SuperKeyStateService superKey, StatusBarTheme theme,
+    public WorkspacesModule(HyprlandService hyprland, SuperKeyStateService superKey, Theme theme,
         Func<bool> blockPopup)
     {
         _theme = theme;
@@ -58,7 +56,7 @@ internal sealed class WorkspacesModule : IDrawableModule
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
                     Spacing = 4,
                     BorderColor = _theme.Border,
-                    BorderRadius = new BorderRadius(0, _theme.Radius, _theme.Radius, 0),
+                    BorderRadius = new BorderRadius(0, _theme.BorderRadius, _theme.BorderRadius, 0),
                     Padding = new Insets(8, 8)
                 },
                 Children =
@@ -70,7 +68,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         ], () => BuildWorkspacePopup(snapshot, _theme));
     }
 
-    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, StatusBarTheme theme) =>
+    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme) =>
         new(400)
         {
             IgnoreLayout = true,
@@ -84,7 +82,7 @@ internal sealed class WorkspacesModule : IDrawableModule
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
@@ -102,7 +100,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             ]
         };
 
-    private Node WorkspaceModule(WorkspaceSnapshot workspace, StatusBarTheme theme)
+    private Node WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
     {
         var normal = workspace.Active ? theme.Active : theme.Panel;
         var state = GetPopupWorkspaceState(workspace.Id, normal);

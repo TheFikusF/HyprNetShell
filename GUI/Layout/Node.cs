@@ -9,6 +9,7 @@ public enum ItemsAlignment
     Center,
     End,
     Spread,
+    Stretch,
 }
 
 public enum Direction

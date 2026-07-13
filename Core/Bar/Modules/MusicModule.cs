@@ -1,16 +1,16 @@
+using System.Globalization;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
-using System.Globalization;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class MusicModule(
     Func<MusicSnapshot> snapshot,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private enum PlayerAction
     {
@@ -21,8 +21,8 @@ internal sealed class MusicModule(
 
     private const int VISIBLE_CHARACTERS = 40;
     private const int IMAGE_SIZE = 34;
-    private const int POPUP_WIDTH = 512;
-    private const int POPUP_IMAGE_SIZE = 128;
+    private const int POPUP_WIDTH = 512 + 64;
+    private const int POPUP_IMAGE_SIZE = 128 + 64;
 
     private readonly ModulesCommon.NodeWithPopup _node = new()
     {
@@ -31,72 +31,120 @@ internal sealed class MusicModule(
 
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
     private readonly RefBool _progressDragging = new();
+    private readonly ModulesCommon.BoxState _coverButton = new(Color.White with { A = 0 });
     private readonly SeekUpdateQueue _seekQueue = new();
     private long _positionOverrideMicros;
 
     public Node Draw()
     {
-        var module = snapshot();
-        if (!module.Available)
+        var music = snapshot();
+        if (!music.Available)
         {
             return new SpacerNode();
         }
 
         return _node.Draw([
-            BuildCover(module),
-            BuildTextBody(module)
-        ], () => BuildPopup(module));
+            BuildSurface(music, [new ImageNode(Icons.SkipBack, 18, 18, theme.Text)],
+                right: false,
+                onClick: () => Control(music, PlayerAction.Previous),
+                padding: new Insets(6, 4)
+            ),
+            BuildCover(music),
+            BuildTextBody(music)
+        ], () => BuildPopup(music));
     }
 
-    private Node BuildCover(MusicSnapshot music) =>
-        BuildSurface(music, IMAGE_SIZE + 6, IMAGE_SIZE + 6, 4, theme.BorderWidth,
-        [
+    private Node BuildCover(MusicSnapshot music)
+    {
+        _coverButton.Background = Color.LerpSmooth(_coverButton.Background,
+            _coverButton.Hovered || string.IsNullOrWhiteSpace(music.ImagePath)
+                ? Color.White
+                : Color.White with { A = 0 }, 18.0f, ModulesCommon.DELTA_TIME);
+        return BuildSurface(music, [
             string.IsNullOrWhiteSpace(music.ImagePath)
-                ? ModulesCommon.BuildBadge("M", 14.0f, theme.Muted, theme)
+                ? new SpacerNode()
                 : new ImageNode(music.ImagePath, IMAGE_SIZE, IMAGE_SIZE),
-        ], () => Control(music, PlayerAction.PlayPause));
+            new BoxNode(IMAGE_SIZE, IMAGE_SIZE)
+            {
+                IgnoreLayout = true,
+                VerticalAlignment = ItemsAlignment.Center,
+                HorizontalAlignment = ItemsAlignment.Center,
+                IsHovered = _coverButton.Hovered,
+                Style = new Style { BackgroundColor = Color.Black with { A = _coverButton.Background.A * 0.6f } },
+                Children = [new ImageNode(music.Playing ? Icons.Pause : Icons.Play, 18, 18, _coverButton.Background)]
+            }
+        ], width: IMAGE_SIZE + 6, height: IMAGE_SIZE + 6, 4, 0, onClick: () => Control(music, PlayerAction.PlayPause));
+    }
 
     private Node BuildTextBody(MusicSnapshot music) =>
-        BuildSurface(music, null, null, new BorderRadius(0, theme.Radius, theme.Radius, 0),
-            new Insets(theme.BorderWidth, theme.BorderWidth, theme.BorderWidth, 0),
-            [
-                new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text),
-            ]);
+        BuildSurface(music, [
+                new BoxNode
+                {
+                    IgnoreLayout = true,
+                    Style = new Style() { Padding = new Insets(0, 0, 0, -40) },
+                    Children =
+                    [
+                        BuildSurface(music, [new ImageNode(Icons.SkipForward, 18, 18, theme.Text)],
+                            left: false,
+                            onClick: () => Control(music, PlayerAction.Next),
+                            padding: new Insets(6, 4)
+                        )
+                    ]
+                },
+                new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
+            ], left: false, padding: new Insets(6, 8, 6, 40), 
+            horizontalAlignment: ItemsAlignment.Start, darken: 0.4f
+        );
 
     private Node BuildSurface(
         MusicSnapshot music,
-        int? width,
-        int? height,
-        BorderRadius radius,
-        Insets borderWidth,
-        List<Node> children,
-        Action? onClick = null)
+        ICollection<Node> children,
+        int? width = null,
+        int? height = null,
+        BorderRadius? radius = null,
+        Insets? padding = null,
+        bool left = true,
+        bool right = true,
+        Action? onClick = null,
+        bool ignoreLayout = false,
+        ItemsAlignment horizontalAlignment = ItemsAlignment.Center,
+        ItemsAlignment verticalAlignment = ItemsAlignment.Center,
+        float darken = 0)
     {
-        var style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+        var style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
         {
-            BorderColor = theme.Border,
-            BorderRadius = radius,
-            BorderWidth = borderWidth,
-            Padding = width != null ? 0 : new Insets(8, 6),
             Spacing = 8
         };
 
+        if (radius.HasValue)
+        {
+            style = style with { BorderRadius = radius.Value };
+        }
+
+        if (padding.HasValue)
+        {
+            style = style with { Padding = padding.Value };
+        }
+
         return music.Playing
-            ? new GradientBoxNode(Color.FromRgb(255, 214, 66), Color.FromRgb(255, 121, 24), GradientOffset, width,
-                height)
+            ? new GradientBoxNode(Color.Darken(Color.FromRgb(255, 214, 66), darken), 
+                Color.Darken(Color.FromRgb(255, 121, 24), darken), 
+                GradientOffset, width, height)
             {
+                IgnoreLayout = ignoreLayout,
                 Direction = Direction.Horizontal,
-                HorizontalAlignment = ItemsAlignment.Center,
-                VerticalAlignment = ItemsAlignment.Center,
+                HorizontalAlignment = horizontalAlignment,
+                VerticalAlignment = verticalAlignment,
                 OnClick = onClick,
                 Style = style,
                 Children = children
             }
             : new BoxNode(width, height)
             {
+                IgnoreLayout = ignoreLayout,
                 Direction = Direction.Horizontal,
-                HorizontalAlignment = ItemsAlignment.Center,
-                VerticalAlignment = ItemsAlignment.Center,
+                HorizontalAlignment = horizontalAlignment,
+                VerticalAlignment = verticalAlignment,
                 OnClick = onClick,
                 Style = style,
                 Children = children
@@ -115,7 +163,7 @@ internal sealed class MusicModule(
             [
                 new BoxNode(POPUP_WIDTH)
                 {
-                    Direction = Direction.Vertical,
+                    Direction = Direction.Horizontal,
                     VerticalAlignment = ItemsAlignment.Start,
                     Style = ModulesCommon.ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.93f)) with
                     {
@@ -126,18 +174,17 @@ internal sealed class MusicModule(
                     },
                     Children =
                     [
-                        new BoxNode
+                        BuildPopupImage(music),
+                        new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42, POPUP_IMAGE_SIZE)
                         {
-                            Direction = Direction.Horizontal,
-                            VerticalAlignment = ItemsAlignment.Start,
-                            Style = new Style { Spacing = 12 },
+                            Direction = Direction.Vertical,
+                            VerticalAlignment = ItemsAlignment.Spread,
+                            Style = new Style { Spacing = 5 },
                             Children =
                             [
-                                BuildPopupImage(music),
-                                new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42)
+                                new BoxNode
                                 {
                                     Direction = Direction.Vertical,
-                                    VerticalAlignment = ItemsAlignment.Start,
                                     Style = new Style { Spacing = 5 },
                                     Children =
                                     [
@@ -145,21 +192,29 @@ internal sealed class MusicModule(
                                         new MarqueeTextNode(FormatSubtitle(music), 47, 14.0f, theme.Text),
                                         new MarqueeTextNode(music.Player, 47, 14.0f, theme.Text),
                                     ]
-                                }
-                            ]
-                        },
-                        BuildProgress(music),
-                        new BoxNode(POPUP_WIDTH - 30)
-                        {
-                            Direction = Direction.Horizontal,
-                            HorizontalAlignment = ItemsAlignment.Center,
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Style = new Style { Spacing = 12 },
-                            Children =
-                            [
-                                BuildControlButton(PlayerAction.Previous, music),
-                                BuildControlButton(PlayerAction.PlayPause, music),
-                                BuildControlButton(PlayerAction.Next, music),
+                                },
+                                new BoxNode
+                                {
+                                    Direction = Direction.Vertical,
+                                    Style = new Style { Spacing = 5 },
+                                    Children =
+                                    [
+                                        BuildProgress(music),
+                                        new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42)
+                                        {
+                                            Direction = Direction.Horizontal,
+                                            HorizontalAlignment = ItemsAlignment.Center,
+                                            VerticalAlignment = ItemsAlignment.Center,
+                                            Style = new Style { Spacing = 12 },
+                                            Children =
+                                            [
+                                                BuildControlButton(PlayerAction.Previous, music),
+                                                BuildControlButton(PlayerAction.PlayPause, music),
+                                                BuildControlButton(PlayerAction.Next, music),
+                                            ]
+                                        }
+                                    ]
+                                },
                             ]
                         }
                     ]
@@ -180,7 +235,7 @@ internal sealed class MusicModule(
 
     private Node BuildProgress(MusicSnapshot music)
     {
-        var width = POPUP_WIDTH - 30;
+        var width = POPUP_WIDTH - POPUP_IMAGE_SIZE - 42;
         var position = _progressDragging.Value ? _positionOverrideMicros : EffectivePosition(music);
         var ratio = music.LengthMicros > 0
             ? Math.Clamp((float)position / music.LengthMicros, 0.0f, 1.0f)
@@ -240,6 +295,8 @@ internal sealed class MusicModule(
     private Node BuildControlButton(PlayerAction action, MusicSnapshot music)
     {
         var size = action == PlayerAction.PlayPause ? 44 : 36;
+        var iconSize = action == PlayerAction.PlayPause ? 20 : 14;
+
         var defaultColor = action == PlayerAction.PlayPause ? theme.Active : theme.Panel;
         var state = GetButtonState(action);
         var target = state.Hovered
@@ -260,13 +317,13 @@ internal sealed class MusicModule(
             },
             Children =
             [
-                new TextNode(action switch
+                new ImageNode(action switch
                 {
-                    PlayerAction.PlayPause => music.Playing ? "[]" : ">",
-                    PlayerAction.Previous => "[<",
-                    PlayerAction.Next => ">]",
+                    PlayerAction.PlayPause => music.Playing ? Icons.Pause : Icons.Play,
+                    PlayerAction.Previous => Icons.SkipBack,
+                    PlayerAction.Next => Icons.SkipForward,
                     _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
-                }, 14.0f, theme.Text)
+                }, iconSize, iconSize, theme.Text)
             ]
         };
     }

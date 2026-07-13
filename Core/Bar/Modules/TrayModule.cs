@@ -2,15 +2,14 @@ using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class TrayModule(
     Func<IReadOnlyList<TrayItemSnapshot>> snapshot,
     SniTrayService service,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.NodeWithPopup> _nodes = [];
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
@@ -70,7 +69,7 @@ internal sealed class TrayModule(
                 new BoxNode(300)
                 {
                     Direction = Direction.Vertical,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),

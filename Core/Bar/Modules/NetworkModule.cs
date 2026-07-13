@@ -4,14 +4,13 @@ using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class NetworkModule(
     Func<NetworkSnapshot> snapshot,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private static readonly TimeSpan WifiScanInterval = TimeSpan.FromSeconds(5);
 
@@ -19,7 +18,7 @@ internal sealed class NetworkModule(
     private IReadOnlyList<WifiNetworkSnapshot> _wifiNetworks = [];
     private DateTime _lastWifiScan = DateTime.MinValue;
     private Task? _wifiScanTask;
-    
+
     private readonly ModulesCommon.NodeWithPopup _node = new("network_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
@@ -36,25 +35,39 @@ internal sealed class NetworkModule(
         return _node.Draw([BuildStateModule(network)], () => BuildPopup(network));
     }
 
+    private Node WifiIcon(int strength, int size)
+    {
+        return new BoxNode(size, size)
+        {
+            new BoxNode
+            {
+                IgnoreLayout = true,
+                Children = [new ImageNode(Icons.WifiStrength[^1], 18, 18, theme.Text with { A = 0.3f })]
+            },
+            new BoxNode
+            {
+                IgnoreLayout = true, Children = [new ImageNode(Icons.WifiStrength[strength], 18, 18, theme.Text)]
+            }
+        };
+    }
+
     private Node BuildStateModule(NetworkSnapshot network)
     {
         var icon = !network.Connected
-            ? Icons.WifiOff
+            ? new ImageNode(Icons.WifiOff, 18, 18, theme.Text)
             : network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-                ? Icons.WifiStrength[^1]
+                ? WifiIcon(2, 18)
                 : network.Type.Equals("ethernet", StringComparison.OrdinalIgnoreCase)
-                    ? Icons.Ethernet
-                    : Icons.Globe;
+                    ? new ImageNode(Icons.Ethernet, 18, 18, theme.Text)
+                    : new ImageNode(Icons.Globe, 18, 18, theme.Text);
 
         return new BoxNode
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left: false),
-            Children =
-            [
-                new ImageNode(icon, 18, 18, theme.Text),
-            ],
+            Style = ModulesCommon.ModuleStyle(theme,
+                ModulesCommon.ToBackground(theme, Color.Lerp(Color.Green, Color.Blue, 0.3f)), left: false),
+            Children = [icon],
         };
     }
 
@@ -72,7 +85,7 @@ internal sealed class NetworkModule(
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
@@ -87,7 +100,8 @@ internal sealed class NetworkModule(
                         new TextNode("Available Wi-Fi", 14.0f, theme.Text),
                         ..BuildWifiRows(),
                         ModulesCommon.BuildDivider(theme.Border),
-                        new TextNode("IP addresses", 14.0f, theme.Text),
+                        new TextNode("Details", 14.0f, theme.Text),
+                        BuildIpRow(network.Device),
                         ..BuildIpRows(network),
                     ]
                 }
@@ -132,7 +146,9 @@ internal sealed class NetworkModule(
         var state = GetRowState($"wifi:{wifi.Ssid}", wifi.Active ? theme.Active : theme.Panel);
         var target = state.Hovered
             ? Color.Lighten(wifi.Active ? theme.Active : theme.Panel, 0.12f)
-            : wifi.Active ? theme.Active : theme.Panel;
+            : wifi.Active
+                ? theme.Active
+                : theme.Panel;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
 
         var ssid = string.IsNullOrWhiteSpace(wifi.Ssid) ? "<hidden>" : wifi.Ssid;
@@ -154,7 +170,13 @@ internal sealed class NetworkModule(
             Children =
             [
                 wifi.Active ? new ImageNode(Icons.Check, 14, 14, theme.Text) : new BoxNode(16, 16),
-                new ImageNode(WifiIcon(wifi.Signal), 16, 16, theme.Text),
+                WifiIcon(wifi.Signal switch
+                {
+                    null or <= 25 => 0,
+                    <= 50 => 1,
+                    <= 75 => 2,
+                    _ => 3,
+                }, 18),
                 new TextNode(Trim(ssid, 22), 14.0f, theme.Text),
                 new TextNode(security, 14.0f, theme.Text),
             ],
@@ -180,7 +202,7 @@ internal sealed class NetworkModule(
             },
             Children =
             [
-                new ImageNode(Icons.Copy, 16, 16, theme.Text),
+                new ImageNode(Icons.Copy, 14, 14, theme.Text),
                 new TextNode(ipAddress, 14.0f, theme.Text),
             ],
         };
@@ -358,18 +380,6 @@ internal sealed class NetworkModule(
         state = new ModulesCommon.BoxState(initialColor);
         _rowStates[key] = state;
         return state;
-    }
-
-    private static SvgAsset WifiIcon(int? signal)
-    {
-        var index = signal switch
-        {
-            null or <= 25 => 0,
-            <= 50 => 1,
-            <= 75 => 2,
-            _ => 3,
-        };
-        return Icons.WifiStrength[index];
     }
 
     private static string Trim(string text, int maxLength) =>

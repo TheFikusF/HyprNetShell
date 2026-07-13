@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Modules;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
@@ -26,11 +27,13 @@ public sealed class StatusBar : IDisposable
 
     private readonly NotificationService _notificationService = new();
     private readonly MusicModuleService _musicService = new();
+    private readonly DisplayControlsModuleService _displayControlsService = new();
     private readonly WorkspacesModule _workspacesModule;
     private readonly LanguageModule _languageModule;
     private readonly SystemStatsModule _systemStatsModule;
     private readonly NetworkModule _networkModule;
     private readonly AudioModule _audioModule;
+    private readonly DisplayControlsModule _displayControlsModule;
     private readonly BluetoothModule _bluetoothModule;
     private readonly BatteryModule _batteryModule;
     private readonly CenterModule _centerModule;
@@ -55,22 +58,27 @@ public sealed class StatusBar : IDisposable
             _notificationService,
             new NetworkModuleService(),
             new AudioModuleService(),
+            _displayControlsService,
             new BluetoothModuleService(),
             new BatteryModuleService(),
             new SystemStatsModuleService(),
             _trayService,
         ];
-        _languageModule = new LanguageModule(_hyprland, StatusBarTheme.Default);
-        _systemStatsModule = new SystemStatsModule(() => _snapshot.SystemStats, StatusBarTheme.Default);
-        _networkModule = new NetworkModule(() => _snapshot.Network, StatusBarTheme.Default);
-        _audioModule = new AudioModule(() => _snapshot.Audio, StatusBarTheme.Default);
-        _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, StatusBarTheme.Default);
-        _batteryModule = new BatteryModule(() => _snapshot.Battery, StatusBarTheme.Default);
-        _centerModule = new CenterModule(() => _snapshot.Notifications, StatusBarTheme.Default);
-        _musicModule = new MusicModule(() => _musicService.Snapshot, StatusBarTheme.Default);
-        _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, StatusBarTheme.Default);
+        _languageModule = new LanguageModule(_hyprland, Theme.Default);
+        _systemStatsModule = new SystemStatsModule(() => _snapshot.SystemStats, Theme.Default);
+        _networkModule = new NetworkModule(() => _snapshot.Network, Theme.Default);
+        _audioModule = new AudioModule(() => _snapshot.Audio, Theme.Default);
+        _displayControlsModule = new DisplayControlsModule(
+            () => _snapshot.DisplayControls,
+            _displayControlsService,
+            Theme.Default);
+        _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, Theme.Default);
+        _batteryModule = new BatteryModule(() => _snapshot.Battery, Theme.Default);
+        _centerModule = new CenterModule(() => _snapshot.Notifications, Theme.Default);
+        _musicModule = new MusicModule(() => _musicService.Snapshot, Theme.Default);
+        _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, Theme.Default);
         _workspacesModule =
-            new WorkspacesModule(_hyprland, _superKey, StatusBarTheme.Default, () => _languageModule.IsShown);
+            new WorkspacesModule(_hyprland, _superKey, Theme.Default, () => _languageModule.IsShown);
     }
 
     public void Draw()
@@ -115,6 +123,7 @@ public sealed class StatusBar : IDisposable
                 new BoxNode
                 {
                     _audioModule.Draw(),
+                    _displayControlsModule.Draw(),
                     _bluetoothModule.Draw(),
                     _networkModule.Draw(),
                 },

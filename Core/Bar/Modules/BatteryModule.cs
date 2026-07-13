@@ -2,14 +2,13 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BatteryModule(
     Func<BatterySnapshot> snapshot,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private readonly ModulesCommon.NodeWithPopup _node = new("battery_module")
     {

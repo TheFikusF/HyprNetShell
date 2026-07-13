@@ -2,14 +2,13 @@ using System.Diagnostics;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class CenterModule(
     Func<NotificationsSnapshot> notifications,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private const int POPUP_WIDTH = 620;
 
@@ -78,7 +77,7 @@ internal sealed class CenterModule(
                     [
                         new BoxNode(12, 12)
                         {
-                            Style = ModulesCommon.ModuleStyle(theme, theme.Active) with
+                            Style = ModulesCommon.ModuleStyle(theme, Color.Orange) with
                             {
                                 Padding = new Insets(16, -16, 0, -16)
                             },
@@ -124,7 +123,7 @@ internal sealed class CenterModule(
                     [
                         new BoxNode(12, 12)
                         {
-                            Style = ModulesCommon.ModuleStyle(theme, theme.Active) with
+                            Style = ModulesCommon.ModuleStyle(theme, Color.Orange) with
                             {
                                 Padding = new Insets(16, -16, 0, -16)
                             },
@@ -148,7 +147,7 @@ internal sealed class CenterModule(
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.92f),

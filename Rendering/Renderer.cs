@@ -32,8 +32,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public int Width => _frameWidth;
     public int Height => _frameHeight;
 
-    public static event Action OnFrameStart;
-    public static event Action OnFrameEnd;
+    public static event Action? OnFrameStart;
+    public static event Action? OnFrameEnd;
 
     public Renderer(Func<string, IntPtr> getProcAddress)
     {
@@ -107,6 +107,9 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public void FillRoundedRect(Rect rect, BorderRadius radius, Color color)
         => DrawRoundedRect(rect.X, rect.Y, rect.Width, rect.Height, radius, color);
 
+    public void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
+        => DrawRoundedBorder(rect, radius, thickness, color);
+
     public void FillRoundedRectHorizontalGradient(Rect rect, BorderRadius radius, Color left, Color right, float offset)
         => DrawRoundedGradient(rect, radius, left, right, offset);
 
@@ -156,6 +159,93 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         WriteVertex(vertices, points.Count + 1, points[0].X, points[0].Y, color);
 
         DrawVertices(vertices, PrimitiveType.TriangleFan);
+    }
+
+    private void DrawRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
+    {
+        if (rect.Width <= 0.0f || rect.Height <= 0.0f || thickness.Max <= 0.0f)
+        {
+            return;
+        }
+
+        thickness = new Insets(
+            MathF.Max(0.0f, thickness.Top),
+            MathF.Max(0.0f, thickness.Right),
+            MathF.Max(0.0f, thickness.Bottom),
+            MathF.Max(0.0f, thickness.Left));
+
+        radius = ClampCornerRadius(radius, rect.Width, rect.Height);
+        var innerRect = rect.Inset(thickness);
+        if (innerRect.Width <= 0.0f || innerRect.Height <= 0.0f)
+        {
+            DrawRoundedRect(rect.X, rect.Y, rect.Width, rect.Height, radius, color);
+            return;
+        }
+
+        var outer = BuildRoundedContour(rect, radius);
+        var innerRadius = ClampCornerRadius(radius.Inset(thickness), innerRect.Width, innerRect.Height);
+        var inner = BuildRoundedContour(innerRect, innerRadius);
+        var vertices = new float[outer.Length * 6 * 6];
+        var vertex = 0;
+
+        for (var i = 0; i < outer.Length; i++)
+        {
+            var next = (i + 1) % outer.Length;
+            WriteVertex(vertices, vertex++, outer[i].X, outer[i].Y, color);
+            WriteVertex(vertices, vertex++, outer[next].X, outer[next].Y, color);
+            WriteVertex(vertices, vertex++, inner[next].X, inner[next].Y, color);
+            WriteVertex(vertices, vertex++, outer[i].X, outer[i].Y, color);
+            WriteVertex(vertices, vertex++, inner[next].X, inner[next].Y, color);
+            WriteVertex(vertices, vertex++, inner[i].X, inner[i].Y, color);
+        }
+
+        DrawVertices(vertices, PrimitiveType.Triangles);
+    }
+
+    private static (float X, float Y)[] BuildRoundedContour(Rect rect, BorderRadius radius)
+    {
+        const int SEGMENTS = 6;
+        var points = new (float X, float Y)[4 * (SEGMENTS + 1)];
+        var index = 0;
+
+        AddContourCorner(points, ref index, rect.X + rect.Width - radius.TopRight,
+            rect.Y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, rect.X + rect.Width, rect.Y);
+        AddContourCorner(points, ref index, rect.X + rect.Width - radius.BottomRight,
+            rect.Y + rect.Height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f,
+            rect.X + rect.Width, rect.Y + rect.Height);
+        AddContourCorner(points, ref index, rect.X + radius.BottomLeft,
+            rect.Y + rect.Height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f,
+            rect.X, rect.Y + rect.Height);
+        AddContourCorner(points, ref index, rect.X + radius.TopLeft,
+            rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
+
+        return points;
+    }
+
+    private static void AddContourCorner(
+        (float X, float Y)[] points,
+        ref int index,
+        float cx,
+        float cy,
+        float radius,
+        float fromDegrees,
+        float toDegrees,
+        float sharpX,
+        float sharpY)
+    {
+        const int SEGMENTS = 6;
+        for (var i = 0; i <= SEGMENTS; i++)
+        {
+            if (radius <= 0.0f)
+            {
+                points[index++] = (sharpX, sharpY);
+                continue;
+            }
+
+            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / SEGMENTS;
+            var radians = degrees * MathF.PI / 180.0f;
+            points[index++] = (cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
+        }
     }
 
     private void DrawRoundedGradient(Rect rect, BorderRadius radius, Color left, Color right, float offset)

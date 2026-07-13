@@ -7,8 +7,8 @@ public static partial class Icons
     [SvgAsset(
         "assets/icons/lucide/wifi-zero.svg",
         "assets/icons/lucide/wifi-low.svg",
-        "assets/icons/lucide/wifi.svg",
-        "assets/icons/lucide/wifi-high.svg")]
+        "assets/icons/lucide/wifi-high.svg",
+        "assets/icons/lucide/wifi.svg")]
     public static partial SvgAsset[] WifiStrength { get; }
 
     [SvgAsset("assets/icons/lucide/wifi-off.svg")]
@@ -83,4 +83,22 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/thermometer.svg")]
     public static partial SvgAsset Temperature { get; }
+
+    [SvgAsset("assets/icons/lucide/sun.svg", "assets/icons/lucide/sun-medium.svg", "assets/icons/lucide/sun-dim.svg")]
+    public static partial SvgAsset[] Brightness { get; }
+
+    [SvgAsset("assets/icons/lucide/keyboard.svg")]
+    public static partial SvgAsset Keyboard { get; }
+
+    [SvgAsset("assets/icons/lucide/play.svg")]
+    public static partial SvgAsset Play { get; }
+
+    [SvgAsset("assets/icons/lucide/pause.svg")]
+    public static partial SvgAsset Pause { get; }
+
+    [SvgAsset("assets/icons/lucide/skip-forward.svg")]
+    public static partial SvgAsset SkipForward { get; }
+
+    [SvgAsset("assets/icons/lucide/skip-back.svg")]
+    public static partial SvgAsset SkipBack { get; }
 }

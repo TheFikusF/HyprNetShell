@@ -9,6 +9,7 @@ public sealed class BarStateBuilder
     public SystemStatsSnapshot SystemStats { get; set; } = SystemStatsSnapshot.Empty;
     public NetworkSnapshot Network { get; set; } = NetworkSnapshot.Empty;
     public AudioSnapshot Audio { get; set; } = AudioSnapshot.Empty;
+    public DisplayControlsSnapshot DisplayControls { get; set; } = DisplayControlsSnapshot.Empty;
     public BluetoothSnapshot Bluetooth { get; set; } = BluetoothSnapshot.Empty;
     public BatterySnapshot Battery { get; set; } = BatterySnapshot.Empty;
     public NotificationsSnapshot Notifications { get; set; } = NotificationsSnapshot.Empty;
@@ -21,6 +22,7 @@ public sealed class BarStateBuilder
             SystemStats,
             Network,
             Audio,
+            DisplayControls,
             Bluetooth,
             Battery,
             Notifications,

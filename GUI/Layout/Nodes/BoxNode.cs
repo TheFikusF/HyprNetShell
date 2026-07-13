@@ -170,6 +170,11 @@ public class BoxNode : Node, IEnumerable<Node>
         int contentHeight, int contentWidth)
     {
         var children = SolidChildren.ToArray();
+        if (HorizontalAlignment == ItemsAlignment.Stretch)
+        {
+            StretchChildWidths(children, contentWidth);
+        }
+
         var childrenWidth = children.Sum(child => child.Width);
         var spacing = GetSpacing(HorizontalAlignment, contentWidth, childrenWidth, children.Length);
         var cursorX = contentX + GetOffset(HorizontalAlignment, contentWidth, childrenWidth, spacing, children.Length);
@@ -178,11 +183,13 @@ public class BoxNode : Node, IEnumerable<Node>
 
         foreach (var child in children)
         {
-            var childY = contentY + GetCrossAxisOffset(VerticalAlignment, contentHeight, child.Height);
-            if (child is BoxNode boxChild && child.Height < contentHeight && VerticalAlignment == ItemsAlignment.Spread)
+            if (child is BoxNode { _explicitHeight: null } boxChild &&
+                VerticalAlignment == ItemsAlignment.Stretch)
             {
-                boxChild._measuredHeight = contentHeight - boxChild.VerticalInset;
+                boxChild._measuredHeight = Math.Max(0, contentHeight - boxChild.VerticalInset);
             }
+
+            var childY = contentY + GetCrossAxisOffset(VerticalAlignment, contentHeight, child.Height);
             child.Draw(renderer, cursorX, childY);
             childHovered |= child.LastHoveredInTree;
             childClicked |= child.LastClickedInTree;
@@ -196,6 +203,11 @@ public class BoxNode : Node, IEnumerable<Node>
         int contentHeight, int contentWidth)
     {
         var children = SolidChildren.ToArray();
+        if (VerticalAlignment == ItemsAlignment.Stretch)
+        {
+            StretchChildHeights(children, contentHeight);
+        }
+
         var childrenHeight = children.Sum(child => child.Height);
         var verticalSpacing = GetSpacing(VerticalAlignment, contentHeight, childrenHeight, children.Length);
         var cursorY = contentY + GetOffset(VerticalAlignment, contentHeight, childrenHeight, verticalSpacing, children.Length);
@@ -204,11 +216,13 @@ public class BoxNode : Node, IEnumerable<Node>
 
         foreach (var child in children)
         {
-            var childX = contentX + GetCrossAxisOffset(HorizontalAlignment, contentWidth, child.Width);
-            if (child is BoxNode boxChild && child.Width < contentWidth && HorizontalAlignment == ItemsAlignment.Spread)
+            if (child is BoxNode { _explicitWidth: null } boxChild &&
+                HorizontalAlignment == ItemsAlignment.Stretch)
             {
-                boxChild._measuredWidth = contentWidth - boxChild.HorizontalInset;
+                boxChild._measuredWidth = Math.Max(0, contentWidth - boxChild.HorizontalInset);
             }
+
+            var childX = contentX + GetCrossAxisOffset(HorizontalAlignment, contentWidth, child.Width);
             child.Draw(renderer, childX, cursorY);
             childHovered |= child.LastHoveredInTree;
             childClicked |= child.LastClickedInTree;
@@ -216,6 +230,40 @@ public class BoxNode : Node, IEnumerable<Node>
         }
 
         return (childHovered, childClicked);
+    }
+
+    private void StretchChildWidths(IReadOnlyList<Node> children, int availableWidth)
+    {
+        var stretchable = children.OfType<BoxNode>().Where(child => !child._explicitWidth.HasValue).ToArray();
+        if (stretchable.Length == 0)
+        {
+            return;
+        }
+
+        var fixedWidth = children.Where(child => child is not BoxNode { _explicitWidth: null }).Sum(child => child.Width);
+        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Count - 1));
+        for (var i = 0; i < stretchable.Length; i++)
+        {
+            var targetWidth = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
+            stretchable[i]._measuredWidth = Math.Max(0, targetWidth - stretchable[i].HorizontalInset);
+        }
+    }
+
+    private void StretchChildHeights(IReadOnlyList<Node> children, int availableHeight)
+    {
+        var stretchable = children.OfType<BoxNode>().Where(child => !child._explicitHeight.HasValue).ToArray();
+        if (stretchable.Length == 0)
+        {
+            return;
+        }
+
+        var fixedHeight = children.Where(child => child is not BoxNode { _explicitHeight: null }).Sum(child => child.Height);
+        var remaining = Math.Max(0, availableHeight - fixedHeight - Style.Spacing * Math.Max(0, children.Count - 1));
+        for (var i = 0; i < stretchable.Length; i++)
+        {
+            var targetHeight = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
+            stretchable[i]._measuredHeight = Math.Max(0, targetHeight - stretchable[i].VerticalInset);
+        }
     }
 
     private void SetBoxInteractionState(bool hovered, bool hoveredThrough, bool clicked, bool clickedThrough)
@@ -243,7 +291,7 @@ public class BoxNode : Node, IEnumerable<Node>
 
         if (Style.BorderColor.HasValue)
         {
-            renderer.FillRoundedRect(rect, cornerRadius, Style.BorderColor.Value);
+            renderer.FillRoundedBorder(rect, cornerRadius, borderThickness, Style.BorderColor.Value);
 
             if (Style.BackgroundColor.HasValue && borderThickness.Max > 0.0f)
             {
@@ -318,7 +366,7 @@ public class BoxNode : Node, IEnumerable<Node>
         {
             ItemsAlignment.Center => extraSpace / 2,
             ItemsAlignment.End => extraSpace,
-            ItemsAlignment.Spread => 0,
+            ItemsAlignment.Spread or ItemsAlignment.Stretch => 0,
             _ => 0,
         });
     }

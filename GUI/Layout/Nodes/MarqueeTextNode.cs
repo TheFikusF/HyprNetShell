@@ -12,6 +12,9 @@ public class MarqueeTextNode : Node
     private readonly float _fontSize;
     private readonly Color _color;
     private readonly int _visibleCharacters;
+    
+    public Color? ShadowColor { get; init; }
+    public float ShadowDistance { get; init; }
 
     public override int Width => (int)MathF.Ceiling(Layout.Renderer.MeasureText(VisibleText(), _fontSize) + Style.Padding.Left + Style.Padding.Right);
     public override int Height => (int)MathF.Ceiling(_fontSize + Style.Padding.Top + Style.Padding.Bottom);
@@ -34,6 +37,13 @@ public class MarqueeTextNode : Node
         Layout.AddInputRegion(new Rect(x, y, Width, Height));
 
         var text = VisibleText();
+        
+        if (ShadowColor.HasValue)
+        {
+            renderer.DrawText(text, Style.Padding.Left + x,
+                Style.Padding.Top + y + (int)(_fontSize * 0.8f) + (int)ShadowDistance, _fontSize, ShadowColor.Value, 0);
+        }
+        
         renderer.DrawText(text, Style.Padding.Left + x, Style.Padding.Top + y + (int)(_fontSize * 0.8f), _fontSize, _color);
     }
 

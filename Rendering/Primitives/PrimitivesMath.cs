@@ -32,4 +32,12 @@ public static class PrimitivesMath
             color.G + (1.0f - color.G) * amount,
             color.B + (1.0f - color.B) * amount,
             color.A);
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Color Darken(Color color, float amount) =>
+        new(
+            color.R - color.R * amount,
+            color.G - color.G * amount,
+            color.B - color.B * amount,
+            color.A);
 }

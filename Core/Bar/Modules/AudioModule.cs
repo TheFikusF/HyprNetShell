@@ -1,16 +1,16 @@
-using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class AudioModule(
     Func<AudioSnapshot> snapshot,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, RefBool> _sliderDragging = [];
@@ -42,7 +42,8 @@ internal sealed class AudioModule(
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel, right: false) with { Spacing = 6 },
+            Style = ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f)), 
+                right: false) with { Spacing = 6 },
             Children =
             [
                 new ImageNode(icon, 18, 18, theme.Text),
@@ -64,7 +65,7 @@ internal sealed class AudioModule(
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
@@ -116,7 +117,7 @@ internal sealed class AudioModule(
         {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
-            HorizontalAlignment = ItemsAlignment.Spread,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             IsHovered = state.Hovered,
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {

@@ -1,16 +1,15 @@
-using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BluetoothModule(
     Func<BluetoothSnapshot> snapshot,
-    StatusBarTheme theme) : IDrawableModule
+    Theme theme) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, bool> _connectionOverrides = [];
@@ -31,21 +30,24 @@ internal sealed class BluetoothModule(
         var connectedCount = bluetooth.Devices.Count(EffectiveConnected);
         var icon = !bluetooth.Available
             ? Icons.BluetoothOff
-            : connectedCount == 0 ? Icons.Bluetooth : Icons.BluetoothConnected;
+            : connectedCount == 0
+                ? Icons.Bluetooth
+                : Icons.BluetoothConnected;
         return new BoxNode
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left: false, right: false) with
-            {
-                BorderWidth = new Insets(1, theme.BorderWidth),
-                Spacing = 6,
-            },
+            Style = ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.Lerp(Color.Lazure, Color.Blue, 0.3f)), 
+                    left: false, right: false) with
+                {
+                    BorderWidth = new Insets(1, theme.BorderWidth),
+                    Spacing = 6,
+                },
             Children =
             [
                 new ImageNode(icon, 18, 18, theme.Text),
                 ..(connectedCount > 0
-                    ? new Node[] { new TextNode(connectedCount.ToString(), 13.0f, theme.Text) }
+                    ? new Node[] { new TextNode(connectedCount.ToString(), 14.0f, theme.Text) }
                     : Array.Empty<Node>()),
             ],
         };
@@ -62,7 +64,7 @@ internal sealed class BluetoothModule(
                 {
                     Direction = Direction.Vertical,
                     VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
@@ -112,7 +114,7 @@ internal sealed class BluetoothModule(
         return new BoxNode
         {
             Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Spread,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => ToggleConnection(device),

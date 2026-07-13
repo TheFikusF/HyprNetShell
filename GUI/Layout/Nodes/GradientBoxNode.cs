@@ -30,7 +30,7 @@ public class GradientBoxNode : BoxNode
 
         if (style.BorderColor.HasValue)
         {
-            renderer.FillRoundedRect(rect, style.BorderRadius, style.BorderColor.Value);
+            renderer.FillRoundedBorder(rect, style.BorderRadius, style.BorderWidth, style.BorderColor.Value);
         }
 
         renderer.FillRoundedRectHorizontalGradient(
