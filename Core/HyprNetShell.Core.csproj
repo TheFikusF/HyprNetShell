@@ -14,7 +14,7 @@
         <ProjectReference Include="../Generators/HyprNetShell.Generators.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"
-                          GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
+                          GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained;TargetFramework" />
     </ItemGroup>
 
     <ItemGroup>

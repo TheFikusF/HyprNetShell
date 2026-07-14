@@ -19,7 +19,7 @@
 
     <ItemGroup>
         <EmbeddedResource Include="../assets/fonts/0xProto-Regular-NL.ttf" LogicalName="HyprNetShell.Fonts.0xProto-Regular-NL.ttf" />
-        <EmbeddedResource Include="../assets/fonts/LiberationSans-Regular.ttf" LogicalName="HyprNetShell.Fonts.LiberationSans-Regular.ttf" />
+        <EmbeddedResource Include="../assets/fonts/LiberationMono-Regular.ttf" LogicalName="HyprNetShell.Fonts.LiberationMono-Regular.ttf" />
         <EmbeddedResource Include="../assets/fonts/NotoColorEmoji.ttf" LogicalName="HyprNetShell.Fonts.NotoColorEmoji.ttf" />
     </ItemGroup>
 

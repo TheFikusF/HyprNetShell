@@ -12,22 +12,29 @@ internal sealed unsafe class FontRenderer : IDisposable
 {
     private const int SYMBOL_ATLAS_WIDTH = 2048;
     private const int SYMBOL_ATLAS_HEIGHT = 2048;
-    
+
     private const string PRIMARY_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.0xProto-Regular-NL.ttf";
-    private const string FALLBACK_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.LiberationSans-Regular.ttf";
+    private const string FALLBACK_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.LiberationMono-Regular.ttf";
     private const string EMOJI_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.NotoColorEmoji.ttf";
-    
-    private static readonly UnicodeRange[] SymbolRanges =
-    [
-        new(0x0000, 0x01FF), // Basic Latin printable ASCII.
-        new(0x0400, 0x052F), // Cyrillic and Cyrillic Supplement.
-        new(0x1C80, 0x1C8F), // Cyrillic Extended-C.
-        new(0x2DE0, 0x2DFF), // Cyrillic Extended-A.
-        new(0xA640, 0xA69F), // Cyrillic Extended-B.
-    ];
+
+    private readonly Dictionary<string, UnicodeRange[]> _symbolRanges = new()
+    {
+        [PRIMARY_FONT_RESOURCE_NAME] =
+        [
+            new(0x0000, 0x01FF), // Basic Latin printable ASCII.
+            new(0x2000, 0x206F), // General Punctuation: dashes, smart quotes, bullets, ellipsis, etc.
+        ],
+        [FALLBACK_FONT_RESOURCE_NAME] =
+        [
+            new(0x0400, 0x052F), // Cyrillic and Cyrillic Supplement.
+            new(0x1C80, 0x1C8F), // Cyrillic Extended-C.
+            new(0x2DE0, 0x2DFF), // Cyrillic Extended-A.
+            new(0xA640, 0xA69F), // Cyrillic Extended-B.
+        ]
+    };
 
     private readonly GL _gl;
-    private readonly byte[] _fontBytes;
+    private readonly Dictionary<string, byte[]> _fontBytes;
     private readonly Dictionary<int, SymbolAtlas[]> _symbolAtlases = new();
     private readonly Dictionary<ColorGlyphKey, ColorGlyph> _colorGlyphs = new();
     private readonly uint _program;
@@ -45,10 +52,15 @@ internal sealed unsafe class FontRenderer : IDisposable
     public FontRenderer(GL gl)
     {
         _gl = gl;
-        _fontBytes = ResolvePrimaryFontBytes();
+        _fontBytes = new Dictionary<string, byte[]>
+        {
+            [PRIMARY_FONT_RESOURCE_NAME] = ReadEmbeddedFont(PRIMARY_FONT_RESOURCE_NAME),
+            [FALLBACK_FONT_RESOURCE_NAME] = ReadEmbeddedFont(FALLBACK_FONT_RESOURCE_NAME)
+        };
 
         _program = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.ALPHA_TEXTURE_FRAGMENT, "text");
-        _colorProgram = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "color text");
+        _colorProgram =
+            GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "color text");
         _viewportLocation = _gl.GetUniformLocation(_program, "uViewport");
         _colorLocation = _gl.GetUniformLocation(_program, "uColor");
         _colorViewportLocation = _gl.GetUniformLocation(_colorProgram, "uViewport");
@@ -61,7 +73,8 @@ internal sealed unsafe class FontRenderer : IDisposable
         _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(6 * 4 * sizeof(float)), null, BufferUsageARB.DynamicDraw);
         _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
         _gl.EnableVertexAttribArray(0);
-        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float),
+            (void*)(2 * sizeof(float)));
         _gl.EnableVertexAttribArray(1);
 
         _gl.UseProgram(_program);
@@ -224,7 +237,7 @@ internal sealed unsafe class FontRenderer : IDisposable
     private bool TryGetSymbolGlyph(string textElement, float fontSize, out SymbolGlyph glyph)
     {
         glyph = default;
-        if (!TryGetSingleCodepoint(textElement, out var codepoint))
+        if (TryGetSingleCodepoint(textElement, out var codepoint) == false)
         {
             return false;
         }
@@ -257,22 +270,20 @@ internal sealed unsafe class FontRenderer : IDisposable
             return atlases;
         }
 
-        atlases = new SymbolAtlas[SymbolRanges.Length];
-        for (var i = 0; i < SymbolRanges.Length; i++)
-        {
-            atlases[i] = ImportSymbolsFromFont(SymbolRanges[i], pixelSize);
-        }
+        atlases = _symbolRanges.SelectMany(x => x.Value
+                .Select(j => ImportSymbolsFromFont(x.Key, j, pixelSize)))
+            .ToArray();
 
         _symbolAtlases[pixelSize] = atlases;
         return atlases;
     }
 
-    private SymbolAtlas ImportSymbolsFromFont(UnicodeRange range, int pixelSize)
+    private SymbolAtlas ImportSymbolsFromFont(string font, UnicodeRange range, int pixelSize)
     {
         var pixels = new byte[SYMBOL_ATLAS_WIDTH * SYMBOL_ATLAS_HEIGHT];
         var chars = new StbTrueType.stbtt_bakedchar[range.Count];
         var result = StbTrueType.stbtt_BakeFontBitmap(
-            _fontBytes,
+            _fontBytes[font],
             0,
             pixelSize,
             pixels,
@@ -357,21 +368,13 @@ internal sealed unsafe class FontRenderer : IDisposable
         return glyph;
     }
 
-    private static byte[] ResolvePrimaryFontBytes()
-    {
-        return ReadEmbeddedFont(PRIMARY_FONT_RESOURCE_NAME)
-               ?? ReadEmbeddedFont(FALLBACK_FONT_RESOURCE_NAME)
-               ?? throw new FileNotFoundException(
-                   "Could not find an embedded font. Set HYPRBAR_FONT_PATH to a .ttf file.");
-    }
-
-    private static byte[]? ReadEmbeddedFont(string resourceName)
+    private static byte[] ReadEmbeddedFont(string resourceName)
     {
         var assembly = typeof(FontRenderer).Assembly;
         using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream is null)
         {
-            return null;
+            throw new FileNotFoundException($"Missing embedded font {resourceName}");
         }
 
         using var buffer = new MemoryStream();
@@ -431,8 +434,11 @@ internal sealed unsafe class FontRenderer : IDisposable
     }
 
     private readonly record struct SymbolGlyph(SymbolAtlas Atlas, int Index);
+
     private readonly record struct ColorGlyphKey(string Text, int PixelSize);
+
     private sealed record ColorGlyph(uint Texture, int Width, int Height, float Advance);
+
     private sealed record SymbolAtlas(UnicodeRange Range, uint Texture, StbTrueType.stbtt_bakedchar[] Chars);
 
     private static class ColorEmojiRenderer

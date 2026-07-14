@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk"
-         TreatAsLocalProperty="PublishAot;RuntimeIdentifier;SelfContained">
+         TreatAsLocalProperty="PublishAot;RuntimeIdentifier;SelfContained;TargetFramework">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>

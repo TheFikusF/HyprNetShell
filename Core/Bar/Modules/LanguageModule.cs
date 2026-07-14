@@ -16,8 +16,8 @@ internal sealed class LanguageModule : IDrawableModule
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["English (US)"] = "🇺🇸🦅🗽",
-            ["Ukrainian"] = "🇺🇦 UKR",
-            ["Russian"] = "🛡 RVC"
+            ["Ukrainian"] = "🇺🇦 УКР",
+            ["Russian"] = "🛡 РДК"
         };
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _languagesRowStates = [];

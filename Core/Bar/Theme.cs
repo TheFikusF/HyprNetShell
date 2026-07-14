@@ -21,7 +21,7 @@ public sealed record Theme
         BorderRadius = 4308,
         BorderWidth = 3.0f,
         Border = Color.White,
-        Panel = Color.FromRgb(31, 35, 44, 0.92f),
+        Panel = Color.FromRgb(31, 35, 44, 0.9f),
         Active = Color.Lerp(Color.FromRgb(31, 35, 44, 0.92f), Color.Orange, 0.5f),
         Warning = Color.FromRgb(230, 126, 34, 0.85f),
         Critical = Color.FromRgb(231, 76, 60, 0.90f),
