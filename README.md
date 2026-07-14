@@ -106,6 +106,16 @@ Rendering is intentionally primitive:
 
 Set `HYPRBAR_FONT_PATH` if your 0xProto TTF lives somewhere other than `/usr/local/share/fonts/0xProto-Regular-NL.ttf`.
 
+The weather widget defaults to Prague and can be pointed at another location with:
+
+```bash
+export HYPRNETSHELL_WEATHER_LATITUDE="50.0755"
+export HYPRNETSHELL_WEATHER_LONGITUDE="14.4378"
+export HYPRNETSHELL_WEATHER_LOCATION="Prague"
+```
+
+Set `HYPRNETSHELL_WEATHER_URL` to override the page opened when the widget is clicked.
+
 ## Native ABI
 
 The native library exposes a small C ABI:

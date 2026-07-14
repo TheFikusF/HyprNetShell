@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using HyprNetShell.Core.Models;
 
 namespace HyprNetShell.Core.Features.Hyprland;
@@ -134,11 +134,11 @@ internal sealed class HyprlandService : IDisposable
             var monitorsJson = await RequestJsonAsync("monitors", timeout.Token);
             var devicesJson = await RequestJsonAsync("devices", timeout.Token);
 
-            var active = Deserialize<HyprClient>(activeJson);
-            var clients = DeserializeArray<HyprClient>(clientsJson);
-            var workspaces = DeserializeArray<HyprWorkspace>(workspacesJson);
-            var monitors = DeserializeArray<HyprMonitor>(monitorsJson);
-            var devices = Deserialize<HyprDevices>(devicesJson);
+            var active = Deserialize(activeJson, HyprlandJsonContext.Default.HyprClient);
+            var clients = DeserializeArray(clientsJson, HyprlandJsonContext.Default.HyprClientArray);
+            var workspaces = DeserializeArray(workspacesJson, HyprlandJsonContext.Default.HyprWorkspaceArray);
+            var monitors = DeserializeArray(monitorsJson, HyprlandJsonContext.Default.HyprMonitorArray);
+            var devices = Deserialize(devicesJson, HyprlandJsonContext.Default.HyprDevices);
 
             _snapshot = BuildSnapshot(active, clients, workspaces, monitors, devices);
         }
@@ -409,14 +409,14 @@ internal sealed class HyprlandService : IDisposable
         Console.WriteLine($"hyprctl eval exited {process.ExitCode}: {stderr.Trim()}");
     }
 
-    private static T? Deserialize<T>(string? json)
+    private static T? Deserialize<T>(string? json, JsonTypeInfo<T> typeInfo)
     {
-        return string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<T>(json, JsonOptions);
+        return string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize(json, typeInfo);
     }
 
-    private static T[] DeserializeArray<T>(string? json)
+    private static T[] DeserializeArray<T>(string? json, JsonTypeInfo<T[]> typeInfo)
     {
-        return string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize<T[]>(json, JsonOptions) ?? [];
+        return string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize(json, typeInfo) ?? [];
     }
 
     private static string FirstNonEmpty(params string?[] values)
@@ -429,29 +429,4 @@ internal sealed class HyprlandService : IDisposable
         return "";
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
-    private sealed record HyprWorkspace(int Id, string? Monitor);
-
-    private sealed record HyprMonitor(string Name, bool Focused, HyprActiveWorkspace? ActiveWorkspace);
-
-    private sealed record HyprActiveWorkspace(int Id);
-
-    private sealed record HyprClient(
-        [property: JsonPropertyName("class")] string ClassName,
-        string Title,
-        HyprClientWorkspace? Workspace);
-
-    private sealed record HyprClientWorkspace(int Id);
-
-    private sealed record HyprDevices(IReadOnlyList<HyprKeyboard>? Keyboards);
-
-    private sealed record HyprKeyboard(
-        string Name,
-        [property: JsonPropertyName("active_keymap")]
-        string ActiveKeymap,
-        bool Main);
 }

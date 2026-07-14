@@ -1,4 +1,5 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk"
+         TreatAsLocalProperty="PublishAot;RuntimeIdentifier;SelfContained">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
@@ -8,6 +9,9 @@
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <NoWarn>$(NoWarn);RS2008</NoWarn>
         <RootNamespace>HyprNetShell.Generators</RootNamespace>
+        <PublishAot>false</PublishAot>
+        <RuntimeIdentifier></RuntimeIdentifier>
+        <SelfContained>false</SelfContained>
     </PropertyGroup>
 
     <ItemGroup>

@@ -13,7 +13,8 @@
         <ProjectReference Include="../Rendering/HyprNetShell.Rendering.csproj" />
         <ProjectReference Include="../Generators/HyprNetShell.Generators.csproj"
                           OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false" />
+                          ReferenceOutputAssembly="false"
+                          GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
     </ItemGroup>
 
     <ItemGroup>

@@ -98,6 +98,15 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/wallpaper.svg")]
     public static partial SvgAsset Wallpaper { get; }
 
+    [SvgAsset("assets/icons/lucide/power.svg")]
+    public static partial SvgAsset Power { get; }
+
+    [SvgAsset("assets/icons/lucide/power-off.svg")]
+    public static partial SvgAsset PowerOff { get; }
+
+    [SvgAsset("assets/icons/lucide/rotate-ccw.svg")]
+    public static partial SvgAsset Reboot { get; }
+
     [SvgAsset("assets/icons/lucide/copy.svg")]
     public static partial SvgAsset Copy { get; }
 
@@ -143,4 +152,16 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/skip-back.svg")]
     public static partial SvgAsset SkipBack { get; }
+    
+    [SvgAsset("assets/icons/lucide/calendar-days.svg")]
+    public static partial SvgAsset Calendar { get; }
+    
+    [SvgAsset("assets/icons/lucide/clock.svg")]
+    public static partial SvgAsset Clock { get; }
+    
+    [SvgAsset("assets/icons/lucide/cloud-sun.svg")]
+    public static partial SvgAsset CloudSun { get; }
+    
+    [SvgAsset("assets/icons/lucide/bell.svg")]
+    public static partial SvgAsset Bell { get; }
 }

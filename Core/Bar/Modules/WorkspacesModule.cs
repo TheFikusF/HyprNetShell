@@ -80,7 +80,7 @@ internal sealed class WorkspacesModule : IDrawableModule
     private Node WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
     {
         var normal = workspace.Active ? theme.Active : theme.Panel;
-        var state = GetPopupWorkspaceState(workspace.Id, normal);
+        var state = _popupWorkspaceStates.GetState(workspace.Id, normal);
         var target = state.Hovered ? Color.Lighten(normal, workspace.Active ? 0.18f : 0.12f) : normal;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
 
@@ -113,18 +113,6 @@ internal sealed class WorkspacesModule : IDrawableModule
                     }),
             ],
         };
-    }
-
-    private ModulesCommon.BoxState GetPopupWorkspaceState(int workspaceId, Color initialColor)
-    {
-        if (_popupWorkspaceStates.TryGetValue(workspaceId, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(initialColor);
-        _popupWorkspaceStates[workspaceId] = state;
-        return state;
     }
 
     private void ResetPopupHoverState()

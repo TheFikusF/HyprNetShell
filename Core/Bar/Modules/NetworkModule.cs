@@ -56,7 +56,7 @@ internal sealed class NetworkModule(
         var icon = !network.Connected
             ? new ImageNode(Icons.WifiOff, 18, 18, theme.Text)
             : network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-                ? WifiIcon(2, 18)
+                ? WifiIcon(WifiStrengthIndex(network.WifiSignal), 18)
                 : network.Type.Equals("ethernet", StringComparison.OrdinalIgnoreCase)
                     ? new ImageNode(Icons.Ethernet, 18, 18, theme.Text)
                     : new ImageNode(Icons.Globe, 18, 18, theme.Text);
@@ -123,7 +123,7 @@ internal sealed class NetworkModule(
 
     private Node BuildWifiRow(WifiNetworkSnapshot wifi)
     {
-        var state = GetRowState($"wifi:{wifi.Ssid}", wifi.Active ? theme.Active : theme.Panel);
+        var state = _rowStates.GetState($"wifi:{wifi.Ssid}", wifi.Active ? theme.Active : theme.Panel);
         var target = state.Hovered
             ? Color.Lighten(wifi.Active ? theme.Active : theme.Panel, 0.12f)
             : wifi.Active
@@ -150,13 +150,7 @@ internal sealed class NetworkModule(
             Children =
             [
                 wifi.Active ? new ImageNode(Icons.Check, 14, 14, theme.Text) : new BoxNode(16, 16),
-                WifiIcon(wifi.Signal switch
-                {
-                    null or <= 25 => 0,
-                    <= 50 => 1,
-                    <= 75 => 2,
-                    _ => 3,
-                }, 18),
+                WifiIcon(WifiStrengthIndex(wifi.Signal), 18),
                 new TextNode(Trim(ssid, 22), 14.0f, theme.Text),
                 new TextNode(security, 14.0f, theme.Text),
             ],
@@ -165,7 +159,7 @@ internal sealed class NetworkModule(
 
     private Node BuildIpRow(string ipAddress)
     {
-        var state = GetRowState($"ip:{ipAddress}", theme.Panel);
+        var state = _rowStates.GetState($"ip:{ipAddress}", theme.Panel);
         var target = state.Hovered ? Color.Lighten(theme.Panel, 0.12f) : theme.Panel;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
 
@@ -174,7 +168,7 @@ internal sealed class NetworkModule(
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            OnClick = () => CopyToClipboard(ipAddress),
+            OnClick = () => Utils.CopyToClipboard(ipAddress),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 Spacing = 8,
@@ -282,6 +276,14 @@ internal sealed class NetworkModule(
         return fields.ToArray();
     }
 
+    private static int WifiStrengthIndex(int? signal) => signal switch
+    {
+        null or <= 25 => 0,
+        <= 50 => 1,
+        <= 75 => 2,
+        _ => 3,
+    };
+
     private static void ConnectWifi(string ssid)
     {
         Task.Run(() =>
@@ -303,63 +305,6 @@ internal sealed class NetworkModule(
                 // Ignore transient command failures; the next state refresh will show the result.
             }
         });
-    }
-
-    private static void CopyToClipboard(string text)
-    {
-        Task.Run(() =>
-        {
-            if (!TryCopyWith("wl-copy", [], text))
-            {
-                TryCopyWith("xclip", ["-selection", "clipboard"], text);
-            }
-        });
-    }
-
-    private static bool TryCopyWith(string fileName, IEnumerable<string> arguments, string text)
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = fileName,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-            if (process is null)
-            {
-                return false;
-            }
-
-            foreach (var argument in arguments)
-            {
-                process.StartInfo.ArgumentList.Add(argument);
-            }
-
-            process.StandardInput.Write(text);
-            process.StandardInput.Close();
-            process.WaitForExit(800);
-            return process.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private ModulesCommon.BoxState GetRowState(string key, Color initialColor)
-    {
-        if (_rowStates.TryGetValue(key, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(initialColor);
-        _rowStates[key] = state;
-        return state;
     }
 
     private static string Trim(string text, int maxLength) =>

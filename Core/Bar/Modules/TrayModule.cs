@@ -78,13 +78,7 @@ internal sealed class TrayModule(
             return ModulesCommon.BuildDivider(theme.Border, height: 12);
         }
 
-        var key = item.Id + ":" + (row.ActionId?.ToString() ?? row.Label);
-        if (!_rowStates.TryGetValue(key, out var state))
-        {
-            state = new ModulesCommon.BoxState(theme.Panel);
-            _rowStates[key] = state;
-        }
-
+        var state = _rowStates.GetState(item.Id + ":" + (row.ActionId?.ToString() ?? row.Label), theme.Panel);
         var target = state.Hovered && row.Enabled ? Color.Lighten(theme.Panel, 0.12f) : theme.Panel;
         state.Background = Color.LerpSmooth(state.Background, target, 18, ModulesCommon.DELTA_TIME);
 

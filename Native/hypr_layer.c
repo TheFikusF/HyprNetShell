@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "hypr_layer.h"
 
 #include <EGL/egl.h>
@@ -7,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -49,7 +52,18 @@ struct hypr_layer_window {
     char pending_text[128];
     int pending_text_length;
     double pending_scroll;
+    uint32_t repeat_key;
+    int repeat_active;
+    int repeat_rate;
+    int repeat_delay;
+    int64_t repeat_next_ms;
 };
+
+static int64_t monotonic_milliseconds(void) {
+    struct timespec value;
+    clock_gettime(CLOCK_MONOTONIC, &value);
+    return (int64_t)value.tv_sec * 1000 + value.tv_nsec / 1000000;
+}
 
 static void fail(const char* message) {
     fprintf(stderr, "hypr_layer: %s\n", message);
@@ -379,10 +393,27 @@ static void keyboard_leave(
     struct wl_keyboard* keyboard,
     uint32_t serial,
     struct wl_surface* surface) {
-    (void)data;
     (void)keyboard;
     (void)serial;
     (void)surface;
+    struct hypr_layer_window* window = data;
+    window->repeat_active = 0;
+}
+
+static void queue_keyboard_input(struct hypr_layer_window* window, uint32_t key) {
+    window->pending_key = (int)key;
+    if (window->xkb_state == NULL) {
+        return;
+    }
+
+    char text[64];
+    int length = xkb_state_key_get_utf8(window->xkb_state, key + 8, text, sizeof(text));
+    int remaining = (int)sizeof(window->pending_text) - window->pending_text_length - 1;
+    if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 && text[0] != 0x7f) {
+        memcpy(window->pending_text + window->pending_text_length, text, (size_t)length);
+        window->pending_text_length += length;
+        window->pending_text[window->pending_text_length] = '\0';
+    }
 }
 
 static void keyboard_key(
@@ -395,19 +426,18 @@ static void keyboard_key(
     (void)keyboard;
     (void)serial;
     (void)time;
+    struct hypr_layer_window* window = data;
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        struct hypr_layer_window* window = data;
-        window->pending_key = (int)key;
-        if (window->xkb_state != NULL) {
-            char text[64];
-            int length = xkb_state_key_get_utf8(window->xkb_state, key + 8, text, sizeof(text));
-            int remaining = (int)sizeof(window->pending_text) - window->pending_text_length - 1;
-            if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 && text[0] != 0x7f) {
-                memcpy(window->pending_text + window->pending_text_length, text, (size_t)length);
-                window->pending_text_length += length;
-                window->pending_text[window->pending_text_length] = '\0';
-            }
+        queue_keyboard_input(window, key);
+        if (window->repeat_rate > 0 &&
+            window->xkb_keymap != NULL &&
+            xkb_keymap_key_repeats(window->xkb_keymap, key + 8)) {
+            window->repeat_key = key;
+            window->repeat_active = 1;
+            window->repeat_next_ms = monotonic_milliseconds() + window->repeat_delay;
         }
+    } else if (window->repeat_active && window->repeat_key == key) {
+        window->repeat_active = 0;
     }
 }
 
@@ -435,10 +465,13 @@ static void keyboard_modifiers(
 }
 
 static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
-    (void)data;
     (void)keyboard;
-    (void)rate;
-    (void)delay;
+    struct hypr_layer_window* window = data;
+    window->repeat_rate = rate;
+    window->repeat_delay = delay;
+    if (rate <= 0) {
+        window->repeat_active = 0;
+    }
 }
 
 static const struct wl_keyboard_listener keyboard_listener = {
@@ -471,6 +504,7 @@ static void seat_capabilities(void* data, struct wl_seat* seat, uint32_t capabil
     } else if (!has_keyboard && window->keyboard != NULL) {
         wl_keyboard_release(window->keyboard);
         window->keyboard = NULL;
+        window->repeat_active = 0;
     }
 }
 
@@ -834,6 +868,15 @@ void hypr_layer_poll_events(hypr_layer_window* window) {
             window->should_close = 1;
         }
     }
+
+    if (window->repeat_active && window->repeat_rate > 0) {
+        int64_t now = monotonic_milliseconds();
+        if (now >= window->repeat_next_ms) {
+            queue_keyboard_input(window, window->repeat_key);
+            int64_t interval = 1000 / window->repeat_rate;
+            window->repeat_next_ms = now + (interval > 0 ? interval : 1);
+        }
+    }
 }
 
 void hypr_layer_set_input_regions(hypr_layer_window* window, const int* rectangles, int rectangle_count) {
@@ -853,6 +896,9 @@ void hypr_layer_set_keyboard_interactivity(hypr_layer_window* window, int enable
         return;
     }
 
+    if (!enabled) {
+        window->repeat_active = 0;
+    }
     zwlr_layer_surface_v1_set_keyboard_interactivity(window->layer_surface, enabled ? 1 : 0);
     wl_surface_commit(window->surface);
     wl_display_flush(window->display);

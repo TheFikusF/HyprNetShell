@@ -168,12 +168,7 @@ public sealed class HyprLayer : IDisposable
 
 file static class NativeMethods
 {
-    private const string HyprLayerLibrary =
-#if HYPRNETSHELL_STATIC_NATIVE
-        "__Internal";
-#else
-        "hypr_layer";
-#endif
+    private const string HyprLayerLibrary = "hypr_layer";
 
     [DllImport(HyprLayerLibrary)]
     internal static extern IntPtr hypr_layer_create_top_bar(int reservedHeight);

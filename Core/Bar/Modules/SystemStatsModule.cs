@@ -96,5 +96,5 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Them
     }
 
     private static string FormatPercent(int? value) => value.HasValue ? $"{value.Value}%" : "?";
-    private static string FormatTemperature(int? value) => value.HasValue ? $"{value.Value}C" : "?";
+    private static string FormatTemperature(int? value) => value.HasValue ? $"{value.Value}°C" : "?";
 }

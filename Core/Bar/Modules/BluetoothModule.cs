@@ -55,7 +55,7 @@ internal sealed class BluetoothModule(
         };
     }
 
-    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new (360)
+    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new(360)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -91,7 +91,7 @@ internal sealed class BluetoothModule(
     private Node BuildDeviceRow(BluetoothDeviceSnapshot device)
     {
         var connected = EffectiveConnected(device);
-        var state = GetRowState(device.Address, connected ? theme.Active : theme.Panel);
+        var state = _rowStates.GetState(device.Address, connected ? theme.Active : theme.Panel);
         var baseColor = connected ? theme.Active : theme.Panel;
         var target = state.Hovered ? Color.Lighten(baseColor, 0.12f) : baseColor;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
@@ -168,18 +168,6 @@ internal sealed class BluetoothModule(
         var connect = !EffectiveConnected(device);
         _connectionOverrides[device.Address] = connect;
         _ = BluetoothModuleService.SetConnectedAsync(device.Address, connect);
-    }
-
-    private ModulesCommon.BoxState GetRowState(string key, Color initialColor)
-    {
-        if (_rowStates.TryGetValue(key, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(initialColor);
-        _rowStates[key] = state;
-        return state;
     }
 
     private static string Trim(string text, int maxLength) =>

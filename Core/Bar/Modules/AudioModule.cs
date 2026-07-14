@@ -96,7 +96,7 @@ internal sealed class AudioModule(
 
     private Node BuildDeviceRow(AudioDeviceSnapshot device)
     {
-        var state = GetRowState(device.Id, device.Active ? theme.Active : theme.Panel);
+        var state = _rowStates.GetState(device.Id, device.Active ? theme.Active : theme.Panel);
         var baseColor = device.Active ? theme.Active : theme.Panel;
         var target = state.Hovered ? Color.Lighten(baseColor, 0.12f) : baseColor;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
@@ -273,18 +273,6 @@ internal sealed class AudioModule(
         dragging = new RefBool();
         _sliderDragging[deviceId] = dragging;
         return dragging;
-    }
-
-    private ModulesCommon.BoxState GetRowState(string key, Color initialColor)
-    {
-        if (_rowStates.TryGetValue(key, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(initialColor);
-        _rowStates[key] = state;
-        return state;
     }
 
     private static string Trim(string text, int maxLength) =>

@@ -285,7 +285,9 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                 Directory.CreateDirectory(Path.GetDirectoryName(_curvePath)!);
                 await File.WriteAllTextAsync(
                     _curvePath,
-                    JsonSerializer.Serialize(new TemperatureScheduleConfig(enabled, curve)),
+                    JsonSerializer.Serialize(
+                        new TemperatureScheduleConfig(enabled, curve),
+                        DisplayControlsJsonContext.Default.TemperatureScheduleConfig),
                     cancellationToken);
             }
             catch (OperationCanceledException)
@@ -307,13 +309,17 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             using var document = JsonDocument.Parse(json);
             if (document.RootElement.ValueKind == JsonValueKind.Array)
             {
-                var legacyPoints = JsonSerializer.Deserialize<TemperatureCurvePoint[]>(json);
+                var legacyPoints = JsonSerializer.Deserialize(
+                    json,
+                    DisplayControlsJsonContext.Default.TemperatureCurvePointArray);
                 return legacyPoints is { Length: 4 }
                     ? (NormalizeCurve(legacyPoints), true)
                     : ([..TemperatureCurveMath.DefaultPoints], true);
             }
 
-            var config = JsonSerializer.Deserialize<TemperatureScheduleConfig>(json);
+            var config = JsonSerializer.Deserialize(
+                json,
+                DisplayControlsJsonContext.Default.TemperatureScheduleConfig);
             return config?.Points is { Length: 4 }
                 ? (NormalizeCurve(config.Points), config.Enabled)
                 : ([..TemperatureCurveMath.DefaultPoints], true);
@@ -428,8 +434,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService
 
         return Path.Combine(configRoot, "hyprnetshell", "temperature-curve.json");
     }
-
-    private sealed record TemperatureScheduleConfig(bool Enabled, TemperatureCurvePoint[] Points);
 
     private static void StartHyprsunset(int temperatureKelvin)
     {

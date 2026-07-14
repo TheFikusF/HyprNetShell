@@ -5,9 +5,10 @@ public sealed record NetworkSnapshot(
     string Device,
     string Type,
     string Connection,
-    IReadOnlyList<string> IpAddresses)
+    IReadOnlyList<string> IpAddresses,
+    int? WifiSignal)
 {
-    public static NetworkSnapshot Empty { get; } = new(false, "", "", "", []);
+    public static NetworkSnapshot Empty { get; } = new(false, "", "", "", [], null);
 }
 
 public sealed record WifiNetworkSnapshot(

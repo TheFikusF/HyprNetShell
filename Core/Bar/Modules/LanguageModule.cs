@@ -97,7 +97,7 @@ internal sealed class LanguageModule : IDrawableModule
 
         var normal = text == _lastLayoutName ? _theme.Active : _theme.Panel;
         float fontSize = text == _lastLayoutName ? 20.0f : 14.0f;
-        var state = GetPopupWorkspaceState(text, normal);
+        var state = _languagesRowStates.GetState(text, normal);
         var target = state.Hovered ? Color.Lighten(normal, text == _lastLayoutName ? 0.18f : 0.12f) : normal;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
 
@@ -126,17 +126,5 @@ internal sealed class LanguageModule : IDrawableModule
                 new TextNode(alias, fontSize, _theme.Text)
             ]
         };
-    }
-
-    private ModulesCommon.BoxState GetPopupWorkspaceState(string layout, Color initialColor)
-    {
-        if (_languagesRowStates.TryGetValue(layout, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(initialColor);
-        _languagesRowStates[layout] = state;
-        return state;
     }
 }

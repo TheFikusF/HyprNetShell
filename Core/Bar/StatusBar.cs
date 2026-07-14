@@ -51,6 +51,7 @@ public sealed class StatusBar : IDisposable
     private readonly CenterModule _centerModule;
     private readonly MusicModule _musicModule;
     private readonly TrayModule _trayModule;
+    private readonly PowerModule _powerModule;
     private readonly MainDialog _mainDialog = new();
     private readonly SniTrayService _trayService = new();
 
@@ -91,6 +92,7 @@ public sealed class StatusBar : IDisposable
         _centerModule = new CenterModule(() => _snapshot.Notifications, Theme.Default);
         _musicModule = new MusicModule(() => _musicService.Snapshot, Theme.Default);
         _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, Theme.Default);
+        _powerModule = new PowerModule(Theme.Default);
         _workspacesModule =
             new WorkspacesModule(_hyprland, _superKey, Theme.Default, () => _languageModule.IsShown);
 
@@ -98,7 +100,7 @@ public sealed class StatusBar : IDisposable
         _rightModules =
         [
             new CompositeModule(_audioModule, _displayControlsModule, _bluetoothModule, _networkModule),
-            _systemStatsModule, _languageModule, _batteryModule, _trayModule
+            _systemStatsModule, _languageModule, _batteryModule, _trayModule, _powerModule
         ];
     }
 

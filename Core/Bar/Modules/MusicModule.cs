@@ -31,7 +31,7 @@ internal sealed class MusicModule(
 
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
     private readonly RefBool _progressDragging = new();
-    private readonly ModulesCommon.BoxState _coverButton = new(Color.White with { A = 0 });
+    private readonly ModulesCommon.BoxState _coverButton = new() { Background = Color.White with { A = 0 }};
     private readonly SeekUpdateQueue _seekQueue = new();
     private long _positionOverrideMicros;
 
@@ -287,7 +287,7 @@ internal sealed class MusicModule(
         var iconSize = action == PlayerAction.PlayPause ? 20 : 14;
 
         var defaultColor = action == PlayerAction.PlayPause ? theme.Active : theme.Panel;
-        var state = GetButtonState(action);
+        var state = _buttonStates.GetState(action, defaultColor);
         var target = state.Hovered
             ? Color.Lighten(defaultColor, 0.16f)
             : defaultColor;
@@ -315,18 +315,6 @@ internal sealed class MusicModule(
                 }, iconSize, iconSize, theme.Text)
             ]
         };
-    }
-
-    private ModulesCommon.BoxState GetButtonState(PlayerAction action)
-    {
-        if (_buttonStates.TryGetValue(action, out var state))
-        {
-            return state;
-        }
-
-        state = new ModulesCommon.BoxState(theme.Panel);
-        _buttonStates[action] = state;
-        return state;
     }
 
     private static float GradientOffset() => -(float)(Environment.TickCount64 % 2600 / 2600.0);

@@ -5,7 +5,6 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <DefineConstants Condition="'$(PublishAot)' == 'true'">$(DefineConstants);HYPRNETSHELL_STATIC_NATIVE</DefineConstants>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(PublishAot)' == 'true'">
@@ -34,13 +33,14 @@
 
     <ItemGroup Condition="'$(PublishAot)' == 'true'">
         <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
-        <DirectPInvoke Include="__Internal" />
+        <DirectPInvoke Include="hypr_layer" />
         <LinkerArg Include="-lwayland-client" />
         <LinkerArg Include="-lwayland-egl" />
         <LinkerArg Include="-lEGL" />
+        <LinkerArg Include="-lxkbcommon" />
     </ItemGroup>
 
-    <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+    <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="ComputeIlcCompileInputs" Condition="'$(PublishAot)' == 'true'">
         <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot; --reconfigure" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
         <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot;" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
         <Exec Command="meson compile -C &quot;$(MSBuildProjectDirectory)/Native/build&quot;" />

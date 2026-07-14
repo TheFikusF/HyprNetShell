@@ -43,6 +43,7 @@ public static class ModulesCommon
                 {
                     CantOpenBefore[_lastOpenedId ?? string.Empty] = DateTime.Now + TimeSpan.FromMilliseconds(200);
                 }
+
                 _lastOpenedId = _pendingOpenedId;
                 _pendingOpenedId = null;
             };
@@ -52,7 +53,7 @@ public static class ModulesCommon
         {
             var shouldShowExternal = GetShouldShowPopup(IsHovered);
             var shouldShow = shouldShowExternal && (_lastOpenedId == _moduleId || _ignorePopupQueue);
-            if (_ignorePopupQueue == false 
+            if (_ignorePopupQueue == false
                 && shouldShowExternal
                 && CantOpenBefore[_moduleId] < DateTime.Now
                 && (_lastOpenedId != _moduleId || string.IsNullOrEmpty(_pendingOpenedId)))
@@ -94,7 +95,8 @@ public static class ModulesCommon
 
     private static readonly AppIconResolver IconResolver = new();
 
-    public static Color ToBackground(Theme theme, Color color) => Color.Lerp(theme.Panel, color, 0.125f) with { A = 0.9f };
+    public static Color ToBackground(Theme theme, Color color) =>
+        Color.Lerp(theme.Panel, color, 0.125f) with { A = 0.9f };
 
     public static Node BuildDivider(Color color, int? width = null, int height = 24) =>
         new BoxNode(width, height)
@@ -102,7 +104,7 @@ public static class ModulesCommon
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
-            Children = [ new BoxNode(height: 2) { Style = new Style { BackgroundColor = color } } ]
+            Children = [new BoxNode(height: 2) { Style = new Style { BackgroundColor = color } }]
         };
 
     public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null) =>
@@ -165,9 +167,24 @@ public static class ModulesCommon
         return string.IsNullOrWhiteSpace(className) ? "?" : className[..1].ToUpperInvariant();
     }
 
-    public sealed class BoxState(Color background)
+    public static TState GetState<TKey, TState>(this Dictionary<TKey, TState> stateDictionary, TKey key,
+        Color initialColor)
+        where TState : BoxState, new()
+        where TKey : notnull
+    {
+        if (stateDictionary.TryGetValue(key, out var state))
+        {
+            return state;
+        }
+
+        state = new TState { Background = initialColor };
+        stateDictionary[key] = state;
+        return state;
+    }
+
+    public class BoxState
     {
         public RefBool Hovered { get; } = new();
-        public Color Background { get; set; } = background;
+        public Color Background { get; set; }
     }
 }

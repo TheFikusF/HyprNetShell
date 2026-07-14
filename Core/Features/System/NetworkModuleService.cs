@@ -35,18 +35,50 @@ internal sealed class NetworkModuleService : IBarDataService
 
                 if (stateName == "connected" && !string.IsNullOrWhiteSpace(connection))
                 {
+                    var wifiSignal = type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
+                        ? await ReadWifiSignalAsync(device, cancellationToken)
+                        : null;
                     snapshot = new NetworkSnapshot(
                         true,
                         device,
                         type,
                         connection,
-                        ReadIpAddresses(device));
+                        ReadIpAddresses(device),
+                        wifiSignal);
                     break;
                 }
             }
         }
 
         state.Network = snapshot;
+    }
+
+    private static async Task<int?> ReadWifiSignalAsync(string device, CancellationToken cancellationToken)
+    {
+        var output = await CommandRunner.TryReadAsync(
+            "nmcli",
+            $"-t -f ACTIVE,SIGNAL device wifi list ifname {device}",
+            TimeSpan.FromMilliseconds(800),
+            cancellationToken);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separator = line.LastIndexOf(':');
+            if (separator <= 0 ||
+                !line[..separator].Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+                !int.TryParse(line[(separator + 1)..], out var signal))
+            {
+                continue;
+            }
+
+            return Math.Clamp(signal, 0, 100);
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<string> ReadIpAddresses(string device)
