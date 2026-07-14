@@ -71,42 +71,22 @@ internal sealed class NetworkModule(
         };
     }
 
-    private BoxNode BuildPopup(NetworkSnapshot network) =>
-        new(360)
-        {
-            IgnoreLayout = true,
-            Style = new Style
-            {
-                Padding = new Insets(32, 0, 0, 0),
-            },
-            Children =
-            [
-                new BoxNode(360)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8
-                    },
-                    Children =
-                    [
-                        new TextNode("Available Wi-Fi", 14.0f, theme.Text),
-                        ..BuildWifiRows(),
-                        ModulesCommon.BuildDivider(theme.Border),
-                        new TextNode("Details", 14.0f, theme.Text),
-                        BuildIpRow(network.Device),
-                        ..BuildIpRows(network),
-                    ]
-                }
-            ]
-        };
+    private BoxNode BuildPopup(NetworkSnapshot network) => new BoxNode(360)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            new TextNode("Available Wi-Fi", 14.0f, theme.Text),
+            ..BuildWifiRows(),
+            ModulesCommon.BuildDivider(theme.Border),
+            new TextNode("Details", 14.0f, theme.Text),
+            BuildIpRow(network.Device),
+            ..BuildIpRows(network),
+        ]
+    };
 
     private IEnumerable<Node> BuildWifiRows()
     {

@@ -41,10 +41,10 @@ public class MarqueeTextNode : Node
         if (ShadowColor.HasValue)
         {
             renderer.DrawText(text, Style.Padding.Left + x,
-                Style.Padding.Top + y + (int)(_fontSize * 0.8f) + (int)ShadowDistance, _fontSize, ShadowColor.Value, 0);
+                Style.Padding.Top + y + (int)(_fontSize * 0.8f) + (int)ShadowDistance, _fontSize, ShadowColor.Value.PushOpacity(Opacity), 0);
         }
         
-        renderer.DrawText(text, Style.Padding.Left + x, Style.Padding.Top + y + (int)(_fontSize * 0.8f), _fontSize, _color);
+        renderer.DrawText(text, Style.Padding.Left + x, Style.Padding.Top + y + (int)(_fontSize * 0.8f), _fontSize, _color.PushOpacity(Opacity));
     }
 
     private string VisibleText()

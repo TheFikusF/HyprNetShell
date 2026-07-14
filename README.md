@@ -33,6 +33,9 @@ ninja
 dotnet-sdk
 wireplumber (for the `wpctl` audio controls)
 bluez-utils (for the `bluetoothctl` device controls)
+xkbcommon (for keyboard-layout-aware launcher input)
+socat (for Hyprland hotkey notifications)
+cliphist and wl-clipboard (for clipboard history)
 ```
 
 Gentoo package names are typically:
@@ -79,6 +82,9 @@ dotnet run --project HyprNetShell.csproj
 ```
 
 Run this inside Hyprland or another compositor implementing `zwlr_layer_shell_v1`.
+
+The built-in Hyprland key watcher registers `SUPER+L` to toggle the application launcher and removes the
+binding during shutdown.
 
 ## What It Draws
 

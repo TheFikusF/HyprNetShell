@@ -3,6 +3,7 @@ using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
@@ -37,7 +38,8 @@ internal sealed class BluetoothModule(
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.Lerp(Color.Lazure, Color.Blue, 0.3f)), 
+            Style = ModulesCommon.ModuleStyle(theme,
+                    ModulesCommon.ToBackground(theme, Color.Lerp(Color.Lazure, Color.Blue, 0.3f)),
                     left: false, right: false) with
                 {
                     BorderWidth = new Insets(1, theme.BorderWidth),
@@ -53,35 +55,18 @@ internal sealed class BluetoothModule(
         };
     }
 
-    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) =>
-        new(360)
-        {
-            IgnoreLayout = true,
-            Style = new Style { Padding = new Insets(32, 0, 0, 0) },
-            Children =
-            [
-                new BoxNode(360)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8,
-                    },
-                    Children =
-                    [
-                        new TextNode("Bluetooth devices", 14.0f, theme.Text),
-                        ..BuildDeviceRows(bluetooth),
-                    ],
-                },
-            ],
-        };
+    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new (360)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            new TextNode("Bluetooth devices", 14.0f, theme.Text),
+            ..BuildDeviceRows(bluetooth),
+        ],
+    };
 
     private IEnumerable<Node> BuildDeviceRows(BluetoothSnapshot bluetooth)
     {
@@ -131,8 +116,8 @@ internal sealed class BluetoothModule(
                     VerticalAlignment = ItemsAlignment.Center,
                     Children =
                     [
-                        new TextNode(Trim(device.Name, 30), 14.0f, theme.Text),
-                        new TextNode(connected ? "Connected" : "Disconnected", 12.0f, theme.Text),
+                        ModulesCommon.BuildTextWithIcon(theme, DeviceTypeIcon(device.Icon), Trim(device.Name, 30)),
+                        new TextNode(connected ? "Connected" : "Disconnected", theme.TextSize, theme.Text),
                     ]
                 },
                 device.BatteryPercentage is { } battery
@@ -140,31 +125,19 @@ internal sealed class BluetoothModule(
                     {
                         HorizontalAlignment = ItemsAlignment.Spread,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Style = new Style() { Padding = new Insets(8, 0, 0, 0) },
+                        Style = new Style { Padding = new Insets(8, 0, 0, 0) },
                         Children =
                         [
-                            new TextNode("Battery", 12.0f, theme.Text),
-                            new TextNode($"{battery}%", 14.0f, battery <= 20 ? theme.Warning : theme.Text),
+                            new TextNode("Battery", theme.TextSize, theme.Text),
+                            ModulesCommon.BuildTextWithIcon(theme, BatteryModule.BatteryLevelIcon(battery),
+                                $"{battery}%",
+                                battery <= 20 ? Color.Lerp(Color.White, Color.Orange, 0.5f) : theme.Text)
                         ]
                     }
                     : new SpacerNode(),
             ],
         };
     }
-
-    private Node BuildBatteryRow(int battery) =>
-        new BoxNode(340)
-        {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Spread,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Padding = new Insets(2, 8) },
-            Children =
-            [
-                new TextNode("Battery", 12.0f, theme.Muted),
-                new TextNode($"{battery}%", 13.0f, battery <= 20 ? theme.Warning : theme.Text),
-            ],
-        };
 
     private Node BuildPlainRow(string text) =>
         new BoxNode
@@ -211,4 +184,23 @@ internal sealed class BluetoothModule(
 
     private static string Trim(string text, int maxLength) =>
         text.Length <= maxLength ? text : text[..Math.Max(0, maxLength - 3)] + "...";
+
+    private static SvgAsset DeviceTypeIcon(string? icon) => icon?.ToLowerInvariant() switch
+    {
+        "audio-headphones" => Icons.Headphones,
+        "audio-headset" => Icons.Headset,
+        "audio-speakers" or "audio-card" => Icons.Speaker,
+        "audio-input-microphone" => Icons.Microphone,
+        "input-keyboard" => Icons.Keyboard,
+        "input-mouse" => Icons.Mouse,
+        "input-gaming" => Icons.Gamepad,
+        "input-tablet" => Icons.Tablet,
+        "phone" => Icons.Smartphone,
+        "computer" => Icons.Laptop,
+        "multimedia-player" => Icons.Monitor,
+        "watch" => Icons.Watch,
+        "camera-photo" or "camera-video" => Icons.Camera,
+        "printer" or "scanner" => Icons.Printer,
+        _ => Icons.Bluetooth,
+    };
 }

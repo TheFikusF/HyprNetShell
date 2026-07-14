@@ -39,17 +39,17 @@ public sealed class SliderNode(
         
         var normalizedValue = Math.Clamp(value, 0.0f, 1.0f);
         var track = new Rect(x, y + (Height - TRACK_HEIGHT) / 2.0f, Width, TRACK_HEIGHT);
-        renderer.FillRoundedRect(track, TRACK_HEIGHT / 2.0f, trackColor);
+        renderer.FillRoundedRect(track, TRACK_HEIGHT / 2.0f, trackColor.PushOpacity(Opacity));
         if (normalizedValue > 0.0f)
         {
-            renderer.FillRoundedRect(track with { Width = track.Width * normalizedValue }, TRACK_HEIGHT / 2.0f, fillColor);
+            renderer.FillRoundedRect(track with { Width = track.Width * normalizedValue }, TRACK_HEIGHT / 2.0f, fillColor.PushOpacity(Opacity));
         }
 
         var thumbX = x + normalizedValue * Width;
         renderer.FillRoundedRect(
             new Rect(thumbX - THUMB_SIZE / 2.0f, y + (Height - THUMB_SIZE) / 2.0f, THUMB_SIZE, THUMB_SIZE),
             THUMB_SIZE / 2.0f,
-            thumbColor);
+            thumbColor.PushOpacity(Opacity));
 
         Layout.AddInputRegion(bounds);
         SetInteractionState(hovered, false, hovered && Layout.Input.PointerPressed, false);

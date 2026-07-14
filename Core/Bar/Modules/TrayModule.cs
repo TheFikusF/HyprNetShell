@@ -43,7 +43,7 @@ internal sealed class TrayModule(
             : new ImageNode(item.IconPath, 18, 18);
 
         return node.Draw([
-            new BoxNode(32, 32)
+            new BoxNode(height: 32)
             {
                 Direction = Direction.Horizontal,
                 HorizontalAlignment = ItemsAlignment.Center,
@@ -57,33 +57,17 @@ internal sealed class TrayModule(
         ], () => BuildPopup(item));
     }
 
-    private Node BuildPopup(TrayItemSnapshot item)
+    private BoxNode BuildPopup(TrayItemSnapshot item)
     {
         var rows = item.Menu?.Rows;
-        return new BoxNode(300)
+        return new BoxNode
         {
-            IgnoreLayout = true,
-            Style = new Style { Padding = new Insets(28, 0, 0, 0) },
-            Children =
-            [
-                new BoxNode(300)
-                {
-                    Direction = Direction.Vertical,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 4,
-                    },
-                    Children = rows is { Count: > 0 }
-                        ? rows.Select(row => BuildRow(item, row)).ToArray()
-                        : [new TextNode(item.Title, 14.0f, theme.Muted)],
-                },
-            ],
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = ModulesCommon.PopupStyle(theme),
+            Children = rows is { Count: > 0 }
+                ? rows.Select(row => BuildRow(item, row)).ToArray()
+                : [new TextNode(item.Title, 14.0f, theme.Muted)],
         };
     }
 

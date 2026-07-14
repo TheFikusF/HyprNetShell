@@ -148,6 +148,7 @@ public class BoxNode : Node, IEnumerable<Node>
 
         foreach (var child in EphemeralChildren)
         {
+            child.Opacity *= Opacity;
             var childX = contentX + GetAnchorOffset(HorizontalAlignment, contentWidth, child.Width);
             var childY = contentY + GetAnchorOffset(VerticalAlignment, contentHeight, child.Height);
             child.Draw(renderer, childX, childY);
@@ -183,6 +184,8 @@ public class BoxNode : Node, IEnumerable<Node>
 
         foreach (var child in children)
         {
+            child.Opacity *= Opacity;
+            
             if (child is BoxNode { _explicitHeight: null } boxChild &&
                 VerticalAlignment == ItemsAlignment.Stretch)
             {
@@ -216,6 +219,8 @@ public class BoxNode : Node, IEnumerable<Node>
 
         foreach (var child in children)
         {
+            child.Opacity *= Opacity;
+            
             if (child is BoxNode { _explicitWidth: null } boxChild &&
                 HorizontalAlignment == ItemsAlignment.Stretch)
             {
@@ -291,7 +296,7 @@ public class BoxNode : Node, IEnumerable<Node>
 
         if (Style.BorderColor.HasValue)
         {
-            renderer.FillRoundedBorder(rect, cornerRadius, borderThickness, Style.BorderColor.Value);
+            renderer.FillRoundedBorder(rect, cornerRadius, borderThickness, Style.BorderColor.Value.PushOpacity(Opacity));
 
             if (Style.BackgroundColor.HasValue && borderThickness.Max > 0.0f)
             {
@@ -299,11 +304,11 @@ public class BoxNode : Node, IEnumerable<Node>
                 renderer.FillRoundedRect(
                     inner,
                     cornerRadius.Inset(borderThickness),
-                    Style.BackgroundColor.Value);
+                    Style.BackgroundColor.Value.PushOpacity(Opacity));
             }
             else if (Style.BackgroundColor.HasValue)
             {
-                renderer.FillRoundedRect(rect, cornerRadius, Style.BackgroundColor.Value);
+                renderer.FillRoundedRect(rect, cornerRadius, Style.BackgroundColor.Value.PushOpacity(Opacity));
             }
 
             return;
@@ -311,7 +316,7 @@ public class BoxNode : Node, IEnumerable<Node>
 
         if (Style.BackgroundColor.HasValue)
         {
-            renderer.FillRoundedRect(rect, cornerRadius, Style.BackgroundColor.Value);
+            renderer.FillRoundedRect(rect, cornerRadius, Style.BackgroundColor.Value.PushOpacity(Opacity));
         }
     }
 

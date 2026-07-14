@@ -56,6 +56,48 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/speaker.svg")]
     public static partial SvgAsset Speaker { get; }
 
+    [SvgAsset("assets/icons/lucide/headset.svg")]
+    public static partial SvgAsset Headset { get; }
+
+    [SvgAsset("assets/icons/lucide/mouse.svg")]
+    public static partial SvgAsset Mouse { get; }
+
+    [SvgAsset("assets/icons/lucide/gamepad-2.svg")]
+    public static partial SvgAsset Gamepad { get; }
+
+    [SvgAsset("assets/icons/lucide/smartphone.svg")]
+    public static partial SvgAsset Smartphone { get; }
+
+    [SvgAsset("assets/icons/lucide/tablet.svg")]
+    public static partial SvgAsset Tablet { get; }
+
+    [SvgAsset("assets/icons/lucide/laptop.svg")]
+    public static partial SvgAsset Laptop { get; }
+
+    [SvgAsset("assets/icons/lucide/monitor.svg")]
+    public static partial SvgAsset Monitor { get; }
+
+    [SvgAsset("assets/icons/lucide/watch.svg")]
+    public static partial SvgAsset Watch { get; }
+
+    [SvgAsset("assets/icons/lucide/camera.svg")]
+    public static partial SvgAsset Camera { get; }
+
+    [SvgAsset("assets/icons/lucide/printer.svg")]
+    public static partial SvgAsset Printer { get; }
+
+    [SvgAsset("assets/icons/lucide/app-window.svg")]
+    public static partial SvgAsset Application { get; }
+
+    [SvgAsset("assets/icons/lucide/calculator.svg")]
+    public static partial SvgAsset Calculator { get; }
+
+    [SvgAsset("assets/icons/lucide/clipboard.svg")]
+    public static partial SvgAsset Clipboard { get; }
+
+    [SvgAsset("assets/icons/lucide/wallpaper.svg")]
+    public static partial SvgAsset Wallpaper { get; }
+
     [SvgAsset("assets/icons/lucide/copy.svg")]
     public static partial SvgAsset Copy { get; }
 

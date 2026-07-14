@@ -37,6 +37,7 @@ internal sealed unsafe class FontRenderer : IDisposable
     private readonly int _viewportLocation;
     private readonly int _colorLocation;
     private readonly int _colorViewportLocation;
+    private readonly int _colorGlyphColorLocation;
     private bool _disposed;
     private int _viewportWidth = 1;
     private int _viewportHeight = 1;
@@ -51,6 +52,7 @@ internal sealed unsafe class FontRenderer : IDisposable
         _viewportLocation = _gl.GetUniformLocation(_program, "uViewport");
         _colorLocation = _gl.GetUniformLocation(_program, "uColor");
         _colorViewportLocation = _gl.GetUniformLocation(_colorProgram, "uViewport");
+        _colorGlyphColorLocation = _gl.GetUniformLocation(_colorProgram, "uColor");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -113,7 +115,7 @@ internal sealed unsafe class FontRenderer : IDisposable
         {
             if (!TryGetSymbolGlyph(element, fontSize, out var glyph))
             {
-                cursorX += DrawColorGlyph(element, cursorX, y, fontSize) + charDistance;
+                cursorX += DrawColorGlyph(element, cursorX, y, fontSize, color) + charDistance;
                 _gl.UseProgram(_program);
                 _gl.Uniform2(_viewportLocation, (float)_viewportWidth, (float)_viewportHeight);
                 _gl.Uniform4(_colorLocation, color.R, color.G, color.B, color.A);
@@ -156,7 +158,7 @@ internal sealed unsafe class FontRenderer : IDisposable
         }
     }
 
-    private float DrawColorGlyph(string textElement, float x, float baselineY, float fontSize)
+    private float DrawColorGlyph(string textElement, float x, float baselineY, float fontSize, Color color)
     {
         var glyph = GetColorGlyph(textElement, fontSize);
         if (glyph is null)
@@ -177,6 +179,12 @@ internal sealed unsafe class FontRenderer : IDisposable
 
         _gl.UseProgram(_colorProgram);
         _gl.Uniform2(_colorViewportLocation, (float)_viewportWidth, (float)_viewportHeight);
+        _gl.Uniform4(
+            _colorGlyphColorLocation,
+            color.R * color.A,
+            color.G * color.A,
+            color.B * color.A,
+            color.A);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, glyph.Texture);
         _gl.BindVertexArray(_vao);

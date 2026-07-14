@@ -32,6 +32,9 @@ public abstract class Node
 {
     public virtual int Width { get; }
     public virtual int Height { get; }
+
+    public float Opacity { get; set; } = 1;
+    
     public Style Style { get; set; } = new Style();
     internal bool LastHovered { get; private set; }
     internal bool LastHoveredThrough { get; private set; }

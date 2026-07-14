@@ -133,59 +133,39 @@ internal sealed class CenterModule(
             ],
         };
 
-    private Node BuildPopup(DateTime now, NotificationsSnapshot snapshot) =>
-        new BoxNode(POPUP_WIDTH)
-        {
-            IgnoreLayout = true,
-            Style = new Style
+    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new (POPUP_WIDTH)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            new BoxNode
             {
-                Padding = new Insets(36, 0, 0, 0),
-            },
-            Children =
-            [
-                new BoxNode(POPUP_WIDTH)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
+                Direction = Direction.Horizontal,
+                VerticalAlignment = ItemsAlignment.Start,
+                Style = new Style { Spacing = 12 },
+                Children =
+                [
+                    BuildCalendar(now),
+                    new BoxNode
                     {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.92f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 12,
-                        Spacing = 12
-                    },
-                    Children =
-                    [
-                        new BoxNode
-                        {
-                            Direction = Direction.Horizontal,
-                            VerticalAlignment = ItemsAlignment.Start,
-                            Style = new Style { Spacing = 12 },
-                            Children =
-                            [
-                                BuildCalendar(now),
-                                new BoxNode
-                                {
-                                    Direction = Direction.Vertical,
-                                    VerticalAlignment = ItemsAlignment.Start,
-                                    Style = new Style { Spacing = 12 },
-                                    Children =
-                                    [
-                                        BuildWorldClocks(now),
-                                        BuildWeatherPlaceholder(),
-                                    ]
-                                }
-                            ]
-                        },
-                        ModulesCommon.BuildDivider(theme.Border, height: 12),
-                        BuildNotificationsList(snapshot)
-                    ]
-                }
-            ]
-        };
+                        Direction = Direction.Vertical,
+                        VerticalAlignment = ItemsAlignment.Start,
+                        Style = new Style { Spacing = 12 },
+                        Children =
+                        [
+                            BuildWorldClocks(now),
+                            BuildWeatherPlaceholder(),
+                        ]
+                    }
+                ]
+            },
+            ModulesCommon.BuildDivider(theme.Border, height: 12),
+            BuildNotificationsList(snapshot)
+        ]
+    };
 
     private Node BuildCalendar(DateTime now)
     {

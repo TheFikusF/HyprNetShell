@@ -63,37 +63,20 @@ internal sealed class DisplayControlsModule(
         };
     }
 
-    private BoxNode BuildPopup(DisplayControlsSnapshot controls) =>
-        new(380)
-        {
-            IgnoreLayout = true,
-            Style = new Style { Padding = new Insets(32, 0, 0, 0) },
-            Children =
-            [
-                new BoxNode(380)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8,
-                    },
-                    Children =
-                    [
-                        new TextNode("Display controls", theme.TextSize, theme.Text),
-                        BuildBacklightControl("display", "Screen brightness", Icons.Brightness[0], controls.Display),
-                        BuildBacklightControl("keyboard", "Keyboard brightness", Icons.Keyboard, controls.Keyboard),
-                        BuildTemperatureSchedule(controls),
-                    ],
-                },
-            ],
-        };
+    private BoxNode BuildPopup(DisplayControlsSnapshot controls) =>new (380)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            new TextNode("Display controls", theme.TextSize, theme.Text),
+            BuildBacklightControl("display", "Screen brightness", Icons.Brightness[0], controls.Display),
+            BuildBacklightControl("keyboard", "Keyboard brightness", Icons.Keyboard, controls.Keyboard),
+            BuildTemperatureSchedule(controls),
+        ],
+    };
 
     private Node BuildBacklightControl(
         string key,
@@ -147,17 +130,7 @@ internal sealed class DisplayControlsModule(
                     Style = new Style { Spacing = 8 },
                     Children =
                     [
-                        new BoxNode
-                        {
-                            Direction = Direction.Horizontal,
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Style = new Style { Spacing = 8 },
-                            Children =
-                            [
-                                new ImageNode(Icons.Temperature, 16, 16, theme.Text),
-                                new TextNode("Screen temperature", theme.TextSize, theme.Text),
-                            ],
-                        },
+                        ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, "Screen temperature"),
                         new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K",
                             theme.TextSize,
                             theme.Text),
@@ -238,17 +211,7 @@ internal sealed class DisplayControlsModule(
                     VerticalAlignment = ItemsAlignment.Center,
                     Children =
                     [
-                        new BoxNode
-                        {
-                            Direction = Direction.Horizontal,
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Style = new Style { Spacing = 8 },
-                            Children =
-                            [
-                                new ImageNode(icon, 16, 16, theme.Text),
-                                new TextNode(label, theme.TextSize, theme.Text),
-                            ],
-                        },
+                        ModulesCommon.BuildTextWithIcon(theme, icon, label),
                         new TextNode(valueText, theme.TextSize, theme.Text),
                     ],
                 },

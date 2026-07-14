@@ -18,11 +18,13 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly uint _textureVbo;
     private readonly int _textureViewportLocation;
     private readonly int _textureLocation;
+    private readonly int _textureColorLocation;
     private readonly uint _svgTextureProgram;
     private readonly int _svgTextureViewportLocation;
     private readonly int _svgTextureLocation;
     private readonly int _svgTextureColorLocation;
-    private readonly Dictionary<string, ImageTexture> _textures = new(StringComparer.Ordinal);
+    private readonly Dictionary<ImageTextureKey, ImageTexture> _textures = [];
+    private readonly Dictionary<ImageTextureKey, PendingImageTexture> _pendingTextures = [];
     private readonly Dictionary<SvgAsset, uint> _svgTextures = [];
     private readonly FontRenderer _font;
     private bool _disposed;
@@ -43,6 +45,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _textureProgram = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "texture");
         _textureViewportLocation = _gl.GetUniformLocation(_textureProgram, "uViewport");
         _textureLocation = _gl.GetUniformLocation(_textureProgram, "uTexture");
+        _textureColorLocation = _gl.GetUniformLocation(_textureProgram, "uColor");
         _svgTextureProgram = GlShaders.CreateProgram(
             _gl, GlShaders.TEXTURED_VERTEX, GlShaders.SVG_TEXTURE_FRAGMENT, "SVG texture");
         _svgTextureViewportLocation = _gl.GetUniformLocation(_svgTextureProgram, "uViewport");
@@ -328,14 +331,18 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _font.DrawText(text, x, y, fontSize, charDistance, color);
     }
 
-    public void DrawImage(string imagePath, Rect rect)
+    public void DrawImage(string imagePath, Rect rect, Color multiplicativeColor, bool loadAsync = false)
     {
         if (rect.Width <= 0 || rect.Height <= 0 || string.IsNullOrWhiteSpace(imagePath))
         {
             return;
         }
 
-        var texture = GetTexture(imagePath);
+        var texture = GetTexture(
+            imagePath,
+            Math.Max(1, (int)MathF.Ceiling(rect.Width * 2)),
+            Math.Max(1, (int)MathF.Ceiling(rect.Height * 2)),
+            loadAsync);
         if (texture is null)
         {
             return;
@@ -358,6 +365,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.UseProgram(_textureProgram);
         _gl.Uniform2(_textureViewportLocation, (float)_frameWidth, (float)_frameHeight);
         _gl.Uniform1(_textureLocation, 0);
+        _gl.Uniform4(
+            _textureColorLocation,
+            multiplicativeColor.R,
+            multiplicativeColor.G,
+            multiplicativeColor.B,
+            multiplicativeColor.A);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, texture.Value.Id);
         _gl.BindVertexArray(_textureVao);
@@ -494,7 +507,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         vertices[offset + 5] = color.A;
     }
 
-    private ImageTexture? GetTexture(string imagePath)
+    private ImageTexture? GetTexture(string imagePath, int decodeWidth, int decodeHeight, bool loadAsync)
     {
         try
         {
@@ -505,7 +518,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
             var path = Path.GetFullPath(imagePath);
             var modified = File.GetLastWriteTimeUtc(path);
-            if (_textures.TryGetValue(path, out var cached) && cached.Modified == modified)
+            var key = new ImageTextureKey(path, decodeWidth, decodeHeight);
+            if (_textures.TryGetValue(key, out var cached) && cached.Modified == modified)
             {
                 return cached;
             }
@@ -513,42 +527,81 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             if (cached.Id != 0)
             {
                 _gl.DeleteTexture(cached.Id);
+                _textures.Remove(key);
             }
 
-            var image = LoadImage(path);
+            var image = loadAsync
+                ? GetAsyncDecodedImage(key, modified, path, decodeWidth, decodeHeight)
+                : LoadImage(path, decodeWidth, decodeHeight);
             if (image is null)
             {
                 return null;
             }
 
-            var texture = _gl.GenTexture();
-            _gl.BindTexture(TextureTarget.Texture2D, texture);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-            fixed (byte* data = image.Value.Pixels)
-            {
-                _gl.TexImage2D(
-                    TextureTarget.Texture2D,
-                    0,
-                    InternalFormat.Rgba,
-                    (uint)image.Value.Width,
-                    (uint)image.Value.Height,
-                    0,
-                    PixelFormat.Rgba,
-                    PixelType.UnsignedByte,
-                    data);
-            }
-
-            var loaded = new ImageTexture(texture, modified);
-            _textures[path] = loaded;
-            return loaded;
+            _pendingTextures.Remove(key);
+            return UploadTexture(key, modified, image.Value);
         }
         catch
         {
             return null;
         }
+    }
+
+    private DecodedImage? GetAsyncDecodedImage(
+        ImageTextureKey key,
+        DateTime modified,
+        string path,
+        int decodeWidth,
+        int decodeHeight)
+    {
+        if (_pendingTextures.TryGetValue(key, out var pending) && pending.Modified == modified)
+        {
+            if (!pending.Decode.IsCompleted)
+            {
+                return null;
+            }
+
+            try
+            {
+                return pending.Decode.GetAwaiter().GetResult();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        _pendingTextures[key] = new PendingImageTexture(
+            modified,
+            Task.Run(() => LoadImage(path, decodeWidth, decodeHeight)));
+        return null;
+    }
+
+    private ImageTexture UploadTexture(ImageTextureKey key, DateTime modified, DecodedImage image)
+    {
+        var texture = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, texture);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        fixed (byte* data = image.Pixels)
+        {
+            _gl.TexImage2D(
+                TextureTarget.Texture2D,
+                0,
+                InternalFormat.Rgba,
+                (uint)image.Width,
+                (uint)image.Height,
+                0,
+                PixelFormat.Rgba,
+                PixelType.UnsignedByte,
+                data);
+        }
+
+        var loaded = new ImageTexture(texture, modified);
+        _textures[key] = loaded;
+        return loaded;
     }
 
     private uint? GetTexture(SvgAsset asset)
@@ -590,12 +643,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
-    private static DecodedImage? LoadImage(string path)
+    private static DecodedImage? LoadImage(string path, int decodeWidth, int decodeHeight)
     {
         return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
                Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
             ? LoadSvg(path)
-            : LoadRasterImage(path);
+            : LoadRasterImage(path, decodeWidth, decodeHeight);
     }
 
     private static DecodedImage? LoadSvg(string path)
@@ -623,11 +676,15 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
-    private static DecodedImage? LoadRasterImage(string path)
+    private static DecodedImage? LoadRasterImage(string path, int decodeWidth, int decodeHeight)
     {
         try
         {
             using var image = new MagickImage(path);
+            if (image.Width > decodeWidth || image.Height > decodeHeight)
+            {
+                image.Resize((uint)decodeWidth, (uint)decodeHeight);
+            }
             return DecodeMagickImage(image);
         }
         catch (MagickException)
@@ -671,6 +728,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _disposed = true;
     }
 
+    private readonly record struct ImageTextureKey(string Path, int Width, int Height);
     private readonly record struct ImageTexture(uint Id, DateTime Modified);
+    private readonly record struct PendingImageTexture(DateTime Modified, Task<DecodedImage?> Decode);
     private readonly record struct DecodedImage(int Width, int Height, byte[] Pixels);
 }

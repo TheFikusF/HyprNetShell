@@ -11,13 +11,24 @@ try
     using var renderer = new Renderer(HyprLayer.GetProcAddress);
     using var bar = new StatusBar(renderer, BAR_HEIGHT);
 
+    var keyboardInteractive = false;
+
     while (layer.Update())
     {
+        bar.HandleMainDialogInput(layer.PressedKey, layer.TextInput, layer.Input.ScrollDelta);
+        if (keyboardInteractive != bar.IsMainDialogOpen)
+        {
+            keyboardInteractive = bar.IsMainDialogOpen;
+            layer.SetKeyboardInteractivity(keyboardInteractive);
+        }
+
         renderer.BeginFrame(layer.LayerSize.width, layer.LayerSize.height);
         Layout.Input = layer.Input;
         Layout.BeginInputRegionFrame();
         bar.Draw();
-        layer.SetInputRegions(Layout.GetInputRegions());
+        layer.SetInputRegions(bar.IsMainDialogOpen
+            ? [new(0, 0, layer.LayerSize.width, layer.LayerSize.height)]
+            : Layout.GetInputRegions());
         renderer.EndFrame();
         layer.Swap();
     }

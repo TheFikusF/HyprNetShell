@@ -2,6 +2,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
@@ -30,7 +31,7 @@ internal sealed class BatteryModule(
             ? Icons.BatteryCharging
             : battery.IsCritical
                 ? Icons.BatteryWarning
-                : Icons.BatteryLevels[BatteryLevelIndex(battery.Percentage)];
+                : BatteryLevelIcon(battery.Percentage);
 
         return new GradientBoxNode(left, right, static () => 0.0f)
         {
@@ -45,36 +46,18 @@ internal sealed class BatteryModule(
         };
     }
 
-    private BoxNode BuildPopup(BatterySnapshot battery) =>
-        new(150)
-        {
-            IgnoreLayout = true,
-            HorizontalAlignment =  ItemsAlignment.Center,
-            Style = new Style { Padding = new Insets(32, 0, 0, 0) },
-            Children =
-            [
-                new BoxNode
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8,
-                    },
-                    Children =
-                    [
-                        BuildPopupRow("Device", battery.Device),
-                        BuildPopupRow("Capacity", $"{battery.Percentage}%"),
-                        BuildPopupRow("Status", battery.Status),
-                    ],
-                },
-            ],
-        };
+    private BoxNode BuildPopup(BatterySnapshot battery) => new ()
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            BuildPopupRow("Device", battery.Device),
+            BuildPopupRow("Capacity", $"{battery.Percentage}%"),
+            BuildPopupRow("Status", battery.Status),
+        ],
+    };
 
     private Node BuildPopupRow(string label, string value) =>
         new BoxNode
@@ -100,11 +83,13 @@ internal sealed class BatteryModule(
             : (green, Color.Lerp(red, green, (charge - 50) / 50.0f));
     }
 
-    private static int BatteryLevelIndex(int percentage) => percentage switch
-    {
-        <= 10 => 0,
-        <= 35 => 1,
-        <= 70 => 2,
-        _ => 3,
-    };
+    public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[
+        percentage switch
+        {
+            <= 10 => 0,
+            <= 35 => 1,
+            <= 70 => 2,
+            _ => 3,
+        }
+    ];
 }

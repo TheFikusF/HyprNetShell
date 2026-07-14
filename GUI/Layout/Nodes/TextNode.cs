@@ -32,10 +32,10 @@ public class TextNode : Node
         if (ShadowColor.HasValue)
         {
             renderer.DrawText(Text, Style.Padding.Left + x,
-                Style.Padding.Top + y + (int)(FontSize * 0.8f) + (int)ShadowDistance, FontSize, ShadowColor.Value, 0);
+                Style.Padding.Top + y + (int)(FontSize * 0.8f) + (int)ShadowDistance, FontSize, ShadowColor.Value.PushOpacity(Opacity), 0);
         }
 
         renderer.DrawText(Text, Style.Padding.Left + x, Style.Padding.Top + y + (int)(FontSize * 0.8f), 
-            FontSize, Color);
+            FontSize, Color.PushOpacity(Opacity));
     }
 }

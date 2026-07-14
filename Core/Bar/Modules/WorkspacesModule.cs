@@ -26,7 +26,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         _node = new("workspaces_module", ignorePopupQueue: true)
         {
             GetShouldShowPopup = hovered => (_superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
-                                         _blockPopup() == false,
+                                            _blockPopup() == false,
         };
     }
 
@@ -68,37 +68,14 @@ internal sealed class WorkspacesModule : IDrawableModule
         ], () => BuildWorkspacePopup(snapshot, _theme));
     }
 
-    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme) =>
-        new(400)
-        {
-            IgnoreLayout = true,
-            Style = new Style
-            {
-                Padding = new Insets(36, 0, 0, 0),
-            },
-            Children =
-            [
-                new BoxNode(400)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
-                        BorderRadius = 8,
-                        BorderColor = theme.Border,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8
-                    },
-                    Children =
-                    [
-                        ..snapshot.Workspaces.Select<WorkspaceSnapshot, Node>(x => WorkspaceModule(x, theme))
-                    ]
-                }
-            ]
-        };
+    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme) => new(400)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children = [..snapshot.Workspaces.Select(x => WorkspaceModule(x, theme))]
+    };
 
     private Node WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
     {

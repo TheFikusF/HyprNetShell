@@ -3,8 +3,10 @@ namespace HyprNetShell.Core.Bar;
 public sealed class AppIconResolver
 {
     private static readonly string[] IconExtensions = [".png", ".svg", ".xpm", ".jpg", ".jpeg", ".webp"];
+    private static readonly string[] RasterIconExtensions = [".png", ".xpm", ".jpg", ".jpeg", ".webp"];
     private readonly Dictionary<string, string?> _classCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> _rasterIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     public string? TryResolve(string className)
     {
@@ -22,6 +24,26 @@ public sealed class AppIconResolver
         var iconName = FindDesktopIconName(className);
         var path = ResolveIconPath(iconName) ?? ResolveIconPath(className);
         _classCache[className] = path;
+        return path;
+    }
+
+    public string? TryResolveIcon(string iconName) => ResolveIconPath(iconName);
+
+    public string? TryResolveRasterIcon(string iconName)
+    {
+        iconName = iconName.Trim();
+        if (string.IsNullOrWhiteSpace(iconName))
+        {
+            return null;
+        }
+
+        if (_rasterIconCache.TryGetValue(iconName, out var cached))
+        {
+            return cached;
+        }
+
+        var path = ResolveIconPathCore(iconName, RasterIconExtensions);
+        _rasterIconCache[iconName] = path;
         return path;
     }
 
@@ -68,21 +90,28 @@ public sealed class AppIconResolver
             return cached;
         }
 
-        var path = ResolveIconPathCore(iconName);
+        var path = ResolveIconPathCore(iconName, IconExtensions);
         _iconCache[iconName] = path;
         return path;
     }
 
-    private static string? ResolveIconPathCore(string iconName)
+    private static string? ResolveIconPathCore(string iconName, IReadOnlyCollection<string> extensions)
     {
         if (Path.IsPathRooted(iconName))
         {
             return File.Exists(iconName) ? iconName : null;
         }
 
-        var names = IconExtensions.Contains(Path.GetExtension(iconName), StringComparer.OrdinalIgnoreCase)
+        var suppliedExtension = Path.GetExtension(iconName);
+        if (!string.IsNullOrEmpty(suppliedExtension) &&
+            !extensions.Contains(suppliedExtension, StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var names = !string.IsNullOrEmpty(suppliedExtension)
             ? new[] { iconName }
-            : IconExtensions.Select(extension => iconName + extension).ToArray();
+            : extensions.Select(extension => iconName + extension).ToArray();
 
         foreach (var iconDir in GetIconDirectories())
         {
@@ -100,9 +129,9 @@ public sealed class AppIconResolver
                 }
             }
 
-            foreach (var file in SafeEnumerateFiles(iconDir, "*", SearchOption.AllDirectories))
+            foreach (var name in names)
             {
-                if (names.Any(name => string.Equals(Path.GetFileName(file), name, StringComparison.OrdinalIgnoreCase)))
+                foreach (var file in SafeEnumerateFiles(iconDir, name, SearchOption.AllDirectories))
                 {
                     return file;
                 }
@@ -223,7 +252,7 @@ public sealed class AppIconResolver
                 RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
             };
 
-            return Directory.EnumerateFiles(path, pattern, options).ToArray();
+            return Directory.EnumerateFiles(path, pattern, options);
         }
         catch
         {

@@ -6,8 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
@@ -17,6 +20,10 @@ struct hypr_layer_window {
     struct wl_compositor* compositor;
     struct wl_seat* seat;
     struct wl_pointer* pointer;
+    struct wl_keyboard* keyboard;
+    struct xkb_context* xkb_context;
+    struct xkb_keymap* xkb_keymap;
+    struct xkb_state* xkb_state;
     struct zwlr_layer_shell_v1* layer_shell;
     struct wl_surface* surface;
     struct zwlr_layer_surface_v1* layer_surface;
@@ -38,6 +45,10 @@ struct hypr_layer_window {
     double pointer_y;
     int pointer_inside;
     int pointer_button_down;
+    int pending_key;
+    char pending_text[128];
+    int pending_text_length;
+    double pending_scroll;
 };
 
 static void fail(const char* message) {
@@ -240,11 +251,12 @@ static void pointer_axis(
     uint32_t time,
     uint32_t axis,
     wl_fixed_t value) {
-    (void)data;
     (void)pointer;
     (void)time;
-    (void)axis;
-    (void)value;
+    struct hypr_layer_window* window = data;
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        window->pending_scroll += wl_fixed_to_double(value);
+    }
 }
 
 static void pointer_frame(void* data, struct wl_pointer* pointer) {
@@ -304,9 +316,144 @@ static const struct wl_pointer_listener pointer_listener = {
     .axis_relative_direction = pointer_axis_relative_direction,
 };
 
+static void keyboard_keymap(
+    void* data,
+    struct wl_keyboard* keyboard,
+    uint32_t format,
+    int32_t fd,
+    uint32_t size) {
+    (void)keyboard;
+    struct hypr_layer_window* window = data;
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 || window->xkb_context == NULL) {
+        close(fd);
+        return;
+    }
+
+    char* keymap_text = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (keymap_text == MAP_FAILED) {
+        return;
+    }
+
+    struct xkb_keymap* keymap = xkb_keymap_new_from_string(
+        window->xkb_context,
+        keymap_text,
+        XKB_KEYMAP_FORMAT_TEXT_V1,
+        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    munmap(keymap_text, size);
+    if (keymap == NULL) {
+        return;
+    }
+
+    struct xkb_state* state = xkb_state_new(keymap);
+    if (state == NULL) {
+        xkb_keymap_unref(keymap);
+        return;
+    }
+
+    if (window->xkb_state != NULL) {
+        xkb_state_unref(window->xkb_state);
+    }
+    if (window->xkb_keymap != NULL) {
+        xkb_keymap_unref(window->xkb_keymap);
+    }
+    window->xkb_keymap = keymap;
+    window->xkb_state = state;
+}
+
+static void keyboard_enter(
+    void* data,
+    struct wl_keyboard* keyboard,
+    uint32_t serial,
+    struct wl_surface* surface,
+    struct wl_array* keys) {
+    (void)data;
+    (void)keyboard;
+    (void)serial;
+    (void)surface;
+    (void)keys;
+}
+
+static void keyboard_leave(
+    void* data,
+    struct wl_keyboard* keyboard,
+    uint32_t serial,
+    struct wl_surface* surface) {
+    (void)data;
+    (void)keyboard;
+    (void)serial;
+    (void)surface;
+}
+
+static void keyboard_key(
+    void* data,
+    struct wl_keyboard* keyboard,
+    uint32_t serial,
+    uint32_t time,
+    uint32_t key,
+    uint32_t state) {
+    (void)keyboard;
+    (void)serial;
+    (void)time;
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        struct hypr_layer_window* window = data;
+        window->pending_key = (int)key;
+        if (window->xkb_state != NULL) {
+            char text[64];
+            int length = xkb_state_key_get_utf8(window->xkb_state, key + 8, text, sizeof(text));
+            int remaining = (int)sizeof(window->pending_text) - window->pending_text_length - 1;
+            if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 && text[0] != 0x7f) {
+                memcpy(window->pending_text + window->pending_text_length, text, (size_t)length);
+                window->pending_text_length += length;
+                window->pending_text[window->pending_text_length] = '\0';
+            }
+        }
+    }
+}
+
+static void keyboard_modifiers(
+    void* data,
+    struct wl_keyboard* keyboard,
+    uint32_t serial,
+    uint32_t mods_depressed,
+    uint32_t mods_latched,
+    uint32_t mods_locked,
+    uint32_t group) {
+    (void)keyboard;
+    (void)serial;
+    struct hypr_layer_window* window = data;
+    if (window->xkb_state != NULL) {
+        xkb_state_update_mask(
+            window->xkb_state,
+            mods_depressed,
+            mods_latched,
+            mods_locked,
+            0,
+            0,
+            group);
+    }
+}
+
+static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
+    (void)data;
+    (void)keyboard;
+    (void)rate;
+    (void)delay;
+}
+
+static const struct wl_keyboard_listener keyboard_listener = {
+    .keymap = keyboard_keymap,
+    .enter = keyboard_enter,
+    .leave = keyboard_leave,
+    .key = keyboard_key,
+    .modifiers = keyboard_modifiers,
+    .repeat_info = keyboard_repeat_info,
+};
+
 static void seat_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
     struct hypr_layer_window* window = data;
     int has_pointer = (capabilities & WL_SEAT_CAPABILITY_POINTER) != 0;
+    int has_keyboard = (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0;
 
     if (has_pointer && window->pointer == NULL) {
         window->pointer = wl_seat_get_pointer(seat);
@@ -316,6 +463,14 @@ static void seat_capabilities(void* data, struct wl_seat* seat, uint32_t capabil
         window->pointer = NULL;
         window->pointer_inside = 0;
         window->pointer_button_down = 0;
+    }
+
+    if (has_keyboard && window->keyboard == NULL) {
+        window->keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(window->keyboard, &keyboard_listener, window);
+    } else if (!has_keyboard && window->keyboard != NULL) {
+        wl_keyboard_release(window->keyboard);
+        window->keyboard = NULL;
     }
 }
 
@@ -445,6 +600,8 @@ hypr_layer_window* hypr_layer_create_top_bar(int reserved_height) {
     window->height = 1080;
     window->width = 1920;
     window->reserved_height = reserved_height;
+    window->pending_key = -1;
+    window->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
     window->display = wl_display_connect(NULL);
     if (window->display == NULL) {
@@ -559,8 +716,20 @@ void hypr_layer_destroy(hypr_layer_window* window) {
     if (window->pointer != NULL) {
         wl_pointer_release(window->pointer);
     }
+    if (window->keyboard != NULL) {
+        wl_keyboard_release(window->keyboard);
+    }
     if (window->seat != NULL) {
         wl_seat_release(window->seat);
+    }
+    if (window->xkb_state != NULL) {
+        xkb_state_unref(window->xkb_state);
+    }
+    if (window->xkb_keymap != NULL) {
+        xkb_keymap_unref(window->xkb_keymap);
+    }
+    if (window->xkb_context != NULL) {
+        xkb_context_unref(window->xkb_context);
     }
     if (window->compositor != NULL) {
         wl_compositor_destroy(window->compositor);
@@ -679,6 +848,16 @@ void hypr_layer_set_input_regions(hypr_layer_window* window, const int* rectangl
     }
 }
 
+void hypr_layer_set_keyboard_interactivity(hypr_layer_window* window, int enabled) {
+    if (window == NULL || window->layer_surface == NULL) {
+        return;
+    }
+
+    zwlr_layer_surface_v1_set_keyboard_interactivity(window->layer_surface, enabled ? 1 : 0);
+    wl_surface_commit(window->surface);
+    wl_display_flush(window->display);
+}
+
 int hypr_layer_get_width(hypr_layer_window* window) {
     return window != NULL ? window->width : 0;
 }
@@ -701,6 +880,42 @@ int hypr_layer_pointer_inside(hypr_layer_window* window) {
 
 int hypr_layer_pointer_button_down(hypr_layer_window* window) {
     return window != NULL && window->pointer_button_down;
+}
+
+int hypr_layer_take_key(hypr_layer_window* window) {
+    if (window == NULL) {
+        return -1;
+    }
+
+    int key = window->pending_key;
+    window->pending_key = -1;
+    return key;
+}
+
+int hypr_layer_take_text(hypr_layer_window* window, char* buffer, int buffer_size) {
+    if (window == NULL || buffer == NULL || buffer_size <= 0) {
+        return 0;
+    }
+
+    int length = window->pending_text_length;
+    if (length >= buffer_size) {
+        length = buffer_size - 1;
+    }
+    memcpy(buffer, window->pending_text, (size_t)length);
+    buffer[length] = '\0';
+    window->pending_text_length = 0;
+    window->pending_text[0] = '\0';
+    return length;
+}
+
+double hypr_layer_take_scroll(hypr_layer_window* window) {
+    if (window == NULL) {
+        return 0.0;
+    }
+
+    double scroll = window->pending_scroll;
+    window->pending_scroll = 0.0;
+    return scroll;
 }
 
 int hypr_layer_should_close(hypr_layer_window* window) {

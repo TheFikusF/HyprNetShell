@@ -78,38 +78,18 @@ internal sealed class LanguageModule : IDrawableModule
         ], () => BuildPopup(snapshot.KeyboardName));
     }
 
-    private Node BuildPopup(string keyboardName) =>
-        new BoxNode(WIDTH + 30)
-        {
-            IgnoreLayout = true,
-            Style = new Style
-            {
-                Padding = new Insets(30, 0, 0, 0),
-            },
-            Children =
-            [
-                new BoxNode(WIDTH + 30)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
-                        BorderColor = _theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8
-                    },
-                    Children =
-                    [
-                        .._aliases.Keys.Select((layout, index) => BuildPopupRow(layout,
-                            keyboardName, index))
-                    ],
-                }
-            ]
-        };
+    private BoxNode BuildPopup(string keyboardName) => new (WIDTH + 30)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(_theme),
+        Children =
+        [
+            .._aliases.Keys.Select((layout, index) => BuildPopupRow(layout,
+                keyboardName, index))
+        ],
+    };
 
     private BoxNode BuildPopupRow(string text, string keyboardName, int index)
     {

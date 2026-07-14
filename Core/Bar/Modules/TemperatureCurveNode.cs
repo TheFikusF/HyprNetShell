@@ -19,6 +19,10 @@ internal sealed class TemperatureCurveNode(
     Action<int, float, int> onPointChanged,
     TemperatureCurveDragState dragState) : Node
 {
+    private Color _gridColor = gridColor;
+    private Color _curveColor = curveColor;
+    private Color _pointColor = pointColor;
+    
     private const float LEFT = 42.0f;
     private const float RIGHT = 8.0f;
     private const float TOP = 10.0f;
@@ -29,6 +33,9 @@ internal sealed class TemperatureCurveNode(
 
     public override void Draw(IRenderApi renderer, int x, int y)
     {
+        _gridColor = _gridColor.PushOpacity(Opacity);
+        _curveColor = _curveColor.PushOpacity(Opacity);
+        _pointColor = _pointColor.PushOpacity(Opacity);
         var bounds = new Rect(x, y, Width, Height);
         var plot = new Rect(x + LEFT, y + TOP, Width - LEFT - RIGHT, Height - TOP - BOTTOM);
         DrawGrid(renderer, plot);
@@ -57,7 +64,7 @@ internal sealed class TemperatureCurveNode(
 
         for (var hour = 0; hour <= 24; hour += 6)
         {
-            DrawTimeLine(hour, gridColor);
+            DrawTimeLine(hour, _gridColor);
         }
 
         foreach (var temperature in new[]
@@ -67,14 +74,14 @@ internal sealed class TemperatureCurveNode(
                      TemperatureCurveMath.MinimumTemperature,
                  })
         {
-            DrawTemperatureLine(temperature, gridColor);
+            DrawTemperatureLine(temperature, _gridColor);
         }
 
         if (dragState.PointIndex > -1)
         {
             var point = points[dragState.PointIndex];
-            DrawTimeLine(point.Hour, pointColor);
-            DrawTemperatureLine(point.TemperatureKelvin, pointColor);
+            DrawTimeLine(point.Hour, _pointColor);
+            DrawTemperatureLine(point.TemperatureKelvin, _pointColor);
         }
 
         var now = DateTime.Now;
@@ -90,7 +97,7 @@ internal sealed class TemperatureCurveNode(
             var temperature = TemperatureCurveMath.Evaluate(points, hour);
             var px = plot.X + plot.Width * hour / 24.0f;
             var py = TemperatureToY(plot, temperature);
-            renderer.FillRoundedRect(new Rect(px - 1.5f, py - 1.5f, 3, 3), 1.5f, curveColor);
+            renderer.FillRoundedRect(new Rect(px - 1.5f, py - 1.5f, 3, 3), 1.5f, _curveColor);
         }
 
         for (var i = 0; i < points.Count; i++)
@@ -98,7 +105,7 @@ internal sealed class TemperatureCurveNode(
             var point = points[i];
             var px = plot.X + plot.Width * point.Hour / 24.0f;
             var py = TemperatureToY(plot, point.TemperatureKelvin);
-            renderer.FillRoundedRect(new Rect(px - 5, py - 5, 10, 10), 5, pointColor);
+            renderer.FillRoundedRect(new Rect(px - 5, py - 5, 10, 10), 5, _pointColor);
         }
     }
 

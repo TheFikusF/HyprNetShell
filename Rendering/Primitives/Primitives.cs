@@ -29,6 +29,8 @@ public readonly record struct Color(float R, float G, float B, float A)
     public static readonly Color Lazure = FromRgb(0, 255, 255);
     public static readonly Color White = FromRgb(255, 255, 255);
     public static readonly Color Black = FromRgb(0, 0, 0);
+    
+    public Color PushOpacity(float opacity) => this with { A = A * opacity };
 }
 
 public readonly record struct Rect(float X, float Y, float Width, float Height)

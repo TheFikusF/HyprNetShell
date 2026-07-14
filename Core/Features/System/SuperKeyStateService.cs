@@ -10,6 +10,7 @@ internal sealed class SuperKeyStateService : IDisposable
     private static readonly TimeSpan HyprctlTimeout = TimeSpan.FromSeconds(2);
     private const string SUPER_DOWN_BIND = "SUPER_L";
     private const string SUPER_UP_BIND = "SUPER + SUPER_L";
+    private const string LAUNCHER_BIND = "SUPER + L";
 
     private readonly CancellationTokenSource _cts = new();
     private readonly string _socketPath;
@@ -18,11 +19,15 @@ internal sealed class SuperKeyStateService : IDisposable
     private DateTime _lastLoggedSuperDown;
     private Socket? _listener;
     private int _isHeld;
+    private int _launcherToggleRequested;
     private bool _disposed;
 
     public bool IsHeld => Volatile.Read(ref _isHeld) != 0;
 
     public bool IsHeldFor(TimeSpan timespan) => IsHeld && DateTime.Now - _lastLoggedSuperDown > timespan;
+
+    public bool ConsumeLauncherToggleRequested() =>
+        Interlocked.Exchange(ref _launcherToggleRequested, 0) != 0;
 
     public SuperKeyStateService()
     {
@@ -107,13 +112,20 @@ internal sealed class SuperKeyStateService : IDisposable
                                                    { release = true, transparent = true })
                                                  """, cancellationToken);
 
-        Log("installed Hyprland Super press/release binds");
+        await HyprlandService.HyprctlEvalAsync($$"""
+                                                 hl.bind("{{LAUNCHER_BIND}}",
+                                                   hl.dsp.exec_cmd("printf 'launcher_toggle\n' | socat - UNIX-CONNECT:{{ShellQuote(_socketPath)}}"),
+                                                   { transparent = true })
+                                                 """, cancellationToken);
+
+        Log("installed Hyprland Super press/release and launcher binds");
     }
 
     private static async Task UninstallHyprlandBindsAsync(CancellationToken cancellationToken)
     {
         await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{SUPER_DOWN_BIND}}")""", cancellationToken);
         await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{SUPER_UP_BIND}}")""", cancellationToken);
+        await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{LAUNCHER_BIND}}")""", cancellationToken);
     }
 
     private async Task AcceptLoopAsync(CancellationToken cancellationToken)
@@ -166,6 +178,9 @@ internal sealed class SuperKeyStateService : IDisposable
                 break;
             case "super_up":
                 SetHeld(false, message);
+                break;
+            case "launcher_toggle":
+                Interlocked.Exchange(ref _launcherToggleRequested, 1);
                 break;
             default:
                 Log($"ignored socket message: '{message}'");

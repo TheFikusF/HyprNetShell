@@ -6,6 +6,7 @@ cc = meson.get_compiler('c')
 wayland_client = dependency('wayland-client')
 wayland_egl = dependency('wayland-egl')
 egl = dependency('egl')
+xkbcommon = dependency('xkbcommon')
 
 wayland_scanner = find_program('wayland-scanner')
 layer_shell_xml = files('protocols/wlr-layer-shell-unstable-v1.xml')
@@ -23,7 +24,7 @@ layer_shell_code = custom_target(
   command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
 
 hypr_layer_sources = ['hypr_layer.c', layer_shell_header, layer_shell_code]
-hypr_layer_dependencies = [wayland_client, wayland_egl, egl]
+hypr_layer_dependencies = [wayland_client, wayland_egl, egl, xkbcommon]
 hypr_layer_include_directories = include_directories('.')
 
 shared_library(

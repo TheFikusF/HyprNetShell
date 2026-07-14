@@ -16,6 +16,18 @@ public interface IDrawableModule
     public Node Draw();
 }
 
+file class CompositeModule : IDrawableModule
+{
+    private readonly ICollection<IDrawableModule> _drawableModules;
+
+    public CompositeModule(params ICollection<IDrawableModule> drawableModules)
+    {
+        _drawableModules = drawableModules;
+    }
+
+    public Node Draw() => new BoxNode { Children = [.._drawableModules.Select(x => x.Draw())] };
+}
+
 public sealed class StatusBar : IDisposable
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(700);
@@ -39,6 +51,7 @@ public sealed class StatusBar : IDisposable
     private readonly CenterModule _centerModule;
     private readonly MusicModule _musicModule;
     private readonly TrayModule _trayModule;
+    private readonly MainDialog _mainDialog = new();
     private readonly SniTrayService _trayService = new();
 
     private readonly List<IBarDataService> _dataServices;
@@ -48,6 +61,9 @@ public sealed class StatusBar : IDisposable
     private BarSnapshot _snapshot = BarSnapshot.Empty;
     private DateTime _lastRefresh = DateTime.MinValue;
     private Task? _refreshTask;
+
+    private ICollection<IDrawableModule> _leftModules;
+    private ICollection<IDrawableModule> _rightModules;
 
     public StatusBar(IRenderApi renderer, int barHeight)
     {
@@ -68,10 +84,8 @@ public sealed class StatusBar : IDisposable
         _systemStatsModule = new SystemStatsModule(() => _snapshot.SystemStats, Theme.Default);
         _networkModule = new NetworkModule(() => _snapshot.Network, Theme.Default);
         _audioModule = new AudioModule(() => _snapshot.Audio, Theme.Default);
-        _displayControlsModule = new DisplayControlsModule(
-            () => _snapshot.DisplayControls,
-            _displayControlsService,
-            Theme.Default);
+        _displayControlsModule =
+            new DisplayControlsModule(() => _snapshot.DisplayControls, _displayControlsService, Theme.Default);
         _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, Theme.Default);
         _batteryModule = new BatteryModule(() => _snapshot.Battery, Theme.Default);
         _centerModule = new CenterModule(() => _snapshot.Notifications, Theme.Default);
@@ -79,6 +93,25 @@ public sealed class StatusBar : IDisposable
         _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, Theme.Default);
         _workspacesModule =
             new WorkspacesModule(_hyprland, _superKey, Theme.Default, () => _languageModule.IsShown);
+
+        _leftModules = [_workspacesModule, _musicModule];
+        _rightModules =
+        [
+            new CompositeModule(_audioModule, _displayControlsModule, _bluetoothModule, _networkModule),
+            _systemStatsModule, _languageModule, _batteryModule, _trayModule
+        ];
+    }
+
+    public bool IsMainDialogOpen => _mainDialog.IsOpen;
+
+    public void HandleMainDialogInput(int pressedKey, string textInput, float scrollDelta)
+    {
+        if (_superKey.ConsumeLauncherToggleRequested())
+        {
+            _mainDialog.Toggle();
+        }
+
+        _mainDialog.HandleInput(pressedKey, textInput, scrollDelta);
     }
 
     public void Draw()
@@ -87,15 +120,12 @@ public sealed class StatusBar : IDisposable
 
         DrawLeftRight();
         DrawCenter();
-    }
 
-    public void Dispose()
-    {
-        _hyprland.Dispose();
-        _superKey.Dispose();
-        _notificationService.Dispose();
-        _musicService.Dispose();
-        _trayService.Dispose();
+        if (_mainDialog.IsOpen)
+        {
+            using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
+            layout.AddNode(_mainDialog.Draw());
+        }
     }
 
     private void DrawLeftRight()
@@ -106,11 +136,7 @@ public sealed class StatusBar : IDisposable
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Spacing = 6 },
-            Children =
-            [
-                _workspacesModule.Draw(),
-                _musicModule.Draw(),
-            ],
+            Children = [.._leftModules.Select(x => x.Draw())]
         });
 
         layout.AddNode(new BoxNode
@@ -118,20 +144,7 @@ public sealed class StatusBar : IDisposable
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Spacing = 6 },
-            Children =
-            [
-                new BoxNode
-                {
-                    _audioModule.Draw(),
-                    _displayControlsModule.Draw(),
-                    _bluetoothModule.Draw(),
-                    _networkModule.Draw(),
-                },
-                _systemStatsModule.Draw(),
-                _languageModule.Draw(),
-                _batteryModule.Draw(),
-                _trayModule.Draw(),
-            ],
+            Children = [.._rightModules.Select(x => x.Draw())]
         });
     }
 
@@ -171,4 +184,12 @@ public sealed class StatusBar : IDisposable
         }
     }
 
+    public void Dispose()
+    {
+        _hyprland.Dispose();
+        _superKey.Dispose();
+        _notificationService.Dispose();
+        _musicService.Dispose();
+        _trayService.Dispose();
+    }
 }

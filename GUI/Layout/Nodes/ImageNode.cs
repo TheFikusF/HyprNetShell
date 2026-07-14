@@ -10,11 +10,18 @@ public class ImageNode : Node
     private readonly string? _imagePath;
     private readonly SvgAsset? _svgAsset;
     private readonly Color _color;
+    private readonly bool _loadAsync;
 
-    public ImageNode(string imagePath, int width, int height)
+    public ImageNode(
+        string imagePath,
+        int width,
+        int height,
+        Color? multiplicativeColor = null,
+        bool loadAsync = false)
     {
         _imagePath = imagePath;
-        _color = Color.White;
+        _color = multiplicativeColor ?? Color.White;
+        _loadAsync = loadAsync;
         Width = width;
         Height = height;
     }
@@ -34,11 +41,11 @@ public class ImageNode : Node
         var rect = new Rect(x, y, Width, Height);
         if (_svgAsset is not null)
         {
-            renderer.DrawImage(_svgAsset, rect, _color);
+            renderer.DrawImage(_svgAsset, rect, _color.PushOpacity(Opacity));
         }
         else if (_imagePath is not null)
         {
-            renderer.DrawImage(_imagePath, rect);
+            renderer.DrawImage(_imagePath, rect, _color.PushOpacity(Opacity), _loadAsync);
         }
     }
 }

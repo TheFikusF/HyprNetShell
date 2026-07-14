@@ -35,15 +35,21 @@ internal sealed class AudioModule(
         var volume = output is null ? 0 : EffectiveVolume(output);
         var icon = !audio.Available || output is null
             ? Icons.VolumeOff
-            : EffectiveMuted(output) ? Icons.VolumeMuted : VolumeIcon(volume);
+            : EffectiveMuted(output)
+                ? Icons.VolumeMuted
+                : VolumeIcon(volume);
 
         return new BoxNode(75)
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f)), 
-                right: false) with { Spacing = 6 },
+            Style = ModulesCommon.ModuleStyle(theme,
+                    ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f)),
+                    right: false) with
+                {
+                    Spacing = 6
+                },
             Children =
             [
                 new ImageNode(icon, 18, 18, theme.Text),
@@ -54,38 +60,21 @@ internal sealed class AudioModule(
         };
     }
 
-    private BoxNode BuildPopup(AudioSnapshot audio) =>
-        new(380)
-        {
-            IgnoreLayout = true,
-            Style = new Style { Padding = new Insets(32, 0, 0, 0) },
-            Children =
+    private BoxNode BuildPopup(AudioSnapshot audio) => new (380)
+    {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children = !audio.Available
+            ? [new TextNode("PipeWire audio unavailable", 14.0f, theme.Muted)]
+            :
             [
-                new BoxNode(380)
-                {
-                    Direction = Direction.Vertical,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style
-                    {
-                        BackgroundColor = Color.FromRgb(0, 0, 0, 0.94f),
-                        BorderColor = theme.Border,
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 8,
-                        Spacing = 8,
-                    },
-                    Children = !audio.Available
-                        ? [new TextNode("PipeWire audio unavailable", 14.0f, theme.Muted)]
-                        :
-                        [
-                            ..BuildDeviceSection("Output devices", audio.Outputs),
-                            ModulesCommon.BuildDivider(theme.Border),
-                            ..BuildDeviceSection("Input devices", audio.Inputs),
-                        ],
-                },
+                ..BuildDeviceSection("Output devices", audio.Outputs),
+                ModulesCommon.BuildDivider(theme.Border),
+                ..BuildDeviceSection("Input devices", audio.Inputs),
             ],
-        };
+    };
 
     private IEnumerable<Node> BuildDeviceSection(
         string title,

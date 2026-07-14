@@ -59,7 +59,8 @@ public readonly record struct LayoutInput(
     float PointerY,
     bool PointerDown,
     bool PointerPressed = false,
-    bool HasPointer = true)
+    bool HasPointer = true,
+    float ScrollDelta = 0)
 {
     public static LayoutInput None { get; } = new(0, 0, false, false, false);
 

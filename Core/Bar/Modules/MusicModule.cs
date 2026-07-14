@@ -24,7 +24,7 @@ internal sealed class MusicModule(
     private const int POPUP_WIDTH = 512 + 64;
     private const int POPUP_IMAGE_SIZE = 128 + 64;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new()
+    private readonly ModulesCommon.NodeWithPopup _node = new("music_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };
@@ -60,6 +60,7 @@ internal sealed class MusicModule(
             _coverButton.Hovered || string.IsNullOrWhiteSpace(music.ImagePath)
                 ? Color.White
                 : Color.White with { A = 0 }, 18.0f, ModulesCommon.DELTA_TIME);
+
         return BuildSurface(music, [
             string.IsNullOrWhiteSpace(music.ImagePath)
                 ? new SpacerNode()
@@ -70,7 +71,13 @@ internal sealed class MusicModule(
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
                 IsHovered = _coverButton.Hovered,
-                Style = new Style { BackgroundColor = Color.Black with { A = _coverButton.Background.A * 0.6f } },
+                Style = new Style
+                {
+                    BackgroundColor = Color.Black with
+                    {
+                        A = _coverButton.Background.A * (string.IsNullOrWhiteSpace(music.ImagePath) ? 0 : 0.6f)
+                    }
+                },
                 Children = [new ImageNode(music.Playing ? Icons.Pause : Icons.Play, 18, 18, _coverButton.Background)]
             }
         ], width: IMAGE_SIZE + 6, height: IMAGE_SIZE + 6, 4, 0, onClick: () => Control(music, PlayerAction.PlayPause));
@@ -92,7 +99,7 @@ internal sealed class MusicModule(
                     ]
                 },
                 new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
-            ], left: false, padding: new Insets(6, 8, 6, 40), 
+            ], left: false, padding: new Insets(6, 8, 6, 40),
             horizontalAlignment: ItemsAlignment.Start, darken: 0.4f
         );
 
@@ -127,8 +134,8 @@ internal sealed class MusicModule(
         }
 
         return music.Playing
-            ? new GradientBoxNode(Color.Darken(Color.FromRgb(255, 214, 66), darken), 
-                Color.Darken(Color.FromRgb(255, 121, 24), darken), 
+            ? new GradientBoxNode(Color.Darken(Color.FromRgb(255, 214, 66), darken),
+                Color.Darken(Color.FromRgb(255, 121, 24), darken),
                 GradientOffset, width, height)
             {
                 IgnoreLayout = ignoreLayout,
@@ -151,76 +158,58 @@ internal sealed class MusicModule(
             };
     }
 
-    private Node BuildPopup(MusicSnapshot music) =>
-        new BoxNode(POPUP_WIDTH)
-        {
-            IgnoreLayout = true,
-            Style = new Style
+    private BoxNode BuildPopup(MusicSnapshot music) => new (POPUP_WIDTH)
+    {
+        Direction = Direction.Horizontal,
+        VerticalAlignment = ItemsAlignment.Start,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children =
+        [
+            BuildPopupImage(music),
+            new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42, POPUP_IMAGE_SIZE)
             {
-                Padding = new Insets(32, 0, 0, 0),
-            },
-            Children =
-            [
-                new BoxNode(POPUP_WIDTH)
-                {
-                    Direction = Direction.Horizontal,
-                    VerticalAlignment = ItemsAlignment.Start,
-                    Style = ModulesCommon.ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.93f)) with
+                Direction = Direction.Vertical,
+                VerticalAlignment = ItemsAlignment.Spread,
+                Style = new Style { Spacing = 5, Padding = new Insets(0, 12) },
+                Children =
+                [
+                    new BoxNode
                     {
-                        BorderRadius = 8,
-                        BorderWidth = 2,
-                        Padding = 12,
-                        Spacing = 10
+                        Direction = Direction.Vertical,
+                        Style = new Style { Spacing = 5 },
+                        Children =
+                        [
+                            new MarqueeTextNode(music.Title, 45, 16.0f, theme.Text),
+                            new MarqueeTextNode(FormatSubtitle(music), 47, 14.0f, theme.Text),
+                            new MarqueeTextNode(music.Player, 47, 14.0f, theme.Text),
+                        ]
                     },
-                    Children =
-                    [
-                        BuildPopupImage(music),
-                        new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42, POPUP_IMAGE_SIZE)
-                        {
-                            Direction = Direction.Vertical,
-                            VerticalAlignment = ItemsAlignment.Spread,
-                            Style = new Style { Spacing = 5 },
-                            Children =
-                            [
-                                new BoxNode
-                                {
-                                    Direction = Direction.Vertical,
-                                    Style = new Style { Spacing = 5 },
-                                    Children =
-                                    [
-                                        new MarqueeTextNode(music.Title, 45, 16.0f, theme.Text),
-                                        new MarqueeTextNode(FormatSubtitle(music), 47, 14.0f, theme.Text),
-                                        new MarqueeTextNode(music.Player, 47, 14.0f, theme.Text),
-                                    ]
-                                },
-                                new BoxNode
-                                {
-                                    Direction = Direction.Vertical,
-                                    Style = new Style { Spacing = 5 },
-                                    Children =
-                                    [
-                                        BuildProgress(music),
-                                        new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42)
-                                        {
-                                            Direction = Direction.Horizontal,
-                                            HorizontalAlignment = ItemsAlignment.Center,
-                                            VerticalAlignment = ItemsAlignment.Center,
-                                            Style = new Style { Spacing = 12 },
-                                            Children =
-                                            [
-                                                BuildControlButton(PlayerAction.Previous, music),
-                                                BuildControlButton(PlayerAction.PlayPause, music),
-                                                BuildControlButton(PlayerAction.Next, music),
-                                            ]
-                                        }
-                                    ]
-                                },
-                            ]
-                        }
-                    ]
-                }
-            ]
-        };
+                    new BoxNode
+                    {
+                        Direction = Direction.Vertical,
+                        Style = new Style { Spacing = 5 },
+                        Children =
+                        [
+                            BuildProgress(music),
+                            new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42)
+                            {
+                                Direction = Direction.Horizontal,
+                                HorizontalAlignment = ItemsAlignment.Center,
+                                VerticalAlignment = ItemsAlignment.Center,
+                                Style = new Style { Spacing = 12 },
+                                Children =
+                                [
+                                    BuildControlButton(PlayerAction.Previous, music),
+                                    BuildControlButton(PlayerAction.PlayPause, music),
+                                    BuildControlButton(PlayerAction.Next, music),
+                                ]
+                            }
+                        ]
+                    },
+                ]
+            }
+        ]
+    };
 
     private Node BuildPopupImage(MusicSnapshot music) =>
         string.IsNullOrWhiteSpace(music.ImagePath)

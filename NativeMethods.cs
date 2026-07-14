@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering.Primitives;
 
@@ -21,6 +22,8 @@ public sealed class HyprLayer : IDisposable
 
     public (int width, int height) LayerSize { get; private set; }
     public LayoutInput Input { get; private set; } = LayoutInput.None;
+    public int PressedKey { get; private set; } = -1;
+    public string TextInput { get; private set; } = "";
     public int ReturnCode => _window == IntPtr.Zero ? _returnCode : NativeMethods.hypr_layer_has_error(_window);
 
     public HyprLayer(int reservedHeight)
@@ -81,8 +84,14 @@ public sealed class HyprLayer : IDisposable
                 (float)NativeMethods.hypr_layer_get_pointer_x(_window),
                 (float)NativeMethods.hypr_layer_get_pointer_y(_window),
                 pointerDown,
-                pointerDown && !_lastPointerDown)
-            : LayoutInput.None;
+                pointerDown && !_lastPointerDown,
+                true,
+                (float)NativeMethods.hypr_layer_take_scroll(_window))
+            : LayoutInput.None with { ScrollDelta = (float)NativeMethods.hypr_layer_take_scroll(_window) };
+        PressedKey = NativeMethods.hypr_layer_take_key(_window);
+        var textBuffer = new byte[128];
+        var textLength = NativeMethods.hypr_layer_take_text(_window, textBuffer, textBuffer.Length);
+        TextInput = textLength > 0 ? Encoding.UTF8.GetString(textBuffer, 0, textLength) : "";
         _lastPointerDown = pointerDown;
         return true;
     }
@@ -133,6 +142,14 @@ public sealed class HyprLayer : IDisposable
         NativeMethods.hypr_layer_set_input_regions(_window, rectangles, regions.Count);
     }
 
+    public void SetKeyboardInteractivity(bool enabled)
+    {
+        if (_window != IntPtr.Zero)
+        {
+            NativeMethods.hypr_layer_set_keyboard_interactivity(_window, enabled ? 1 : 0);
+        }
+    }
+
     public void Dispose()
     {
         if (_window != IntPtr.Zero)
@@ -177,6 +194,9 @@ file static class NativeMethods
     internal static extern void hypr_layer_set_input_regions(IntPtr window, int[] rectangles, int rectangleCount);
 
     [DllImport(HyprLayerLibrary)]
+    internal static extern void hypr_layer_set_keyboard_interactivity(IntPtr window, int enabled);
+
+    [DllImport(HyprLayerLibrary)]
     internal static extern int hypr_layer_get_width(IntPtr window);
 
     [DllImport(HyprLayerLibrary)]
@@ -193,6 +213,15 @@ file static class NativeMethods
 
     [DllImport(HyprLayerLibrary)]
     internal static extern int hypr_layer_pointer_button_down(IntPtr window);
+
+    [DllImport(HyprLayerLibrary)]
+    internal static extern int hypr_layer_take_key(IntPtr window);
+
+    [DllImport(HyprLayerLibrary)]
+    internal static extern int hypr_layer_take_text(IntPtr window, [Out] byte[] buffer, int bufferSize);
+
+    [DllImport(HyprLayerLibrary)]
+    internal static extern double hypr_layer_take_scroll(IntPtr window);
 
     [DllImport(HyprLayerLibrary)]
     internal static extern int hypr_layer_should_close(IntPtr window);

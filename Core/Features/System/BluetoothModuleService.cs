@@ -62,6 +62,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService
     {
         var connected = false;
         int? battery = null;
+        string? icon = null;
         if (!string.IsNullOrWhiteSpace(output))
         {
             connected = ConnectedLine().IsMatch(output);
@@ -70,9 +71,15 @@ internal sealed partial class BluetoothModuleService : IBarDataService
             {
                 battery = Math.Clamp(percentage, 0, 100);
             }
+
+            var iconMatch = IconLine().Match(output);
+            if (iconMatch.Success)
+            {
+                icon = iconMatch.Groups["icon"].Value.Trim();
+            }
         }
 
-        return new BluetoothDeviceSnapshot(address, name, connected, battery);
+        return new BluetoothDeviceSnapshot(address, name, connected, battery, icon);
     }
 
     [GeneratedRegex(@"^Device\s+(?<address>[0-9A-Fa-f:]{17})\s+(?<name>.+)$", RegexOptions.CultureInvariant)]
@@ -83,4 +90,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
     [GeneratedRegex(@"^\s*Battery Percentage:\s*(?:0x[0-9A-Fa-f]+\s+)?\((?<percentage>\d+)\)\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BatteryLine();
+
+    [GeneratedRegex(@"^\s*Icon:\s*(?<icon>\S.*?)\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex IconLine();
 }
