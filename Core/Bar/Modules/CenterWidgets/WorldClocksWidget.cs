@@ -8,9 +8,11 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class WorldClocksWidget(Theme theme)
 {
+    public const int WIDTH = 220;
+    
     private readonly Dictionary<string, ModulesCommon.BoxState> _dateCopyButtons = new();
 
-    public Node Draw(DateTime now) => new BoxNode(220)
+    public Node Draw(DateTime now) => new BoxNode(WIDTH)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,

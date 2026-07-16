@@ -1,38 +1,39 @@
 using HyprNetShell.Rendering.Primitives;
-using ImageMagick;
-using SkiaSharp;
 using Silk.NET.OpenGL;
-using Svg.Skia;
 
 namespace HyprNetShell.Rendering;
 
 public sealed unsafe class Renderer : IRenderApi, IDisposable
 {
     private readonly GL _gl;
+
     private readonly uint _program;
+
     private readonly uint _vao;
     private readonly uint _vbo;
+
     private readonly int _viewportLocation;
+
     private readonly uint _textureProgram;
     private readonly uint _textureVao;
     private readonly uint _textureVbo;
     private readonly int _textureViewportLocation;
     private readonly int _textureLocation;
     private readonly int _textureColorLocation;
+
     private readonly uint _svgTextureProgram;
     private readonly int _svgTextureViewportLocation;
     private readonly int _svgTextureLocation;
     private readonly int _svgTextureColorLocation;
-    private readonly Dictionary<ImageTextureKey, ImageTexture> _textures = [];
-    private readonly Dictionary<ImageTextureKey, PendingImageTexture> _pendingTextures = [];
-    private readonly Dictionary<SvgAsset, uint> _svgTextures = [];
-    private readonly FontRenderer _font;
-    private bool _disposed;
-    private int _frameWidth;
-    private int _frameHeight;
 
-    public int Width => _frameWidth;
-    public int Height => _frameHeight;
+    private readonly TextureRepository _textureRepository;
+
+    private readonly FontRenderer _font;
+
+    private bool _disposed;
+
+    public int Width { get; private set; }
+    public int Height { get; private set; }
 
     public static event Action? OnFrameStart;
     public static event Action? OnFrameEnd;
@@ -74,6 +75,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.EnableVertexAttribArray(1);
 
         _font = new FontRenderer(_gl);
+        _textureRepository = new TextureRepository(_gl);
 
         _gl.Enable(EnableCap.Blend);
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
@@ -81,15 +83,15 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void BeginFrame(int width, int height)
     {
-        _frameWidth = Math.Max(width, 1);
-        _frameHeight = Math.Max(height, 1);
+        Width = Math.Max(width, 1);
+        Height = Math.Max(height, 1);
 
-        _gl.Viewport(0, 0, (uint)_frameWidth, (uint)_frameHeight);
+        _gl.Viewport(0, 0, (uint)Width, (uint)Height);
         _gl.ClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         _gl.Clear(ClearBufferMask.ColorBufferBit);
         _gl.UseProgram(_program);
-        _gl.Uniform2(_viewportLocation, (float)_frameWidth, (float)_frameHeight);
-        _font.SetViewport(_frameWidth, _frameHeight);
+        _gl.Uniform2(_viewportLocation, (float)Width, (float)Height);
+        _font.SetViewport(Width, Height);
         
         OnFrameStart?.Invoke();
     }
@@ -338,7 +340,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        var texture = GetTexture(
+        var texture = _textureRepository.GetTexture(
             imagePath,
             Math.Max(1, (int)MathF.Ceiling(rect.Width * 2)),
             Math.Max(1, (int)MathF.Ceiling(rect.Height * 2)),
@@ -348,6 +350,46 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
+        DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
+            _textureLocation, _textureColorLocation);
+    }
+
+    public void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var texture = _textureRepository.GetTexture(image);
+        DrawTexture(texture, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
+            _textureLocation, _textureColorLocation);
+    }
+
+    public void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var texture = _textureRepository.GetTexture(image);
+        if (texture is not null)
+        {
+            DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
+                _textureLocation, _textureColorLocation);
+        }
+    }
+
+    private void DrawTexture(
+        Texture texture,
+        Rect rect,
+        Color color,
+        uint program,
+        int viewportLocation,
+        int textureLocation,
+        int colorLocation)
+    {
         var x = rect.X;
         var y = rect.Y;
         var width = rect.Width;
@@ -362,17 +404,17 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             x, y + height, 0.0f, 1.0f,
         ];
 
-        _gl.UseProgram(_textureProgram);
-        _gl.Uniform2(_textureViewportLocation, (float)_frameWidth, (float)_frameHeight);
-        _gl.Uniform1(_textureLocation, 0);
+        _gl.UseProgram(program);
+        _gl.Uniform2(viewportLocation, (float)Width, (float)Height);
+        _gl.Uniform1(textureLocation, 0);
         _gl.Uniform4(
-            _textureColorLocation,
-            multiplicativeColor.R,
-            multiplicativeColor.G,
-            multiplicativeColor.B,
-            multiplicativeColor.A);
+            colorLocation,
+            color.R,
+            color.G,
+            color.B,
+            color.A);
         _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, texture.Value.Id);
+        _gl.BindTexture(TextureTarget.Texture2D, texture.Id);
         _gl.BindVertexArray(_textureVao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _textureVbo);
         fixed (float* data = vertices)
@@ -390,50 +432,20 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        var texture = GetTexture(asset);
+        var texture = _textureRepository.GetTexture(asset);
         if (texture is null)
         {
             return;
         }
 
-        var x = rect.X;
-        var y = rect.Y;
-        var width = rect.Width;
-        var height = rect.Height;
-        Span<float> vertices =
-        [
-            x, y, 0.0f, 0.0f,
-            x + width, y, 1.0f, 0.0f,
-            x + width, y + height, 1.0f, 1.0f,
-            x, y, 0.0f, 0.0f,
-            x + width, y + height, 1.0f, 1.0f,
-            x, y + height, 0.0f, 1.0f,
-        ];
-
-        _gl.UseProgram(_svgTextureProgram);
-        _gl.Uniform2(_svgTextureViewportLocation, (float)_frameWidth, (float)_frameHeight);
-        _gl.Uniform1(_svgTextureLocation, 0);
-        _gl.Uniform4(_svgTextureColorLocation, color.R, color.G, color.B, color.A);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, texture.Value);
-        _gl.BindVertexArray(_textureVao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _textureVbo);
-        fixed (float* data = vertices)
-        {
-            _gl.BufferData(
-                BufferTargetARB.ArrayBuffer,
-                (nuint)(vertices.Length * sizeof(float)),
-                data,
-                BufferUsageARB.DynamicDraw);
-        }
-
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        DrawTexture(texture.Value, rect, color, _svgTextureProgram, _svgTextureViewportLocation,
+            _svgTextureLocation, _svgTextureColorLocation);
     }
 
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
     {
         _gl.UseProgram(_program);
-        _gl.Uniform2(_viewportLocation, (float)_frameWidth, (float)_frameHeight);
+        _gl.Uniform2(_viewportLocation, (float)Width, (float)Height);
         _gl.BindVertexArray(_vao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
         fixed (float* data = vertices)
@@ -507,201 +519,6 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         vertices[offset + 5] = color.A;
     }
 
-    private ImageTexture? GetTexture(string imagePath, int decodeWidth, int decodeHeight, bool loadAsync)
-    {
-        try
-        {
-            if (!File.Exists(imagePath))
-            {
-                return null;
-            }
-
-            var path = Path.GetFullPath(imagePath);
-            var modified = File.GetLastWriteTimeUtc(path);
-            var key = new ImageTextureKey(path, decodeWidth, decodeHeight);
-            if (_textures.TryGetValue(key, out var cached) && cached.Modified == modified)
-            {
-                return cached;
-            }
-
-            if (cached.Id != 0)
-            {
-                _gl.DeleteTexture(cached.Id);
-                _textures.Remove(key);
-            }
-
-            var image = loadAsync
-                ? GetAsyncDecodedImage(key, modified, path, decodeWidth, decodeHeight)
-                : LoadImage(path, decodeWidth, decodeHeight);
-            if (image is null)
-            {
-                return null;
-            }
-
-            _pendingTextures.Remove(key);
-            return UploadTexture(key, modified, image.Value);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private DecodedImage? GetAsyncDecodedImage(
-        ImageTextureKey key,
-        DateTime modified,
-        string path,
-        int decodeWidth,
-        int decodeHeight)
-    {
-        if (_pendingTextures.TryGetValue(key, out var pending) && pending.Modified == modified)
-        {
-            if (!pending.Decode.IsCompleted)
-            {
-                return null;
-            }
-
-            try
-            {
-                return pending.Decode.GetAwaiter().GetResult();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        _pendingTextures[key] = new PendingImageTexture(
-            modified,
-            Task.Run(() => LoadImage(path, decodeWidth, decodeHeight)));
-        return null;
-    }
-
-    private ImageTexture UploadTexture(ImageTextureKey key, DateTime modified, DecodedImage image)
-    {
-        var texture = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, texture);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        fixed (byte* data = image.Pixels)
-        {
-            _gl.TexImage2D(
-                TextureTarget.Texture2D,
-                0,
-                InternalFormat.Rgba,
-                (uint)image.Width,
-                (uint)image.Height,
-                0,
-                PixelFormat.Rgba,
-                PixelType.UnsignedByte,
-                data);
-        }
-
-        var loaded = new ImageTexture(texture, modified);
-        _textures[key] = loaded;
-        return loaded;
-    }
-
-    private uint? GetTexture(SvgAsset asset)
-    {
-        if (_svgTextures.TryGetValue(asset, out var cached))
-        {
-            return cached;
-        }
-
-        try
-        {
-            var raster = asset.Rasterize();
-            var texture = _gl.GenTexture();
-            _gl.BindTexture(TextureTarget.Texture2D, texture);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-            fixed (byte* data = raster.Pixels.Span)
-            {
-                _gl.TexImage2D(
-                    TextureTarget.Texture2D,
-                    0,
-                    InternalFormat.Rgba,
-                    (uint)raster.Width,
-                    (uint)raster.Height,
-                    0,
-                    PixelFormat.Rgba,
-                    PixelType.UnsignedByte,
-                    data);
-            }
-
-            _svgTextures[asset] = texture;
-            return texture;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static DecodedImage? LoadImage(string path, int decodeWidth, int decodeHeight)
-    {
-        return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
-               Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
-            ? LoadSvg(path)
-            : LoadRasterImage(path, decodeWidth, decodeHeight);
-    }
-
-    private static DecodedImage? LoadSvg(string path)
-    {
-        try
-        {
-            using var svg = new SKSvg();
-            var picture = svg.Load(path);
-            if (picture is null || picture.CullRect.Width <= 0 || picture.CullRect.Height <= 0) return null;
-
-            const float maxDimension = 512.0f;
-            var scale = MathF.Min(1.0f, maxDimension / MathF.Max(picture.CullRect.Width, picture.CullRect.Height));
-            using var stream = new MemoryStream();
-            using var colorSpace = SKColorSpace.CreateSrgb();
-            picture.ToImage(
-                stream, SKColors.Transparent, SKEncodedImageFormat.Png, 100, scale, scale,
-                SKColorType.Rgba8888, SKAlphaType.Premul, colorSpace);
-            stream.Position = 0;
-            using var image = new MagickImage(stream);
-            return DecodeMagickImage(image);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static DecodedImage? LoadRasterImage(string path, int decodeWidth, int decodeHeight)
-    {
-        try
-        {
-            using var image = new MagickImage(path);
-            if (image.Width > decodeWidth || image.Height > decodeHeight)
-            {
-                image.Resize((uint)decodeWidth, (uint)decodeHeight);
-            }
-            return DecodeMagickImage(image);
-        }
-        catch (MagickException)
-        {
-            return null;
-        }
-    }
-
-    private static DecodedImage? DecodeMagickImage(MagickImage image)
-    {
-        image.Format = MagickFormat.Rgba;
-        var pixels = image.ToByteArray();
-        return pixels.Length == image.Width * image.Height * 4
-            ? new DecodedImage((int)image.Width, (int)image.Height, pixels)
-            : null;
-    }
-
     public void Dispose()
     {
         if (_disposed)
@@ -716,20 +533,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DeleteProgram(_program);
         _gl.DeleteProgram(_textureProgram);
         _gl.DeleteProgram(_svgTextureProgram);
-        foreach (var texture in _textures.Values)
-        {
-            _gl.DeleteTexture(texture.Id);
-        }
-        foreach (var texture in _svgTextures.Values)
-        {
-            _gl.DeleteTexture(texture);
-        }
+        _textureRepository.Dispose();
         _font.Dispose();
         _disposed = true;
     }
-
-    private readonly record struct ImageTextureKey(string Path, int Width, int Height);
-    private readonly record struct ImageTexture(uint Id, DateTime Modified);
-    private readonly record struct PendingImageTexture(DateTime Modified, Task<DecodedImage?> Decode);
-    private readonly record struct DecodedImage(int Width, int Height, byte[] Pixels);
 }

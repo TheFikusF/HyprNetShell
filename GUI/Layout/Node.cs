@@ -18,6 +18,18 @@ public enum Direction
     Vertical,
 }
 
+public interface IWidthBoundNode
+{
+    bool AcceptsWidthBound { get; }
+    void SetMaxWidth(int maxWidth, bool stretch);
+}
+
+public interface IHeightBoundNode
+{
+    bool AcceptsHeightBound { get; }
+    void SetMaxHeight(int maxHeight, bool stretch);
+}
+
 public struct Style
 {
     public Insets Padding;

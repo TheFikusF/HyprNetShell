@@ -11,6 +11,8 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class WeatherWidget
 {
+    public const int WIDTH = 260;
+    
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan FailureRetryInterval = TimeSpan.FromMinutes(10);
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(12) };
@@ -51,7 +53,7 @@ internal sealed class WeatherWidget
             refreshing = _refreshTask is { IsCompleted: false };
         }
 
-        return new BoxNode(220)
+        return new BoxNode(WIDTH)
         {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
@@ -320,7 +322,7 @@ file sealed class TemperatureRangeNode(
     double overallMaximum,
     Theme theme) : Node
 {
-    public override int Width => 58;
+    public override int Width => 72;
     public override int Height => 8;
 
     public override void Draw(IRenderApi renderer, int x, int y)

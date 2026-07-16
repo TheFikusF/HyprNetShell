@@ -1,9 +1,19 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Xml.Linq;
+
 namespace HyprNetShell.Core.Bar;
 
 public sealed class AppIconResolver
 {
-    private static readonly string[] IconExtensions = [".png", ".svg", ".xpm", ".jpg", ".jpeg", ".webp"];
+    private static readonly string[] IconExtensions = [".png", ".svg", ".svgz", ".xpm", ".jpg", ".jpeg", ".webp"];
     private static readonly string[] RasterIconExtensions = [".png", ".xpm", ".jpg", ".jpeg", ".webp"];
+    private static readonly Lazy<string?> SafeSvgCacheDirectory = new(CreateSafeSvgCacheDirectory);
+    private static readonly HashSet<string> SafeSvgElements = new(StringComparer.Ordinal)
+    {
+        "svg", "g", "defs", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+        "linearGradient", "radialGradient", "stop", "clipPath", "use",
+    };
     private readonly Dictionary<string, string?> _classCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _rasterIconCache = new(StringComparer.OrdinalIgnoreCase);
@@ -90,13 +100,103 @@ public sealed class AppIconResolver
             return cached;
         }
 
-        var path = ResolveIconPathCore(iconName, IconExtensions);
+        var path = MakeRendererSafe(ResolveIconPathCore(iconName, IconExtensions));
         _iconCache[iconName] = path;
         return path;
     }
 
+    private static string? MakeRendererSafe(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            (!Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) &&
+             !Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)))
+        {
+            return path;
+        }
+
+        // Svg.Skia can terminate the process on unsupported constructs in old
+        // third-party Inkscape files (notably flowRoot/text). Reduce external
+        // icons to the geometry subset used by our known-safe bundled assets.
+        if (Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var cacheDirectory = SafeSvgCacheDirectory.Value;
+        if (cacheDirectory is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var cacheKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                $"{Path.GetFullPath(path)}|{File.GetLastWriteTimeUtc(path).Ticks}")));
+            var safePath = Path.Combine(cacheDirectory, cacheKey + ".svg");
+            if (File.Exists(safePath))
+            {
+                return safePath;
+            }
+
+            var document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+            var root = document.Root;
+            if (root is null || root.Name.LocalName != "svg")
+            {
+                return null;
+            }
+
+            foreach (var element in root.DescendantsAndSelf().ToArray())
+            {
+                if (!SafeSvgElements.Contains(element.Name.LocalName))
+                {
+                    element.Remove();
+                    continue;
+                }
+
+                foreach (var attribute in element.Attributes().ToArray())
+                {
+                    var name = attribute.Name.LocalName;
+                    var externalReference = name == "href" && !attribute.Value.StartsWith('#');
+                    var unsafeStyle = name == "style" &&
+                                      attribute.Value.Contains("url(", StringComparison.OrdinalIgnoreCase) &&
+                                      !attribute.Value.Contains("url(#", StringComparison.OrdinalIgnoreCase);
+                    if ((!attribute.IsNamespaceDeclaration && !string.IsNullOrEmpty(attribute.Name.NamespaceName)) ||
+                        name.StartsWith("on", StringComparison.OrdinalIgnoreCase) ||
+                        externalReference || unsafeStyle)
+                    {
+                        attribute.Remove();
+                    }
+                }
+            }
+
+            document.Save(safePath, SaveOptions.DisableFormatting);
+            return File.Exists(safePath) ? safePath : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? CreateSafeSvgCacheDirectory()
+    {
+        try
+        {
+            return Directory.CreateTempSubdirectory("hyprnetshell-safe-svg-").FullName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? ResolveIconPathCore(string iconName, IReadOnlyCollection<string> extensions)
     {
+        if (Uri.TryCreate(iconName, UriKind.Absolute, out var iconUri) && iconUri.IsFile)
+        {
+            iconName = iconUri.LocalPath;
+        }
+
         if (Path.IsPathRooted(iconName))
         {
             return File.Exists(iconName) ? iconName : null;
@@ -120,37 +220,97 @@ public sealed class AppIconResolver
                 continue;
             }
 
+            var candidates = new List<string>();
             foreach (var name in names)
             {
                 var direct = Path.Combine(iconDir, name);
                 if (File.Exists(direct))
                 {
-                    return direct;
+                    candidates.Add(direct);
                 }
             }
 
-            foreach (var name in names)
+            var expectedNames = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            candidates.AddRange(
+                SafeEnumerateFiles(iconDir, "*", SearchOption.AllDirectories)
+                    .Where(file => expectedNames.Contains(Path.GetFileName(file))));
+
+            if (candidates.Count > 0)
             {
-                foreach (var file in SafeEnumerateFiles(iconDir, name, SearchOption.AllDirectories))
-                {
-                    return file;
-                }
+                return candidates
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(IconCandidateScore)
+                    .ThenBy(path => path, StringComparer.Ordinal)
+                    .First();
             }
         }
 
         return null;
     }
 
+    private static int IconCandidateScore(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        var score = normalized.Contains("/apps/", StringComparison.OrdinalIgnoreCase) ? 0 : 1000;
+        if (normalized.Contains("symbolic", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 500;
+        }
+
+        var size = IconSizeFromPath(normalized);
+        score += size switch
+        {
+            48 => 0,
+            64 => 2,
+            32 => 4,
+            96 => 6,
+            128 => 8,
+            256 => 10,
+            512 => 12,
+            > 0 => 20 + Math.Abs(size - 48),
+            _ when normalized.Contains("/scalable/", StringComparison.OrdinalIgnoreCase) => 1,
+            _ => 100,
+        };
+        return score;
+    }
+
+    private static int IconSizeFromPath(string path)
+    {
+        foreach (var segment in path.Split('/'))
+        {
+            var separator = segment.IndexOf('x');
+            if (separator > 0 &&
+                int.TryParse(segment[..separator], out var width) &&
+                int.TryParse(segment[(separator + 1)..], out var height) &&
+                width == height)
+            {
+                return width;
+            }
+        }
+
+        return 0;
+    }
+
     private static Dictionary<string, string> ReadDesktopEntry(string desktopFile)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var inDesktopEntry = false;
 
         try
         {
             foreach (var line in File.ReadLines(desktopFile))
             {
                 var trimmed = line.Trim();
-                if (trimmed.Length == 0 || trimmed[0] == '#' || trimmed[0] == '[')
+                if (trimmed.StartsWith('['))
+                {
+                    inDesktopEntry = string.Equals(
+                        trimmed,
+                        "[Desktop Entry]",
+                        StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+
+                if (!inDesktopEntry || trimmed.Length == 0 || trimmed[0] == '#')
                 {
                     continue;
                 }
@@ -252,7 +412,7 @@ public sealed class AppIconResolver
                 RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
             };
 
-            return Directory.EnumerateFiles(path, pattern, options);
+            return Directory.EnumerateFiles(path, pattern, options).ToArray();
         }
         catch
         {

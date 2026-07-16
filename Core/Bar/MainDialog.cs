@@ -1,4 +1,6 @@
 using HyprNetShell.Core.Bar.MainDialogTabs;
+using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 
@@ -24,14 +26,14 @@ public sealed class MainDialog : IDrawableModule
 
     public bool IsOpen { get; private set; }
 
-    public MainDialog()
+    internal MainDialog(ClipboardHistoryService clipboardHistory, IHyprctl hyprctl)
     {
         _tabs =
         [
-            new ApplicationLauncherTab(Close),
+            new ApplicationLauncherTab(hyprctl, Close),
             new CalculatorTab(),
-            new ClipboardManagerTab(Close),
-            new WallpapersTab(Close),
+            new ClipboardManagerTab(clipboardHistory, Close),
+            new WallpapersTab(hyprctl, Close),
         ];
 
         _actions = new Dictionary<int, Action>

@@ -7,7 +7,11 @@ public sealed record WorkspaceSnapshot(
     IReadOnlyList<WindowSummary> Windows,
     PopupSnapshot Popup);
 
-public sealed record WindowSummary(string ClassName, string Title);
+public sealed record WindowSummary(
+    string Address,
+    string ClassName,
+    string InitialClassName,
+    string Title);
 
 public sealed record MonitorWorkspaceSnapshot(
     string Name,

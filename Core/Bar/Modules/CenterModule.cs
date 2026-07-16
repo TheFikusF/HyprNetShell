@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -9,7 +10,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class CenterModule : IDrawableModule
 {
-    private const int PopupWidth = 620;
+    private const int POPUP_WIDTH = 620;
 
     private readonly Func<NotificationsSnapshot> _notifications;
     private readonly Theme _theme;
@@ -23,14 +24,17 @@ internal sealed class CenterModule : IDrawableModule
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
-    public CenterModule(Func<NotificationsSnapshot> notifications, Theme theme)
+    public CenterModule(
+        Func<NotificationsSnapshot> notifications,
+        NotificationService notificationService,
+        Theme theme)
     {
         _notifications = notifications;
         _theme = theme;
         _calendar = new CalendarWidget(theme);
         _worldClocks = new WorldClocksWidget(theme);
         _weather = new WeatherWidget(theme);
-        _notificationsWidget = new NotificationsWidget(theme);
+        _notificationsWidget = new NotificationsWidget(notificationService, theme);
     }
 
     public Node Draw()
@@ -73,7 +77,6 @@ internal sealed class CenterModule : IDrawableModule
     {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
-        OnClick = NotificationsWidget.OpenPanel,
         Style = ModulesCommon.ModuleStyle(
             _theme,
             snapshot.Count > 0 ? Color.Lerp(_theme.Active, _theme.Panel, 0.5f) : _theme.Panel,

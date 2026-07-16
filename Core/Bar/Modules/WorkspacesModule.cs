@@ -11,22 +11,21 @@ internal sealed class WorkspacesModule : IDrawableModule
 {
     private readonly Dictionary<int, ModulesCommon.BoxState> _popupWorkspaceStates = [];
     private readonly Theme _theme;
-    private readonly Func<bool> _blockPopup;
     private readonly ModulesCommon.NodeWithPopup _node;
-    private HyprlandService _hyprland;
-    private SuperKeyStateService _superKey;
+    private readonly HyprlandService _hyprland;
+    private readonly IHyprctl _hyprctl;
 
-    public WorkspacesModule(HyprlandService hyprland, SuperKeyStateService superKey, Theme theme,
+    public WorkspacesModule(HyprlandService hyprland, IHyprctl hyprctl, SuperKeyStateService superKey, Theme theme,
         Func<bool> blockPopup)
     {
         _theme = theme;
         _hyprland = hyprland;
-        _superKey = superKey;
-        _blockPopup = blockPopup;
+        _hyprctl = hyprctl;
+        var blockPopup1 = blockPopup;
         _node = new("workspaces_module", ignorePopupQueue: true)
         {
-            GetShouldShowPopup = hovered => (_superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
-                                            _blockPopup() == false,
+            GetShouldShowPopup = hovered => (superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
+                                            blockPopup1() == false,
         };
     }
 
@@ -89,9 +88,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            OnClick = () => Task.Run(async () =>
-                await HyprlandService.HyprctlEvalAsync(
-                    $$"""hl.dispatch(hl.dsp.focus({ workspace = {{workspace.Id}} }))""", CancellationToken.None)),
+            OnClick = () => _ = _hyprctl.FocusWorkspaceAsync(workspace.Id),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 Spacing = 4,

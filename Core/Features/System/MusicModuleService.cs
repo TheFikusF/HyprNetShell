@@ -10,9 +10,9 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class MusicModuleService : IDisposable
 {
-    private const string PlayerPath = "/org/mpris/MediaPlayer2";
-    private const string PlayerInterface = "org.mpris.MediaPlayer2.Player";
-    private const string PropertiesInterface = "org.freedesktop.DBus.Properties";
+    private const string PLAYER_PATH = "/org/mpris/MediaPlayer2";
+    private const string PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player";
+    private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
 
     private static readonly HttpClient Http = new()
     {
@@ -50,8 +50,8 @@ internal sealed class MusicModuleService : IDisposable
                 new MatchRule
                 {
                     Type = MessageType.Signal,
-                    Path = PlayerPath,
-                    Interface = PropertiesInterface,
+                    Path = PLAYER_PATH,
+                    Interface = PROPERTIES_INTERFACE,
                     Member = "PropertiesChanged",
                 });
             _seekedSubscription = await AddSignalSubscriptionAsync(
@@ -59,8 +59,8 @@ internal sealed class MusicModuleService : IDisposable
                 new MatchRule
                 {
                     Type = MessageType.Signal,
-                    Path = PlayerPath,
-                    Interface = PlayerInterface,
+                    Path = PLAYER_PATH,
+                    Interface = PLAYER_INTERFACE,
                     Member = "Seeked",
                 });
             _nameOwnerSubscription = await AddSignalSubscriptionAsync(
@@ -68,7 +68,7 @@ internal sealed class MusicModuleService : IDisposable
                 new MatchRule
                 {
                     Type = MessageType.Signal,
-                    Interface = Dbus.BusInterface,
+                    Interface = Dbus.BUS_INTERFACE,
                     Member = "NameOwnerChanged",
                 }, onlyMprisOwnerChanges: true);
 

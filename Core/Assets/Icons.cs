@@ -164,4 +164,10 @@ public static partial class Icons
     
     [SvgAsset("assets/icons/lucide/bell.svg")]
     public static partial SvgAsset Bell { get; }
+
+    [SvgAsset("assets/icons/lucide/x.svg")]
+    public static partial SvgAsset X { get; }
+
+    [SvgAsset("assets/icons/lucide/trash.svg")]
+    public static partial SvgAsset Trash { get; }
 }

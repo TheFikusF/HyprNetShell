@@ -6,9 +6,9 @@ internal delegate void MessageBodyWriter(ref MessageWriter writer);
 
 internal static class Dbus
 {
-    public const string BusName = "org.freedesktop.DBus";
-    public const string BusPath = "/org/freedesktop/DBus";
-    public const string BusInterface = "org.freedesktop.DBus";
+    public const string BUS_NAME = "org.freedesktop.DBus";
+    public const string BUS_PATH = "/org/freedesktop/DBus";
+    public const string BUS_INTERFACE = "org.freedesktop.DBus";
 
     public static string SessionAddress =>
         Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS")
@@ -67,9 +67,9 @@ internal static class Dbus
     public static async Task<uint> RequestNameAsync(DBusConnection connection, string name, uint flags) =>
         await CallAsync(
             connection,
-            BusName,
-            BusPath,
-            BusInterface,
+            BUS_NAME,
+            BUS_PATH,
+            BUS_INTERFACE,
             "RequestName",
             reader => reader.ReadUInt32(),
             "su",
@@ -82,9 +82,9 @@ internal static class Dbus
     public static async Task<string> GetNameOwnerAsync(DBusConnection connection, string name) =>
         await CallAsync(
             connection,
-            BusName,
-            BusPath,
-            BusInterface,
+            BUS_NAME,
+            BUS_PATH,
+            BUS_INTERFACE,
             "GetNameOwner",
             reader => reader.ReadString(),
             "s",

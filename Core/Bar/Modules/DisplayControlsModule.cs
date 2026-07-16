@@ -171,17 +171,17 @@ internal sealed class DisplayControlsModule(
         return new SliderNode(
             340,
             14,
-            (value - TemperatureCurveMath.MinimumTemperature) /
-            (float)(TemperatureCurveMath.MaximumTemperature - TemperatureCurveMath.MinimumTemperature),
+            (value - TemperatureCurveMath.MINIMUM_TEMPERATURE) /
+            (float)(TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE),
             theme.Muted,
             Color.Orange,
             theme.Text,
             normalized => SetValue(
                 "temperature",
-                TemperatureCurveMath.MinimumTemperature + (int)MathF.Round(normalized *
-                                                                           (TemperatureCurveMath.MaximumTemperature -
-                                                                            TemperatureCurveMath.MinimumTemperature)),
-                DisplayControlsModuleService.SetTemperatureAsync),
+                TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
+                                                                           (TemperatureCurveMath.MAXIMUM_TEMPERATURE -
+                                                                            TemperatureCurveMath.MINIMUM_TEMPERATURE)),
+                service.SetTemperatureAsync),
             GetSliderDragging("temperature"));
     }
 

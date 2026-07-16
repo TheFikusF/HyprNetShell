@@ -35,7 +35,7 @@ wireplumber (for the `wpctl` audio controls)
 bluez-utils (for the `bluetoothctl` device controls)
 xkbcommon (for keyboard-layout-aware launcher input)
 socat (for Hyprland hotkey notifications)
-cliphist and wl-clipboard (for clipboard history)
+wl-clipboard (Wayland clipboard transport; history is managed in-process)
 ```
 
 Gentoo package names are typically:
@@ -83,8 +83,13 @@ dotnet run --project HyprNetShell.csproj
 
 Run this inside Hyprland or another compositor implementing `zwlr_layer_shell_v1`.
 
-The built-in Hyprland key watcher registers `SUPER+L` to toggle the application launcher and removes the
+The built-in Hyprland key watcher registers `SUPER+R` to toggle the application launcher and removes the
 binding during shutdown.
+
+Runtime messages and full exception details are written to stderr and to
+`$XDG_STATE_HOME/hyprnetshell/hyprnetshell.log` (normally
+`~/.local/state/hyprnetshell/hyprnetshell.log`). The previous log is retained as
+`hyprnetshell.log.1` when the active log reaches 5 MiB.
 
 ## What It Draws
 

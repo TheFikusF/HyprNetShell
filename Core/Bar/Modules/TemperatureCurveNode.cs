@@ -69,9 +69,9 @@ internal sealed class TemperatureCurveNode(
 
         foreach (var temperature in new[]
                  {
-                     TemperatureCurveMath.MaximumTemperature,
-                     (TemperatureCurveMath.MaximumTemperature + TemperatureCurveMath.MinimumTemperature) / 2,
-                     TemperatureCurveMath.MinimumTemperature,
+                     TemperatureCurveMath.MAXIMUM_TEMPERATURE,
+                     (TemperatureCurveMath.MAXIMUM_TEMPERATURE + TemperatureCurveMath.MINIMUM_TEMPERATURE) / 2,
+                     TemperatureCurveMath.MINIMUM_TEMPERATURE,
                  })
         {
             DrawTemperatureLine(temperature, _gridColor);
@@ -130,8 +130,8 @@ internal sealed class TemperatureCurveNode(
         var hour = Math.Clamp((Layout.Input.PointerX - plot.X) / plot.Width * 24.0f, 0.0f, 24.0f);
         var normalizedY = Math.Clamp((Layout.Input.PointerY - plot.Y) / plot.Height, 0.0f, 1.0f);
         var temperature = (int)MathF.Round(
-            TemperatureCurveMath.MaximumTemperature -
-            normalizedY * (TemperatureCurveMath.MaximumTemperature - TemperatureCurveMath.MinimumTemperature));
+            TemperatureCurveMath.MAXIMUM_TEMPERATURE -
+            normalizedY * (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE));
         onPointChanged(dragState.PointIndex, hour, temperature);
     }
 
@@ -156,6 +156,6 @@ internal sealed class TemperatureCurveNode(
 
     private static float TemperatureToY(Rect plot, int temperature) =>
         plot.Y + plot.Height *
-        (TemperatureCurveMath.MaximumTemperature - temperature) /
-        (TemperatureCurveMath.MaximumTemperature - TemperatureCurveMath.MinimumTemperature);
+        (TemperatureCurveMath.MAXIMUM_TEMPERATURE - temperature) /
+        (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE);
 }

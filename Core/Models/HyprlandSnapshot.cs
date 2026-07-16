@@ -3,6 +3,7 @@ namespace HyprNetShell.Core.Models;
 public sealed record HyprlandSnapshot(
     IReadOnlyList<WorkspaceSnapshot> Workspaces,
     IReadOnlyList<MonitorWorkspaceSnapshot> MonitorWorkspaces,
+    IReadOnlyList<WindowSummary> Windows,
     string FocusedTitle,
     string FocusedClassName,
     int FocusedWorkspaceId,
@@ -10,5 +11,5 @@ public sealed record HyprlandSnapshot(
     string LayoutName,
     bool Available)
 {
-    public static HyprlandSnapshot Empty { get; } = new([], [], "Desktop", "", 1, "", "", false);
+    public static HyprlandSnapshot Empty { get; } = new([], [], [], "Desktop", "", 1, "", "", false);
 }

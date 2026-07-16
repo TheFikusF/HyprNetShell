@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 
 namespace HyprNetShell.Core.Features.Hyprland;
@@ -41,9 +41,10 @@ internal sealed class HyprlandService : IDisposable
         {
             _eventTask.Wait(TimeSpan.FromMilliseconds(250));
         }
-        catch
+        catch (Exception exception)
         {
             // The event loop is best-effort and can be abandoned on shutdown.
+            AppLogger.Warning("Hyprland", "Event loop did not stop cleanly", exception);
         }
 
         _refreshLock.Dispose();
@@ -85,8 +86,9 @@ internal sealed class HyprlandService : IDisposable
             {
                 return;
             }
-            catch
+            catch (Exception exception)
             {
+                AppLogger.Warning("Hyprland", "Event socket disconnected", exception);
                 await DelayReconnect(cancellationToken);
             }
         }
@@ -94,7 +96,6 @@ internal sealed class HyprlandService : IDisposable
 
     private async Task HandleEventAsync(string line, CancellationToken cancellationToken)
     {
-        Console.WriteLine(line);
         var lines = line.Split(">>");
         if (lines.Length != 2)
         {
@@ -145,9 +146,14 @@ internal sealed class HyprlandService : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
-        catch when (!_snapshot.Available)
+        catch (Exception exception) when (!_snapshot.Available)
         {
+            AppLogger.Warning("Hyprland", "Could not refresh compositor state", exception);
             _snapshot = BuildUnavailableSnapshot();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("Hyprland", "Could not refresh compositor state; keeping the previous snapshot", exception);
         }
         finally
         {
@@ -210,14 +216,16 @@ internal sealed class HyprlandService : IDisposable
                 group => group.Key,
                 group => group.Select(workspace => workspace.Id).Distinct().Order().ToArray());
 
+        var windows = clients
+            .Select(ToWindowSummary)
+            .ToArray();
+
         var clientsByWorkspace = clients
             .Where(client => client.Workspace?.Id > 0)
             .GroupBy(client => client.Workspace!.Id)
             .ToDictionary(
                 group => group.Key,
-                group => group.Select(client => new WindowSummary(
-                    client.ClassName,
-                    FirstNonEmpty(client.Title, client.ClassName, "(untitled)"))).ToArray());
+                group => group.Select(ToWindowSummary).ToArray());
 
         var monitorSnapshots = new List<MonitorWorkspaceSnapshot>();
         foreach (var monitor in monitors.OrderByDescending(monitor => monitor.Name == currentMonitor?.Name)
@@ -257,6 +265,7 @@ internal sealed class HyprlandService : IDisposable
         return new HyprlandSnapshot(
             workspaceList,
             monitorSnapshots,
+            windows,
             FirstNonEmpty(active?.Title, active?.ClassName, "Desktop"),
             active?.ClassName ?? "",
             active?.Workspace?.Id > 0 ? active.Workspace.Id : activeWorkspace,
@@ -282,6 +291,12 @@ internal sealed class HyprlandService : IDisposable
             windows,
             new PopupSnapshot($"workspace-{id}", $"Workspace {id}", popupRows));
     }
+
+    private static WindowSummary ToWindowSummary(HyprClient client) => new(
+        client.Address ?? "",
+        client.ClassName ?? "",
+        client.InitialClassName ?? "",
+        FirstNonEmpty(client.Title, client.ClassName, client.InitialClassName, "(untitled)"));
 
     private void UpdateLayoutFromEvent(string data)
     {
@@ -352,6 +367,7 @@ internal sealed class HyprlandService : IDisposable
         return new HyprlandSnapshot(
             workspaces,
             [new MonitorWorkspaceSnapshot("fallback", true, 1, workspaces)],
+            [],
             "Desktop",
             "",
             1,
@@ -375,40 +391,6 @@ internal sealed class HyprlandService : IDisposable
             Path.Combine(instanceDirectory, ".socket2.sock"));
     }
     
-    public static async Task HyprctlEvalAsync(string expression, CancellationToken cancellationToken)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(2));
-
-        using var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = "hyprctl",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            ArgumentList = { "eval", expression },
-        });
-
-        if (process is null)
-        {
-            Console.WriteLine("hyprctl eval failed: process did not start");
-            return;
-        }
-
-        var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-        await process.WaitForExitAsync(timeout.Token);
-        var stderr = await stderrTask;
-
-        if (process.ExitCode == 0)
-        {
-            Console.WriteLine("hyprctl eval succeeded");
-            return;
-        }
-
-        Console.WriteLine($"hyprctl eval exited {process.ExitCode}: {stderr.Trim()}");
-    }
-
     private static T? Deserialize<T>(string? json, JsonTypeInfo<T> typeInfo)
     {
         return string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize(json, typeInfo);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Logging;
 
 namespace HyprNetShell.Core.Features.System;
 
@@ -10,9 +11,10 @@ internal sealed class SuperKeyStateService : IDisposable
     private static readonly TimeSpan HyprctlTimeout = TimeSpan.FromSeconds(2);
     private const string SUPER_DOWN_BIND = "SUPER_L";
     private const string SUPER_UP_BIND = "SUPER + SUPER_L";
-    private const string LAUNCHER_BIND = "SUPER + L";
+    private const string LAUNCHER_BIND = "SUPER + R";
 
     private readonly CancellationTokenSource _cts = new();
+    private readonly IHyprctl _hyprctl;
     private readonly string _socketPath;
     private readonly Task _runTask;
 
@@ -26,11 +28,11 @@ internal sealed class SuperKeyStateService : IDisposable
 
     public bool IsHeldFor(TimeSpan timespan) => IsHeld && DateTime.Now - _lastLoggedSuperDown > timespan;
 
-    public bool ConsumeLauncherToggleRequested() =>
-        Interlocked.Exchange(ref _launcherToggleRequested, 0) != 0;
+    public bool ConsumeLauncherToggleRequested() => Interlocked.Exchange(ref _launcherToggleRequested, 0) != 0;
 
-    public SuperKeyStateService()
+    public SuperKeyStateService(IHyprctl hyprctl)
     {
+        _hyprctl = hyprctl;
         _socketPath = Path.Combine(
             Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ?? "/tmp",
             "hypr-shell.sock");
@@ -52,8 +54,9 @@ internal sealed class SuperKeyStateService : IDisposable
         {
             _listener?.Dispose();
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("SuperKeyState", "Could not dispose the event socket", exception);
         }
 
         try
@@ -100,32 +103,32 @@ internal sealed class SuperKeyStateService : IDisposable
     {
         await UninstallHyprlandBindsAsync(cancellationToken);
 
-        await HyprlandService.HyprctlEvalAsync($$"""
-                                                 hl.bind("{{SUPER_DOWN_BIND}}",
-                                                   hl.dsp.exec_cmd("printf 'super_down\n' | socat - UNIX-CONNECT:{{ShellQuote(_socketPath)}}"),
-                                                   { transparent = true })
-                                                 """, cancellationToken);
+        await _hyprctl.BindCommandAsync(
+            SUPER_DOWN_BIND,
+            $"printf 'super_down\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            new HyprlandBindOptions(Transparent: true),
+            cancellationToken);
 
-        await HyprlandService.HyprctlEvalAsync($$"""
-                                                 hl.bind("{{SUPER_UP_BIND}}",
-                                                   hl.dsp.exec_cmd("printf 'super_up\n' | socat - UNIX-CONNECT:{{ShellQuote(_socketPath)}}"),
-                                                   { release = true, transparent = true })
-                                                 """, cancellationToken);
+        await _hyprctl.BindCommandAsync(
+            SUPER_UP_BIND,
+            $"printf 'super_up\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            new HyprlandBindOptions(Release: true, Transparent: true),
+            cancellationToken);
 
-        await HyprlandService.HyprctlEvalAsync($$"""
-                                                 hl.bind("{{LAUNCHER_BIND}}",
-                                                   hl.dsp.exec_cmd("printf 'launcher_toggle\n' | socat - UNIX-CONNECT:{{ShellQuote(_socketPath)}}"),
-                                                   { transparent = true })
-                                                 """, cancellationToken);
+        await _hyprctl.BindCommandAsync(
+            LAUNCHER_BIND,
+            $"printf 'launcher_toggle\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            new HyprlandBindOptions(Transparent: true),
+            cancellationToken);
 
         Log("installed Hyprland Super press/release and launcher binds");
     }
 
-    private static async Task UninstallHyprlandBindsAsync(CancellationToken cancellationToken)
+    private async Task UninstallHyprlandBindsAsync(CancellationToken cancellationToken)
     {
-        await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{SUPER_DOWN_BIND}}")""", cancellationToken);
-        await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{SUPER_UP_BIND}}")""", cancellationToken);
-        await HyprlandService.HyprctlEvalAsync($$"""hl.unbind("{{LAUNCHER_BIND}}")""", cancellationToken);
+        await _hyprctl.UnbindAsync(SUPER_DOWN_BIND, cancellationToken);
+        await _hyprctl.UnbindAsync(SUPER_UP_BIND, cancellationToken);
+        await _hyprctl.UnbindAsync(LAUNCHER_BIND, cancellationToken);
     }
 
     private async Task AcceptLoopAsync(CancellationToken cancellationToken)
@@ -218,8 +221,5 @@ internal sealed class SuperKeyStateService : IDisposable
         }
     }
 
-    private static void Log(string message)
-    {
-        Console.Error.WriteLine($"[SuperKeyState] {DateTime.Now:HH:mm:ss.fff} {message}");
-    }
+    private static void Log(string message) => AppLogger.Info("SuperKeyState", message);
 }

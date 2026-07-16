@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using HyprNetShell.Core.Bar;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Services;
 using Tmds.DBus.Protocol;
@@ -9,12 +10,12 @@ namespace HyprNetShell.Core.Features.Sni;
 
 internal sealed class SniTrayService : IBarDataService, IDisposable
 {
-    private const string WatcherName = "org.kde.StatusNotifierWatcher";
-    private const string WatcherPath = "/StatusNotifierWatcher";
-    private const string WatcherInterface = "org.kde.StatusNotifierWatcher";
-    private const string PropertiesInterface = "org.freedesktop.DBus.Properties";
-    private const string MenuInterface = "com.canonical.dbusmenu";
-    private const uint NameFlagDoNotQueue = 4;
+    private const string WATCHER_NAME = "org.kde.StatusNotifierWatcher";
+    private const string WATCHER_PATH = "/StatusNotifierWatcher";
+    private const string WATCHER_INTERFACE = "org.kde.StatusNotifierWatcher";
+    private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+    private const string MENU_INTERFACE = "com.canonical.dbusmenu";
+    private const uint NAME_FLAG_DO_NOT_QUEUE = 4;
 
     private static readonly string[] ItemInterfaces =
         ["org.kde.StatusNotifierItem", "org.ayatana.NotificationItem"];
@@ -51,19 +52,29 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
             var connection = new DBusConnection(Dbus.SessionAddress);
             await connection.ConnectAsync();
             _connection = connection;
-            try { await Dbus.RequestNameAsync(connection, hostName, NameFlagDoNotQueue); } catch { }
+            try
+            {
+                await Dbus.RequestNameAsync(connection, hostName, NAME_FLAG_DO_NOT_QUEUE);
+            }
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Tray", $"Could not claim host name {hostName}", exception);
+            }
             try
             {
                 await Dbus.CallAsync(
-                    connection, WatcherName, WatcherPath, WatcherInterface, "RegisterStatusNotifierHost", "s",
+                    connection, WATCHER_NAME, WATCHER_PATH, WATCHER_INTERFACE, "RegisterStatusNotifierHost", "s",
                     (ref MessageWriter writer) => writer.WriteString(hostName));
             }
-            catch { }
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Tray", "Could not register the status notifier host", exception);
+            }
             _initialized = true;
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"tray: D-Bus initialization failed: {exception.Message}");
+            AppLogger.Error("Tray", "D-Bus initialization failed", exception);
             _connection?.Dispose();
             _connection = null;
         }
@@ -80,12 +91,12 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         try
         {
             var property = await Dbus.CallAsync(
-                _connection, WatcherName, WatcherPath, PropertiesInterface, "Get",
+                _connection, WATCHER_NAME, WATCHER_PATH, PROPERTIES_INTERFACE, "Get",
                 reader => reader.ReadVariantValue(),
                 "ss",
                 (ref MessageWriter writer) =>
                 {
-                    writer.WriteString(WatcherInterface);
+                    writer.WriteString(WATCHER_INTERFACE);
                     writer.WriteString("RegisteredStatusNotifierItems");
                 }).WaitAsync(cancellationToken);
             registered = property.Unwrap().GetArray<string>();
@@ -143,7 +154,7 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
             try
             {
                 return await Dbus.CallAsync(
-                    _connection, bus, path, PropertiesInterface, "GetAll",
+                    _connection, bus, path, PROPERTIES_INTERFACE, "GetAll",
                     reader => reader.ReadDictionaryOfStringToVariantValue(),
                     "s", (ref MessageWriter writer) => writer.WriteString(itemInterface)).WaitAsync(cancellationToken);
             }
@@ -165,13 +176,13 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
             try
             {
                 await Dbus.CallAsync(
-                    _connection, bus, menuPath, MenuInterface, "AboutToShow", "i",
+                    _connection, bus, menuPath, MENU_INTERFACE, "AboutToShow", "i",
                     (ref MessageWriter writer) => writer.WriteInt32(0)).WaitAsync(cancellationToken);
             }
             catch { }
 
             var root = await Dbus.CallAsync(
-                _connection, bus, menuPath, MenuInterface, "GetLayout",
+                _connection, bus, menuPath, MENU_INTERFACE, "GetLayout",
                 reader =>
                 {
                     _ = reader.ReadUInt32();
@@ -238,7 +249,7 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         try
         {
             await Dbus.CallAsync(
-                _connection, item.BusName, item.MenuPath, MenuInterface, "Event", "isvu",
+                _connection, item.BusName, item.MenuPath, MENU_INTERFACE, "Event", "isvu",
                 (ref MessageWriter writer) =>
                 {
                     writer.WriteInt32(actionId);
@@ -247,7 +258,10 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
                     writer.WriteUInt32((uint)Environment.TickCount64);
                 });
         }
-        catch { }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("Tray", $"Could not trigger menu action {actionId} for {item.Id}", exception);
+        }
     }
 
     private string? ResolveIconPath(string themePath, string iconName, string appId, string bus, string title)
@@ -365,7 +379,14 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         _initializeGate.Dispose();
         foreach (var file in _pixmapFiles)
         {
-            try { File.Delete(file); } catch { }
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Tray", $"Could not delete cached icon {file}", exception);
+            }
         }
     }
 

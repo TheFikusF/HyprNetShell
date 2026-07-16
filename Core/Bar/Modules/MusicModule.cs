@@ -179,7 +179,7 @@ internal sealed class MusicModule(
                         Style = new Style { Spacing = 5 },
                         Children =
                         [
-                            new MarqueeTextNode(music.Title, 45, 16.0f, theme.Text),
+                            new MarqueeTextNode(music.Title, 42, 16.0f, theme.Text),
                             new MarqueeTextNode(FormatSubtitle(music), 47, 14.0f, theme.Text),
                             new MarqueeTextNode(music.Player, 47, 14.0f, theme.Text),
                         ]

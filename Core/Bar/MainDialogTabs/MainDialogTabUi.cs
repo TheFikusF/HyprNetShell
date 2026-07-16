@@ -7,7 +7,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal static class MainDialogTabUi
 {
-    public const int VisibleRowCount = 7;
+    public const int VISIBLE_ROW_COUNT = 7;
 
     public static Node BuildSectionHeader(string title, string status) => new BoxNode
     {
@@ -16,7 +16,7 @@ internal static class MainDialogTabUi
         Children =
         [
             new TextNode(title, 22, Theme.Default.Text),
-            new TextNode(status, 13, Theme.Default.Muted),
+            new TextNode(status, Theme.Default.TextSize, Theme.Default.Muted),
         ],
     };
 
@@ -26,16 +26,44 @@ internal static class MainDialogTabUi
         Style = ModulesCommon.ModuleStyle(Theme.Default, Theme.Default.Panel) with
         {
             BorderRadius = 8,
-            Padding = new Insets(14, 8),
+            Padding = new Insets(Theme.Default.TextSize, 8),
         },
         Children =
         [
-            new TextNode(
-                value.Length == 0 ? placeholder : value + "│",
-                16,
-                value.Length == 0 ? Theme.Default.Muted : Theme.Default.Text),
+            new TextNode(value.Length == 0 ? placeholder : value + (Math.Sin(Environment.TickCount64 / 200) > 0 ? "|" : ""),
+                16, value.Length == 0 ? Theme.Default.Muted : Theme.Default.Text),
         ],
     };
+
+    public static Node BuildScrollableResults(
+        BoxNode content,
+        int firstItem,
+        int totalItems,
+        int visibleItems)
+    {
+        if (totalItems <= visibleItems)
+        {
+            return content;
+        }
+
+        return new BoxNode
+        {
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            VerticalAlignment = ItemsAlignment.Start,
+            Style = new Style { Spacing = 8 },
+            Children =
+            [
+                content,
+                new ScrollbarNode(
+                    content.Height,
+                    firstItem,
+                    totalItems,
+                    visibleItems,
+                    Theme.Default.Panel,
+                    Theme.Default.Muted),
+            ],
+        };
+    }
 
     public static string ResultCount(int selectedIndex, int count, string emptyText) =>
         count == 0 ? emptyText : $"{selectedIndex + 1} / {count}";
@@ -56,14 +84,14 @@ internal static class MainDialogTabUi
             return;
         }
 
-        selectedIndex = Math.Clamp(selectedIndex + direction, 0, itemCount - 1);
+        selectedIndex = (itemCount + selectedIndex + direction) % (itemCount);
         if (selectedIndex < firstIndex)
         {
             firstIndex = selectedIndex;
         }
-        else if (selectedIndex >= firstIndex + VisibleRowCount)
+        else if (selectedIndex >= firstIndex + VISIBLE_ROW_COUNT)
         {
-            firstIndex = selectedIndex - VisibleRowCount + 1;
+            firstIndex = selectedIndex - VISIBLE_ROW_COUNT + 1;
         }
     }
 }

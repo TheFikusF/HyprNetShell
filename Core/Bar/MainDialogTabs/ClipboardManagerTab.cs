@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -7,22 +7,19 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ClipboardManagerTab(Action closeDialog) : IMainDialogTab
+internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog) : IMainDialogTab
 {
-    private IReadOnlyList<ClipboardEntry> _entries = [];
-    private IReadOnlyList<ClipboardEntry> _filteredEntries = [];
+    private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
+    private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
     private int _firstIndex;
     private int _selectedIndex;
+    private int _loadedVersion = -1;
 
     public string Title => "Clipboard";
     public SvgAsset Icon => Icons.Clipboard;
 
-    public void Activate()
-    {
-        _entries = LoadEntries();
-        ApplyFilter();
-    }
+    public void Activate() => RefreshEntries();
 
     public void HandleTextInput(string text)
     {
@@ -58,16 +55,17 @@ internal sealed class ClipboardManagerTab(Action closeDialog) : IMainDialogTab
             return;
         }
 
-        _ = Task.Run(() => CopyEntryAsync(_filteredEntries[_selectedIndex].Id));
+        _ = history.CopyAsync(_filteredEntries[_selectedIndex]);
         closeDialog();
     }
 
     public Node Draw()
     {
-        var visibleEntries = _filteredEntries
-            .Skip(_firstIndex)
-            .Take(MainDialogTabUi.VisibleRowCount)
-            .ToArray();
+        if (_loadedVersion != history.Version)
+        {
+            RefreshEntries();
+        }
+
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -77,17 +75,36 @@ internal sealed class ClipboardManagerTab(Action closeDialog) : IMainDialogTab
             [
                 MainDialogTabUi.BuildSectionHeader(
                     "Clipboard",
-                    MainDialogTabUi.ResultCount(_selectedIndex, _filteredEntries.Count, "Clipboard history is empty")),
+                    MainDialogTabUi.ResultCount(
+                        _selectedIndex,
+                        _filteredEntries.Count,
+                        "Clipboard history is empty")),
                 MainDialogTabUi.BuildInput(_query, "Search clipboard history..."),
-                ..visibleEntries.Select((entry, visibleIndex) => BuildRow(entry, _firstIndex + visibleIndex)),
+                MainDialogTabUi.BuildScrollableResults(
+                    new BoxNode
+                    {
+                        Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
+                        Style = new Style { Spacing = 8 },
+                        Children =
+                        [
+                            .._filteredEntries
+                                .Skip(_firstIndex)
+                                .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
+                                .Select((entry, visibleIndex) => BuildRow(entry, _firstIndex + visibleIndex)),
+                        ],
+                    },
+                    _firstIndex,
+                    _filteredEntries.Count,
+                    MainDialogTabUi.VISIBLE_ROW_COUNT),
             ],
         };
     }
 
-    private Node BuildRow(ClipboardEntry entry, int index)
+    private Node BuildRow(ClipboardHistoryEntry entry, int index)
     {
         var selected = index == _selectedIndex;
-        return new BoxNode(height: 66)
+        return new BoxNode
         {
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
@@ -96,20 +113,35 @@ internal sealed class ClipboardManagerTab(Action closeDialog) : IMainDialogTab
                 ActivateSelection();
             },
             Style = ModulesCommon.ModuleStyle(
-                Theme.Default,
-                selected ? Theme.Default.Active : Theme.Default.Panel) with
-            {
-                BorderRadius = 8,
-                BorderWidth = selected ? Theme.Default.BorderWidth : 0,
-                Padding = new Insets(16, 10),
-                Spacing = 14,
-            },
+                    Theme.Default,
+                    selected ? Theme.Default.Active : Theme.Default.Panel) with
+                {
+                    BorderRadius = 8,
+                    BorderWidth = selected ? Theme.Default.BorderWidth : 0,
+                    Padding = new Insets(16, 8),
+                    Spacing = 14,
+                },
             Children =
             [
-                new ImageNode(Icons.Copy, 30, 30, Theme.Default.Text),
-                new TextNode(MainDialogTabUi.Trim(entry.Preview, 86), 15, Theme.Default.Text),
+                entry.Image is not null
+                    ? new ImageNode(entry.Image, 46, 46)
+                    : new ImageNode(Icons.Copy, 30, 30, Theme.Default.Text),
+                new TextNode(entry.Preview, 15, Theme.Default.Text, wrapping: TextWrapping.Wrap, maxLines: 5),
             ],
         };
+    }
+
+    private void RefreshEntries()
+    {
+        int version;
+        do
+        {
+            version = history.Version;
+            _entries = history.Snapshot();
+        } while (version != history.Version);
+
+        _loadedVersion = version;
+        ApplyFilter();
     }
 
     private void ApplyFilter()
@@ -122,84 +154,4 @@ internal sealed class ClipboardManagerTab(Action closeDialog) : IMainDialogTab
         _firstIndex = 0;
         _selectedIndex = 0;
     }
-
-    private static IReadOnlyList<ClipboardEntry> LoadEntries()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "cliphist",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { "list" },
-            });
-            if (process is null)
-            {
-                return [];
-            }
-
-            var output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(1000) || process.ExitCode != 0)
-            {
-                return [];
-            }
-
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(ParseEntry)
-                .Where(entry => entry is not null)
-                .Cast<ClipboardEntry>()
-                .ToArray();
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private static ClipboardEntry? ParseEntry(string line)
-    {
-        var separator = line.IndexOf('\t');
-        return separator <= 0 || separator == line.Length - 1
-            ? null
-            : new ClipboardEntry(line[..separator], line[(separator + 1)..].Trim());
-    }
-
-    private static async Task CopyEntryAsync(string id)
-    {
-        try
-        {
-            using var decode = Process.Start(new ProcessStartInfo
-            {
-                FileName = "cliphist",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { "decode", id },
-            });
-            using var copy = Process.Start(new ProcessStartInfo
-            {
-                FileName = "wl-copy",
-                RedirectStandardInput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-            if (decode is null || copy is null)
-            {
-                return;
-            }
-
-            await decode.StandardOutput.BaseStream.CopyToAsync(copy.StandardInput.BaseStream);
-            copy.StandardInput.Close();
-            await Task.WhenAll(decode.WaitForExitAsync(), copy.WaitForExitAsync());
-        }
-        catch
-        {
-            // Clipboard tools are optional; a failed copy should not crash the bar.
-        }
-    }
-
-    private sealed record ClipboardEntry(string Id, string Preview);
 }

@@ -1,5 +1,6 @@
-using System.Diagnostics;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -7,7 +8,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTab
+internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog) : IMainDialogTab
 {
     private readonly AppIconResolver _icons = new();
     private IReadOnlyList<DesktopApplication> _applications = [];
@@ -15,6 +16,7 @@ internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTa
     private string _query = "";
     private int _firstIndex;
     private int _selectedIndex;
+    private bool _launching;
 
     public string Title => "Applications";
     public SvgAsset Icon => Icons.Application;
@@ -60,25 +62,31 @@ internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTa
 
     public void ActivateSelection()
     {
-        if (_selectedIndex < 0 || _selectedIndex >= _filteredApplications.Count)
+        if (_launching || _selectedIndex < 0 || _selectedIndex >= _filteredApplications.Count)
         {
             return;
         }
 
+        _launching = true;
+        _ = LaunchAsync(_filteredApplications[_selectedIndex].DesktopFile);
+    }
+
+    private async Task LaunchAsync(string desktopFile)
+    {
         try
         {
-            Process.Start(new ProcessStartInfo
+            if (await hyprctl.LaunchDesktopEntryAsync(desktopFile))
             {
-                FileName = "gio",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { "launch", _filteredApplications[_selectedIndex].DesktopFile },
-            });
-            closeDialog();
+                closeDialog();
+            }
         }
-        catch
+        catch (Exception exception)
         {
-            // Keep the launcher open when the desktop entry cannot be started.
+            AppLogger.Error("ApplicationLauncher", $"Could not launch desktop entry {desktopFile}", exception);
+        }
+        finally
+        {
+            _launching = false;
         }
     }
 
@@ -86,8 +94,18 @@ internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTa
     {
         var visibleApps = _filteredApplications
             .Skip(_firstIndex)
-            .Take(MainDialogTabUi.VisibleRowCount)
+            .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
             .ToArray();
+        var rows = new BoxNode
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = new Style { Spacing = 8 },
+            Children =
+            [
+                ..visibleApps.Select((app, visibleIndex) => BuildRow(app, _firstIndex + visibleIndex)),
+            ],
+        };
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -102,7 +120,11 @@ internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTa
                         _filteredApplications.Count,
                         "No matching applications")),
                 MainDialogTabUi.BuildInput(_query, "Type to search..."),
-                ..visibleApps.Select((app, visibleIndex) => BuildRow(app, _firstIndex + visibleIndex)),
+                MainDialogTabUi.BuildScrollableResults(
+                    rows,
+                    _firstIndex,
+                    _filteredApplications.Count,
+                    MainDialogTabUi.VISIBLE_ROW_COUNT),
             ],
         };
     }
@@ -110,7 +132,7 @@ internal sealed class ApplicationLauncherTab(Action closeDialog) : IMainDialogTa
     private Node BuildRow(DesktopApplication app, int index)
     {
         var selected = index == _selectedIndex;
-        var iconPath = string.IsNullOrWhiteSpace(app.Icon) ? null : _icons.TryResolveRasterIcon(app.Icon);
+        var iconPath = string.IsNullOrWhiteSpace(app.Icon) ? null : _icons.TryResolveIcon(app.Icon);
         return new BoxNode(height: 66)
         {
             VerticalAlignment = ItemsAlignment.Center,

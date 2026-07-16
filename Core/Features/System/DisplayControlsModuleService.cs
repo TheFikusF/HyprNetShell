@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
@@ -13,6 +14,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private static readonly SemaphoreSlim HyprsunsetLock = new(1, 1);
     private readonly object _curveLock = new();
     private readonly object _temperatureQueueLock = new();
+    private readonly IHyprctl _hyprctl;
     private readonly string _curvePath = GetCurvePath();
     private TemperatureCurvePoint[] _temperatureCurve;
     private bool _automaticTemperatureEnabled;
@@ -24,8 +26,9 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private int _temperature = DEFAULT_TEMPERATURE;
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
 
-    public DisplayControlsModuleService()
+    public DisplayControlsModuleService(IHyprctl hyprctl)
     {
+        _hyprctl = hyprctl;
         (_temperatureCurve, _automaticTemperatureEnabled) = LoadSchedule(_curvePath);
     }
 
@@ -47,16 +50,12 @@ internal sealed class DisplayControlsModuleService : IBarDataService
 
     public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
     {
-        var temperatureOutput = await CommandRunner.TryReadAsync(
-            "hyprctl",
-            "hyprsunset temperature",
-            TimeSpan.FromMilliseconds(500),
-            cancellationToken);
-        var running = TryParseTemperature(temperatureOutput, out var temperature);
+        var temperature = await _hyprctl.GetColorTemperatureAsync(cancellationToken);
+        var running = temperature.HasValue;
         if (running)
         {
             _hyprsunsetInstalled = true;
-            _temperature = temperature;
+            _temperature = temperature!.Value;
         }
         else if (!_hyprsunsetInstalled.HasValue)
         {
@@ -121,8 +120,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             _temperatureCurve[index] = new TemperatureCurvePoint(
                 hour,
                 Math.Clamp(temperatureKelvin,
-                    TemperatureCurveMath.MinimumTemperature,
-                    TemperatureCurveMath.MaximumTemperature));
+                    TemperatureCurveMath.MINIMUM_TEMPERATURE,
+                    TemperatureCurveMath.MAXIMUM_TEMPERATURE));
         }
 
         ScheduleCurvePersistence();
@@ -177,18 +176,13 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
-    internal static async Task SetTemperatureAsync(int temperatureKelvin)
+    internal async Task SetTemperatureAsync(int temperatureKelvin)
     {
         temperatureKelvin = Math.Clamp(temperatureKelvin, 2000, 6500);
         await HyprsunsetLock.WaitAsync();
         try
         {
-            var result = await CommandRunner.TryReadAsync(
-                "hyprctl",
-                $"hyprsunset temperature {temperatureKelvin}",
-                TimeSpan.FromMilliseconds(700),
-                CancellationToken.None);
-            if (result is not null)
+            if (await _hyprctl.SetColorTemperatureAsync(temperatureKelvin))
             {
                 return;
             }
@@ -244,19 +238,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             value = 0;
             return false;
         }
-    }
-
-    private static bool TryParseTemperature(string? output, out int temperature)
-    {
-        var token = output?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
-        {
-            temperature = (int)Math.Round(parsed);
-            return true;
-        }
-
-        temperature = 0;
-        return false;
     }
 
     private static bool IsKeyboardBacklight(string name) =>
@@ -338,8 +319,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             .Select(point => new TemperatureCurvePoint(
                 Math.Clamp(MathF.Round(point.Hour * 4.0f) / 4.0f, 0.0f, 24.0f),
                 Math.Clamp(point.TemperatureKelvin,
-                    TemperatureCurveMath.MinimumTemperature,
-                    TemperatureCurveMath.MaximumTemperature)))
+                    TemperatureCurveMath.MINIMUM_TEMPERATURE,
+                    TemperatureCurveMath.MAXIMUM_TEMPERATURE)))
             .OrderBy(point => point.Hour)
             .ToArray();
 

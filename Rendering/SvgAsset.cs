@@ -12,7 +12,7 @@ public sealed class SvgAssetAttribute(params string[] paths) : Attribute
 
 public sealed class SvgAsset
 {
-    private const float MaxRasterDimension = 512.0f;
+    private const float MAX_RASTER_DIMENSION = 512.0f;
     private readonly byte[] _source;
 
     public string Path { get; }
@@ -33,9 +33,7 @@ public sealed class SvgAsset
             throw new InvalidDataException($"SVG asset '{Path}' has no drawable content.");
         }
 
-        var scale = MathF.Min(
-            1.0f,
-            MaxRasterDimension / MathF.Max(picture.CullRect.Width, picture.CullRect.Height));
+        var scale = MathF.Min(1.0f, MAX_RASTER_DIMENSION / MathF.Max(picture.CullRect.Width, picture.CullRect.Height));
         using var encoded = new MemoryStream();
         using var colorSpace = SKColorSpace.CreateSrgb();
         picture.ToImage(

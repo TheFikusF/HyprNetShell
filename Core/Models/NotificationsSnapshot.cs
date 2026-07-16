@@ -1,3 +1,5 @@
+using HyprNetShell.Rendering;
+
 namespace HyprNetShell.Core.Models;
 
 public sealed record NotificationsSnapshot(
@@ -8,7 +10,16 @@ public sealed record NotificationsSnapshot(
 }
 
 public sealed record NotificationSnapshot(
+    uint Id,
     string Title,
     string Body,
     string AppName,
-    string IconName = "");
+    string DesktopEntry,
+    string IconName,
+    RawImageData? ImageData,
+    IReadOnlyList<NotificationActionSnapshot> Actions,
+    bool Resident,
+    DateTime ReceivedAt,
+    DateTime PopupUntil);
+
+public sealed record NotificationActionSnapshot(string Key, string Label);

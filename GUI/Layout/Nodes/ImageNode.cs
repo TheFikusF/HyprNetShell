@@ -8,6 +8,8 @@ public class ImageNode : Node
     public override int Width { get; }
     public override int Height { get; }
     private readonly string? _imagePath;
+    private readonly RawImageData? _rawImage;
+    private readonly EncodedImageData? _encodedImage;
     private readonly SvgAsset? _svgAsset;
     private readonly Color _color;
     private readonly bool _loadAsync;
@@ -34,6 +36,22 @@ public class ImageNode : Node
         Height = height;
     }
 
+    public ImageNode(RawImageData image, int width, int height, Color? multiplicativeColor = null)
+    {
+        _rawImage = image;
+        _color = multiplicativeColor ?? Color.White;
+        Width = width;
+        Height = height;
+    }
+
+    public ImageNode(EncodedImageData image, int width, int height, Color? multiplicativeColor = null)
+    {
+        _encodedImage = image;
+        _color = multiplicativeColor ?? Color.White;
+        Width = width;
+        Height = height;
+    }
+
     public override void Draw(IRenderApi renderer, int x, int y)
     {
         UpdateInteractionState(x, y);
@@ -42,6 +60,14 @@ public class ImageNode : Node
         if (_svgAsset is not null)
         {
             renderer.DrawImage(_svgAsset, rect, _color.PushOpacity(Opacity));
+        }
+        else if (_rawImage is not null)
+        {
+            renderer.DrawImage(_rawImage, rect, _color.PushOpacity(Opacity));
+        }
+        else if (_encodedImage is not null)
+        {
+            renderer.DrawImage(_encodedImage, rect, _color.PushOpacity(Opacity));
         }
         else if (_imagePath is not null)
         {

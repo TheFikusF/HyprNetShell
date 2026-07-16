@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using HyprNetShell.Core.Logging;
 using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Features.Sni;
@@ -6,15 +7,15 @@ namespace HyprNetShell.Core.Features.Sni;
 // This is a direct C# port of status-bar/internal/services/sni_watcher.go.
 internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 {
-    private const string WatcherName = "org.kde.StatusNotifierWatcher";
-    private const string WatcherPath = "/StatusNotifierWatcher";
-    private const string WatcherInterface = "org.kde.StatusNotifierWatcher";
-    private const string DefaultItemPath = "/StatusNotifierItem";
-    private const int MaxIntrospectionNodes = 128;
-    private const uint NameFlagAllowReplacement = 1;
-    private const uint NameFlagReplaceExisting = 2;
-    private const uint NameFlagDoNotQueue = 4;
-    private const uint RequestNameReplyPrimaryOwner = 1;
+    private const string WATCHER_NAME = "org.kde.StatusNotifierWatcher";
+    private const string WATCHER_PATH = "/StatusNotifierWatcher";
+    private const string WATCHER_INTERFACE = "org.kde.StatusNotifierWatcher";
+    private const string DEFAULT_ITEM_PATH = "/StatusNotifierItem";
+    private const int MAX_INTROSPECTION_NODES = 128;
+    private const uint NAME_FLAG_ALLOW_REPLACEMENT = 1;
+    private const uint NAME_FLAG_REPLACE_EXISTING = 2;
+    private const uint NAME_FLAG_DO_NOT_QUEUE = 4;
+    private const uint REQUEST_NAME_REPLY_PRIMARY_OWNER = 1;
 
     private readonly object _gate = new();
     private readonly DBusConnection _connection = new(Dbus.SessionAddress);
@@ -23,7 +24,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     private IDisposable? _nameOwnerSubscription;
     private bool _ownsName;
 
-    public string Path => WatcherPath;
+    public string Path => WATCHER_PATH;
     public bool HandlesChildPaths => false;
 
     private StatusNotifierWatcher(string preRegisteredHostName)
@@ -44,9 +45,9 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             watcher._connection.AddMethodHandler(watcher); // Export before claiming the name.
             var reply = await Dbus.RequestNameAsync(
                 watcher._connection,
-                WatcherName,
-                NameFlagDoNotQueue | NameFlagAllowReplacement | NameFlagReplaceExisting);
-            if (reply != RequestNameReplyPrimaryOwner)
+                WATCHER_NAME,
+                NAME_FLAG_DO_NOT_QUEUE | NAME_FLAG_ALLOW_REPLACEMENT | NAME_FLAG_REPLACE_EXISTING);
+            if (reply != REQUEST_NAME_REPLY_PRIMARY_OWNER)
             {
                 watcher.Dispose();
                 return null;
@@ -57,7 +58,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
                 new MatchRule
                 {
                     Type = MessageType.Signal,
-                    Interface = Dbus.BusInterface,
+                    Interface = Dbus.BUS_INTERFACE,
                     Member = "NameOwnerChanged",
                 },
                 static (message, _) =>
@@ -83,7 +84,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"tray/watcher: could not start embedded watcher: {exception.Message}");
+            AppLogger.Error("TrayWatcher", "Could not start embedded watcher", exception);
             watcher.Dispose();
             return null;
         }
@@ -96,7 +97,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             var request = context.Request;
             var member = request.MemberAsString ?? "";
             var @interface = request.InterfaceAsString ?? "";
-            if (@interface == WatcherInterface && member == "RegisterStatusNotifierItem")
+            if (@interface == WATCHER_INTERFACE && member == "RegisterStatusNotifierItem")
             {
                 var service = request.GetBodyReader().ReadString();
                 var (busName, objectPath) = await ParseItemServiceAsync(request.SenderAsString ?? "", service);
@@ -104,7 +105,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
                 ReplyEmpty(context);
                 return;
             }
-            if (@interface == WatcherInterface && member == "RegisterStatusNotifierHost")
+            if (@interface == WATCHER_INTERFACE && member == "RegisterStatusNotifierHost")
             {
                 RegisterHost(request.SenderAsString ?? "", request.GetBodyReader().ReadString());
                 ReplyEmpty(context);
@@ -118,7 +119,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             if (@interface == "org.freedesktop.DBus.Introspectable" && member == "Introspect")
             {
                 using var writer = context.CreateReplyWriter("s");
-                writer.WriteString(IntrospectionXml);
+                writer.WriteString(INTROSPECTION_XML);
                 context.Reply(writer.CreateMessage());
                 return;
             }
@@ -134,8 +135,8 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     private async Task<(string BusName, string ObjectPath)> ParseItemServiceAsync(string sender, string service)
     {
         if (service.StartsWith('/')) return (sender, service);
-        if (service.StartsWith(':')) return (service, DefaultItemPath);
-        return (await Dbus.GetNameOwnerAsync(_connection, service), DefaultItemPath);
+        if (service.StartsWith(':')) return (service, DEFAULT_ITEM_PATH);
+        return (await Dbus.GetNameOwnerAsync(_connection, service), DEFAULT_ITEM_PATH);
     }
 
     private async Task<bool> RegisterItemAsync(string busName, string objectPath)
@@ -172,7 +173,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     {
         var reader = context.Request.GetBodyReader();
         var requestedInterface = reader.ReadString();
-        if (requestedInterface != WatcherInterface)
+        if (requestedInterface != WATCHER_INTERFACE)
         {
             context.ReplyError("org.freedesktop.DBus.Error.InvalidArgs", "Unknown interface");
             return;
@@ -244,7 +245,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     private async Task<IReadOnlyList<string>> DiscoverItemPathsAsync(string busName)
     {
         var paths = new List<string>();
-        foreach (var candidate in new[] { DefaultItemPath, "/org/ayatana/NotificationItem" })
+        foreach (var candidate in new[] { DEFAULT_ITEM_PATH, "/org/ayatana/NotificationItem" })
         {
             if (await HasItemInterfaceAsync(busName, candidate)) paths.Add(candidate);
         }
@@ -253,7 +254,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         var queue = new Queue<string>();
         var visited = new HashSet<string>(StringComparer.Ordinal) { "/" };
         queue.Enqueue("/");
-        while (queue.Count > 0 && visited.Count <= MaxIntrospectionNodes)
+        while (queue.Count > 0 && visited.Count <= MAX_INTROSPECTION_NODES)
         {
             var current = queue.Dequeue();
             var xml = await TryIntrospectAsync(busName, current);
@@ -360,7 +361,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             "sa{sv}as",
             (ref MessageWriter writer) =>
             {
-                writer.WriteString(WatcherInterface);
+                writer.WriteString(WATCHER_INTERFACE);
                 writer.WriteDictionary(new Dictionary<string, VariantValue>
                 {
                     ["RegisteredStatusNotifierItems"] = VariantValue.Array(RegisteredItems()),
@@ -377,7 +378,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         var writer = _connection.GetMessageWriter();
         try
         {
-            writer.WriteSignalHeader(null!, WatcherPath, @interface ?? WatcherInterface, member, signature);
+            writer.WriteSignalHeader(null!, WATCHER_PATH, @interface ?? WATCHER_INTERFACE, member, signature);
             body?.Invoke(ref writer);
             _connection.TrySendMessage(writer.CreateMessage());
         }
@@ -404,7 +405,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private readonly record struct SniEntry(string BusName, string ObjectPath);
 
-    private const string IntrospectionXml = """
+    private const string INTROSPECTION_XML = """
         <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
         <node name="/StatusNotifierWatcher">
           <interface name="org.kde.StatusNotifierWatcher">

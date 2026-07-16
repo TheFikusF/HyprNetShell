@@ -19,7 +19,9 @@ internal sealed record HyprMonitor(string Name, bool Focused, HyprActiveWorkspac
 internal sealed record HyprActiveWorkspace(int Id);
 
 internal sealed record HyprClient(
+    string Address,
     [property: JsonPropertyName("class")] string ClassName,
+    [property: JsonPropertyName("initialClass")] string InitialClassName,
     string Title,
     HyprClientWorkspace? Workspace);
 

@@ -36,8 +36,8 @@ public sealed record TemperatureCurvePoint(float Hour, int TemperatureKelvin);
 
 public static class TemperatureCurveMath
 {
-    public const int MinimumTemperature = 2000;
-    public const int MaximumTemperature = 6500;
+    public const int MINIMUM_TEMPERATURE = 2000;
+    public const int MAXIMUM_TEMPERATURE = 6500;
 
     public static IReadOnlyList<TemperatureCurvePoint> DefaultPoints { get; } =
     [

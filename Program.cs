@@ -1,10 +1,12 @@
 ﻿using HyprNetShell;
 using HyprNetShell.Core.Bar;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 
 const int BAR_HEIGHT = 52;
 
+AppLogger.Initialize();
 try
 {
     using var layer = new HyprLayer(BAR_HEIGHT);
@@ -37,6 +39,10 @@ try
 }
 catch (Exception e)
 {
-    Console.Error.WriteLine(e);
+    AppLogger.Error("Application", "Fatal error", e);
     return 1;
+}
+finally
+{
+    AppLogger.Shutdown();
 }

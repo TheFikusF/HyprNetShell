@@ -2,6 +2,7 @@ using HyprNetShell.Core.Bar.Modules;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Services;
 using HyprNetShell.GUI.Layout;
@@ -32,14 +33,15 @@ public sealed class StatusBar : IDisposable
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(700);
 
+    private readonly IHyprctl _hyprctl = new Hyprctl();
     private readonly HyprlandService _hyprland = new();
-    private readonly SuperKeyStateService _superKey = new();
+    private readonly SuperKeyStateService _superKey;
     private readonly int _barHeight;
     private readonly IRenderApi _renderer;
 
-    private readonly NotificationService _notificationService = new();
+    private readonly NotificationService _notificationService;
     private readonly MusicModuleService _musicService = new();
-    private readonly DisplayControlsModuleService _displayControlsService = new();
+    private readonly DisplayControlsModuleService _displayControlsService;
     private readonly WorkspacesModule _workspacesModule;
     private readonly LanguageModule _languageModule;
     private readonly SystemStatsModule _systemStatsModule;
@@ -52,7 +54,8 @@ public sealed class StatusBar : IDisposable
     private readonly MusicModule _musicModule;
     private readonly TrayModule _trayModule;
     private readonly PowerModule _powerModule;
-    private readonly MainDialog _mainDialog = new();
+    private readonly ClipboardHistoryService _clipboardHistory = new();
+    private readonly MainDialog _mainDialog;
     private readonly SniTrayService _trayService = new();
 
     private readonly List<IBarDataService> _dataServices;
@@ -70,6 +73,10 @@ public sealed class StatusBar : IDisposable
     {
         _renderer = renderer;
         _barHeight = barHeight;
+        _notificationService = new NotificationService(_hyprland, _hyprctl);
+        _superKey = new SuperKeyStateService(_hyprctl);
+        _displayControlsService = new DisplayControlsModuleService(_hyprctl);
+        _mainDialog = new MainDialog(_clipboardHistory, _hyprctl);
         _dataServices =
         [
             _notificationService,
@@ -81,7 +88,7 @@ public sealed class StatusBar : IDisposable
             new SystemStatsModuleService(),
             _trayService,
         ];
-        _languageModule = new LanguageModule(_hyprland, Theme.Default);
+        _languageModule = new LanguageModule(_hyprland, _hyprctl, Theme.Default);
         _systemStatsModule = new SystemStatsModule(() => _snapshot.SystemStats, Theme.Default);
         _networkModule = new NetworkModule(() => _snapshot.Network, Theme.Default);
         _audioModule = new AudioModule(() => _snapshot.Audio, Theme.Default);
@@ -89,12 +96,12 @@ public sealed class StatusBar : IDisposable
             new DisplayControlsModule(() => _snapshot.DisplayControls, _displayControlsService, Theme.Default);
         _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, Theme.Default);
         _batteryModule = new BatteryModule(() => _snapshot.Battery, Theme.Default);
-        _centerModule = new CenterModule(() => _snapshot.Notifications, Theme.Default);
+        _centerModule = new CenterModule(() => _notificationService.Snapshot, _notificationService, Theme.Default);
         _musicModule = new MusicModule(() => _musicService.Snapshot, Theme.Default);
         _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, Theme.Default);
         _powerModule = new PowerModule(Theme.Default);
         _workspacesModule =
-            new WorkspacesModule(_hyprland, _superKey, Theme.Default, () => _languageModule.IsShown);
+            new WorkspacesModule(_hyprland, _hyprctl, _superKey, Theme.Default, () => _languageModule.IsShown);
 
         _leftModules = [_workspacesModule, _musicModule];
         _rightModules =
@@ -122,6 +129,7 @@ public sealed class StatusBar : IDisposable
 
         DrawLeftRight();
         DrawCenter();
+        DrawNotificationPopups();
 
         if (_mainDialog.IsOpen)
         {
@@ -156,6 +164,18 @@ public sealed class StatusBar : IDisposable
         layout.AddNode(_centerModule.Draw());
     }
 
+    private void DrawNotificationPopups()
+    {
+        using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
+        layout.AddNode(new SpacerNode());
+        layout.AddNode(NotificationPopupLayout.Draw(
+            _notificationService.Snapshot,
+            _notificationService,
+            Theme.Default,
+            _renderer.Height,
+            _barHeight));
+    }
+
     private void RefreshState()
     {
         if (_refreshTask is { IsCompleted: false } || DateTime.UtcNow - _lastRefresh < RefreshInterval)
@@ -180,9 +200,10 @@ public sealed class StatusBar : IDisposable
 
             _snapshot = builder.Build();
         }
-        catch
+        catch (Exception exception)
         {
             // Keep drawing the previous snapshot if a transient command fails.
+            AppLogger.Warning("StatusBar", "Could not refresh bar state; keeping the previous snapshot", exception);
         }
     }
 
@@ -191,6 +212,7 @@ public sealed class StatusBar : IDisposable
         _hyprland.Dispose();
         _superKey.Dispose();
         _notificationService.Dispose();
+        _clipboardHistory.Dispose();
         _musicService.Dispose();
         _trayService.Dispose();
     }

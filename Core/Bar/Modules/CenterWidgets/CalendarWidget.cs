@@ -6,13 +6,15 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class CalendarWidget(Theme theme)
 {
+    public const int WIDTH = 360;
+    
     public Node Draw(DateTime now)
     {
         var first = new DateTime(now.Year, now.Month, 1);
         var days = DateTime.DaysInMonth(now.Year, now.Month);
         var offset = ((int)first.DayOfWeek + 6) % 7;
 
-        return new BoxNode(360)
+        return new BoxNode(WIDTH)
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,

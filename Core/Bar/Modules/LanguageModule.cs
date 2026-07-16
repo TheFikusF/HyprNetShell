@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -23,6 +22,7 @@ internal sealed class LanguageModule : IDrawableModule
     private readonly Dictionary<string, ModulesCommon.BoxState> _languagesRowStates = [];
 
     private readonly HyprlandService _hyprland;
+    private readonly IHyprctl _hyprctl;
     private readonly Theme _theme;
     private readonly ModulesCommon.NodeWithPopup _node;
 
@@ -31,9 +31,10 @@ internal sealed class LanguageModule : IDrawableModule
 
     public bool IsShown => _showUntil > DateTime.UtcNow;
 
-    public LanguageModule(HyprlandService hyprland, Theme theme)
+    public LanguageModule(HyprlandService hyprland, IHyprctl hyprctl, Theme theme)
     {
         _hyprland = hyprland;
+        _hyprctl = hyprctl;
         _theme = theme;
         _node = new("language_module", ignorePopupQueue: true)
         {
@@ -60,15 +61,7 @@ internal sealed class LanguageModule : IDrawableModule
                 Direction = Direction.Vertical,
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
-                OnClick = () => Process.Start(new ProcessStartInfo
-                {
-                    FileName = "hyprctl",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    ArgumentList = { "switchxkblayout", snapshot.KeyboardName, "next" },
-                }),
+                OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(snapshot.KeyboardName),
                 Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
                 Children =
                 [
@@ -107,15 +100,7 @@ internal sealed class LanguageModule : IDrawableModule
             IsHovered = state.Hovered,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            OnClick = () => Process.Start(new ProcessStartInfo
-            {
-                FileName = "hyprctl",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { "switchxkblayout", keyboardName, index.ToString() },
-            }),
+            OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, index),
             Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
             {
                 BorderRadius = 8,

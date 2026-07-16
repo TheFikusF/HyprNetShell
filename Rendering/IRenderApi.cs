@@ -16,6 +16,8 @@ public interface IRenderApi
     void FillRoundedRectHorizontalGradient(Rect rect, BorderRadius radius, Color left, Color right, float offset);
     void StrokeRect(Rect rect, float thickness, Color color);
     void DrawImage(string imagePath, Rect rect, Color multiplicativeColor, bool loadAsync = false);
+    void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor);
+    void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor);
     void DrawImage(SvgAsset asset, Rect rect, Color color);
     void DrawText(string text, float x, float y, float fontSize, Color color, float charDistance = 0);
 }
