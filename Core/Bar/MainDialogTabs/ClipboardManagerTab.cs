@@ -4,11 +4,13 @@ using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
+using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog) : IMainDialogTab
 {
+    private const int FUZZY_SCORE_CUTOFF = 35;
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -149,7 +151,10 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
         _filteredEntries = string.IsNullOrWhiteSpace(_query)
             ? _entries
             : _entries
-                .Where(entry => entry.Preview.Contains(_query, StringComparison.CurrentCultureIgnoreCase))
+                .Select(entry => (Entry: entry, Score: Fuzz.WeightedRatio(_query, entry.Preview)))
+                .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
+                .OrderByDescending(result => result.Score)
+                .Select(result => result.Entry)
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;

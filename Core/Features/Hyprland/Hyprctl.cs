@@ -8,6 +8,12 @@ namespace HyprNetShell.Core.Features.Hyprland;
 internal sealed class Hyprctl : IHyprctl
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
+    private readonly HyprlandBindingManager _bindings;
+
+    public Hyprctl()
+    {
+        _bindings = new HyprlandBindingManager(BindCommandAsync, UnbindAsync);
+    }
 
     public Task<bool> LaunchDesktopEntryAsync(
         string desktopFile,
@@ -29,7 +35,16 @@ internal sealed class Hyprctl : IHyprctl
             $"focus window {windowAddress}",
             cancellationToken);
 
-    public Task<bool> BindCommandAsync(
+    public Task<bool> Bind(
+        string keys,
+        Action callback,
+        HyprlandBindOptions options = default,
+        CancellationToken cancellationToken = default) =>
+        _bindings.BindAsync(keys, callback, options, cancellationToken);
+
+    public void Dispose() => _bindings.Dispose();
+
+    private Task<bool> BindCommandAsync(
         string keys,
         string command,
         HyprlandBindOptions options = default,
@@ -52,7 +67,7 @@ internal sealed class Hyprctl : IHyprctl
             cancellationToken);
     }
 
-    public Task<bool> UnbindAsync(string keys, CancellationToken cancellationToken = default) =>
+    private Task<bool> UnbindAsync(string keys, CancellationToken cancellationToken = default) =>
         EvalAsync($"hl.unbind({LuaString(keys)})", $"unbind {keys}", cancellationToken);
 
     public Task<bool> SwitchKeyboardLayoutAsync(

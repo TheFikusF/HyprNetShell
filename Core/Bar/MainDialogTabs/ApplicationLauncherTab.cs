@@ -5,11 +5,14 @@ using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
+using FuzzySharp;
+using FuzzySharp.SimilarityRatio.Scorer.Composite;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog) : IMainDialogTab
 {
+    private const int FUZZY_SCORE_CUTOFF = 35;
     private readonly AppIconResolver _icons = new();
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<DesktopApplication> _filteredApplications = [];
@@ -176,7 +179,12 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         _filteredApplications = string.IsNullOrWhiteSpace(_query)
             ? _applications
             : _applications
-                .Where(app => app.Name.Contains(_query, StringComparison.CurrentCultureIgnoreCase))
+                .Select(app => (App: app, 
+                    Score: PrimitivesMath.Lerp(Fuzz.WeightedRatio( _query, app.Name), Fuzz.WeightedRatio( _query, app.Comment ?? ""), 0.15f)))
+                .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
+                .OrderByDescending(result => result.Score)
+                .ThenBy(result => result.App.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(result => result.App)
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;

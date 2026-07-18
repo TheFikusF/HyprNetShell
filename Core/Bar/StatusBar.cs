@@ -215,5 +215,6 @@ public sealed class StatusBar : IDisposable
         _clipboardHistory.Dispose();
         _musicService.Dispose();
         _trayService.Dispose();
+        _hyprctl.Dispose();
     }
 }

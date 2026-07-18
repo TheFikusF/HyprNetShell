@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="FuzzySharp" Version="2.0.2" />
         <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2" />
         <ProjectReference Include="../GUI/HyprNetShell.GUI.csproj" />
         <ProjectReference Include="../Rendering/HyprNetShell.Rendering.csproj" />

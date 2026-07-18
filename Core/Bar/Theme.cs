@@ -23,8 +23,8 @@ public sealed record Theme
         Border = Color.White,
         Panel = Color.FromRgb(31, 35, 44, 0.9f),
         Active = Color.Lerp(Color.FromRgb(31, 35, 44, 0.92f), Color.Orange, 0.5f),
-        Warning = Color.FromRgb(230, 126, 34, 0.85f),
-        Critical = Color.FromRgb(231, 76, 60, 0.90f),
+        Warning = Color.FromRgb(230, 126, 34, 0.9f),
+        Critical = Color.FromRgb(231, 76, 60, 0.9f),
         Muted = Color.FromRgb(96, 96, 96),
         Text = Color.FromRgb(255, 255, 255)
     };

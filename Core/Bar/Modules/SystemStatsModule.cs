@@ -10,26 +10,32 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Them
 {
     private const int WIDTH = 75;
 
-    private Color ColorFromCpuPercent(int percent) => ModulesCommon.ToBackground(theme, percent switch
-    {
-        > 90 => theme.Critical,
-        > 75 => theme.Warning,
-        _ => Color.Violet,
-    });
+    private readonly Gradient _cpuGradient = new Gradient(
+        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Violet)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Violet)),
+        new Gradient.Stop(0.75f, theme.Warning),
+        new Gradient.Stop(1f, Color.Red)
+    );
 
-    private Color ColorFromRamPercent(int percent) => ModulesCommon.ToBackground(theme, percent switch
-    {
-        > 90 => theme.Critical,
-        > 70 => theme.Warning,
-        _ => Color.Green,
-    });
+    private readonly Gradient _ramGradient = new Gradient(
+        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Green)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Green)),
+        new Gradient.Stop(0.70f, theme.Warning),
+        new Gradient.Stop(1f, Color.Red)
+    );
 
-    private Color ColorFromTempPercent(int temp) => ModulesCommon.ToBackground(theme, temp switch
-    {
-        > 90 => theme.Critical,
-        > 75 => theme.Warning,
-        _ => Color.Orange,
-    });
+    private readonly Gradient _tempGradient = new Gradient(
+        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Orange)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Orange)),
+        new Gradient.Stop(0.75f, theme.Warning),
+        new Gradient.Stop(1f, Color.Red)
+    );
+
+    private Color ColorFromCpuPercent(int percent) => _cpuGradient.Evaluate((float)percent / 100);
+
+    private Color ColorFromRamPercent(int percent) => _ramGradient.Evaluate((float)percent / 100);
+
+    private Color ColorFromTempPercent(int temp) => _tempGradient.Evaluate((float)temp / 100);
 
     public Node Draw()
     {

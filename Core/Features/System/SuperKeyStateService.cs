@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Net.Sockets;
-using System.Text;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Logging;
 
@@ -8,18 +5,16 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class SuperKeyStateService : IDisposable
 {
-    private static readonly TimeSpan HyprctlTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(2);
     private const string SUPER_DOWN_BIND = "SUPER_L";
     private const string SUPER_UP_BIND = "SUPER + SUPER_L";
     private const string LAUNCHER_BIND = "SUPER + R";
 
     private readonly CancellationTokenSource _cts = new();
     private readonly IHyprctl _hyprctl;
-    private readonly string _socketPath;
     private readonly Task _runTask;
 
     private DateTime _lastLoggedSuperDown;
-    private Socket? _listener;
     private int _isHeld;
     private int _launcherToggleRequested;
     private bool _disposed;
@@ -33,9 +28,6 @@ internal sealed class SuperKeyStateService : IDisposable
     public SuperKeyStateService(IHyprctl hyprctl)
     {
         _hyprctl = hyprctl;
-        _socketPath = Path.Combine(
-            Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ?? "/tmp",
-            "hypr-shell.sock");
         _runTask = Task.Run(() => RunAsync(_cts.Token));
     }
 
@@ -48,27 +40,15 @@ internal sealed class SuperKeyStateService : IDisposable
 
         _disposed = true;
         _cts.Cancel();
-        Log("disposing");
-
         try
         {
-            _listener?.Dispose();
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("SuperKeyState", "Could not dispose the event socket", exception);
-        }
-
-        try
-        {
-            UninstallHyprlandBindsAsync(CancellationToken.None).Wait(HyprctlTimeout);
+            _runTask.Wait(DisposeTimeout);
         }
         catch (Exception error)
         {
             Log($"unbind failed during dispose: {error.GetType().Name}: {error.Message}");
         }
 
-        TryDeleteSocket();
         _cts.Dispose();
     }
 
@@ -76,9 +56,8 @@ internal sealed class SuperKeyStateService : IDisposable
     {
         try
         {
-            StartSocket();
             await InstallHyprlandBindsAsync(cancellationToken);
-            await AcceptLoopAsync(cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -89,106 +68,31 @@ internal sealed class SuperKeyStateService : IDisposable
         }
     }
 
-    private void StartSocket()
-    {
-        TryDeleteSocket();
-
-        _listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        _listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
-        _listener.Listen(8);
-        Log($"listening on {_socketPath}");
-    }
-
     private async Task InstallHyprlandBindsAsync(CancellationToken cancellationToken)
     {
-        await UninstallHyprlandBindsAsync(cancellationToken);
-
-        await _hyprctl.BindCommandAsync(
+        await _hyprctl.Bind(
             SUPER_DOWN_BIND,
-            $"printf 'super_down\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            () =>
+            {
+                SetHeld(true, "super_down");
+                _lastLoggedSuperDown = DateTime.Now;
+            },
             new HyprlandBindOptions(Transparent: true),
             cancellationToken);
 
-        await _hyprctl.BindCommandAsync(
+        await _hyprctl.Bind(
             SUPER_UP_BIND,
-            $"printf 'super_up\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            () => SetHeld(false, "super_up"),
             new HyprlandBindOptions(Release: true, Transparent: true),
             cancellationToken);
 
-        await _hyprctl.BindCommandAsync(
+        await _hyprctl.Bind(
             LAUNCHER_BIND,
-            $"printf 'launcher_toggle\\n' | socat - UNIX-CONNECT:{ShellQuote(_socketPath)}",
+            () => Interlocked.Exchange(ref _launcherToggleRequested, 1),
             new HyprlandBindOptions(Transparent: true),
             cancellationToken);
 
         Log("installed Hyprland Super press/release and launcher binds");
-    }
-
-    private async Task UninstallHyprlandBindsAsync(CancellationToken cancellationToken)
-    {
-        await _hyprctl.UnbindAsync(SUPER_DOWN_BIND, cancellationToken);
-        await _hyprctl.UnbindAsync(SUPER_UP_BIND, cancellationToken);
-        await _hyprctl.UnbindAsync(LAUNCHER_BIND, cancellationToken);
-    }
-
-    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
-    {
-        if (_listener is null)
-        {
-            return;
-        }
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var client = await _listener.AcceptAsync(cancellationToken);
-            _ = Task.Run(() => ReadClientAsync(client, cancellationToken), cancellationToken);
-        }
-    }
-
-    private async Task ReadClientAsync(Socket client, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using (client)
-            {
-                var buffer = new byte[128];
-                var read = await client.ReceiveAsync(buffer, SocketFlags.None, cancellationToken);
-                if (read <= 0)
-                {
-                    return;
-                }
-
-                var message = Encoding.UTF8.GetString(buffer, 0, read).Trim();
-                HandleMessage(message);
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception error)
-        {
-            Log($"socket client failed: {error.GetType().Name}: {error.Message}");
-        }
-    }
-
-    private void HandleMessage(string message)
-    {
-        switch (message)
-        {
-            case "super_down":
-                SetHeld(true, message);
-                _lastLoggedSuperDown = DateTime.Now;
-                break;
-            case "super_up":
-                SetHeld(false, message);
-                break;
-            case "launcher_toggle":
-                Interlocked.Exchange(ref _launcherToggleRequested, 1);
-                break;
-            default:
-                Log($"ignored socket message: '{message}'");
-                break;
-        }
     }
 
     private void SetHeld(bool held, string message)
@@ -200,24 +104,6 @@ internal sealed class SuperKeyStateService : IDisposable
         if (previous != held)
         {
             Log($"state changed: held={held}");
-        }
-    }
-
-    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\''")}'";
-
-    private void TryDeleteSocket()
-    {
-        try
-        {
-            if (File.Exists(_socketPath))
-            {
-                File.Delete(_socketPath);
-                Log($"deleted stale socket {_socketPath}");
-            }
-        }
-        catch (Exception error)
-        {
-            Log($"failed to delete socket {_socketPath}: {error.GetType().Name}: {error.Message}");
         }
     }
 

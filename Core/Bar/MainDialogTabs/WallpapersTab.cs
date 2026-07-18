@@ -3,11 +3,13 @@ using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
+using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMainDialogTab
 {
+    private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
     private const int ROWS = 4;
     private const int VISIBLE_WALLPAPER_COUNT = COLUMNS * ROWS;
@@ -321,7 +323,11 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMai
         _filteredWallpapers = string.IsNullOrWhiteSpace(_query)
             ? _wallpapers
             : _wallpapers
-                .Where(wallpaper => wallpaper.Name.Contains(_query, StringComparison.CurrentCultureIgnoreCase))
+                .Select(wallpaper => (Wallpaper: wallpaper, Score: Fuzz.WeightedRatio(_query, wallpaper.Name)))
+                .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
+                .OrderByDescending(result => result.Score)
+                .ThenBy(result => result.Wallpaper.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(result => result.Wallpaper)
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;

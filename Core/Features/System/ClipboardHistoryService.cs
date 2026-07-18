@@ -79,10 +79,11 @@ internal sealed class ClipboardHistoryService : IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            Process? process = null;
             try
             {
                 await CaptureCurrentClipboardAsync(cancellationToken);
-                using var process = Process.Start(CreateProcess("wl-paste", "--watch", "printf", "changed\n"));
+                process = Process.Start(CreateProcess("wl-paste", "--watch", "printf", "changed\n"));
                 if (process is null)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
@@ -122,8 +123,13 @@ internal sealed class ClipboardHistoryService : IDisposable
             {
                 lock (_gate)
                 {
-                    _watchProcess = null;
+                    if (ReferenceEquals(_watchProcess, process))
+                    {
+                        _watchProcess = null;
+                    }
                 }
+
+                process?.Dispose();
             }
         }
     }
@@ -329,6 +335,11 @@ internal sealed class ClipboardHistoryService : IDisposable
             {
                 process.Kill(entireProcessTree: true);
             }
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited between HasExited and Kill, or has already been
+            // detached from this Process instance. Either way, cleanup is done.
         }
         catch (Exception exception)
         {
