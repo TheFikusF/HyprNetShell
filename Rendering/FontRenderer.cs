@@ -202,7 +202,11 @@ internal sealed unsafe class FontRenderer : IDisposable
         _gl.BindTexture(TextureTarget.Texture2D, glyph.Texture);
         _gl.BindVertexArray(_vao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
-        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
+        _gl.BlendFuncSeparate(
+            BlendingFactor.One,
+            BlendingFactor.OneMinusSrcAlpha,
+            BlendingFactor.One,
+            BlendingFactor.OneMinusSrcAlpha);
 
         fixed (float* data = vertices)
         {
@@ -210,7 +214,11 @@ internal sealed unsafe class FontRenderer : IDisposable
         }
 
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.BlendFuncSeparate(
+            BlendingFactor.SrcAlpha,
+            BlendingFactor.OneMinusSrcAlpha,
+            BlendingFactor.One,
+            BlendingFactor.OneMinusSrcAlpha);
         return glyph.Advance;
     }
 

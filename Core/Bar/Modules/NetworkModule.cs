@@ -121,20 +121,11 @@ internal sealed class NetworkModule(
         }
     }
 
-    private Node BuildWifiRow(WifiNetworkSnapshot wifi)
+    private BoxNode BuildWifiRow(WifiNetworkSnapshot wifi)
     {
-        var state = _rowStates.GetState($"wifi:{wifi.Ssid}", wifi.Active ? theme.Active : theme.Panel);
-        var target = state.Hovered
-            ? Color.Lighten(wifi.Active ? theme.Active : theme.Panel, 0.12f)
-            : wifi.Active
-                ? theme.Active
-                : theme.Panel;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
+        var state = _rowStates.GetState($"wifi:{wifi.Ssid}", theme.Panel).UpdateColor(wifi.Active ? theme.Active : theme.Panel);
         var ssid = string.IsNullOrWhiteSpace(wifi.Ssid) ? "<hidden>" : wifi.Ssid;
         var security = string.IsNullOrWhiteSpace(wifi.Security) ? "open" : wifi.Security;
-        var signal = wifi.Signal.HasValue ? $"{wifi.Signal.Value}%" : "?";
-
         return new BoxNode
         {
             Direction = Direction.Horizontal,
@@ -157,12 +148,9 @@ internal sealed class NetworkModule(
         };
     }
 
-    private Node BuildIpRow(string ipAddress)
+    private BoxNode BuildIpRow(string ipAddress)
     {
-        var state = _rowStates.GetState($"ip:{ipAddress}", theme.Panel);
-        var target = state.Hovered ? Color.Lighten(theme.Panel, 0.12f) : theme.Panel;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
+        var state = _rowStates.GetState($"ip:{ipAddress}", theme.Panel).UpdateColor(theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Horizontal,

@@ -33,15 +33,16 @@ internal sealed class BatteryModule(
                 ? Icons.BatteryWarning
                 : BatteryLevelIcon(battery.Percentage);
 
-        return new GradientBoxNode(left, right, static () => 0.0f)
+        return new GradientBoxNode(left, right, static () => 0.0f, 80)
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { Spacing = 6 },
+            HorizontalAlignment = ItemsAlignment.Center,
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { Spacing = 8 },
             Children =
             [
                 new ImageNode(icon, 18, 18, theme.Text),
-                new TextNode($"{battery.Percentage}%", 14.0f, theme.Text),
+                new TextNode($"{battery.Percentage}%", theme.TextSize, theme.Text),
             ],
         };
     }

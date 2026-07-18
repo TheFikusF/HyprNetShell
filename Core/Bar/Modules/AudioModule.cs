@@ -39,28 +39,12 @@ internal sealed class AudioModule(
                 ? Icons.VolumeMuted
                 : VolumeIcon(volume);
 
-        return new BoxNode(75)
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme,
-                    ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f)),
-                    right: false) with
-                {
-                    Spacing = 6
-                },
-            Children =
-            [
-                new ImageNode(icon, 18, 18, theme.Text),
-                ..(output is not null
-                    ? new Node[] { new TextNode($"{volume}%", 13.0f, theme.Text) }
-                    : Array.Empty<Node>()),
-            ],
-        };
+        var bg = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f));
+        return ModulesCommon.BuildTextWithIcon(theme, icon, output is not null ? $"{volume}%" : "?",
+            style: ModulesCommon.ModuleStyle(theme, bg, right: false), width: 75);
     }
 
-    private BoxNode BuildPopup(AudioSnapshot audio) => new (380)
+    private BoxNode BuildPopup(AudioSnapshot audio) => new(380)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -70,17 +54,18 @@ internal sealed class AudioModule(
             ? [new TextNode("PipeWire audio unavailable", 14.0f, theme.Muted)]
             :
             [
-                ..BuildDeviceSection("Output devices", audio.Outputs),
+                ..BuildDeviceSection(Icons.Speaker, "Output devices", audio.Outputs),
                 ModulesCommon.BuildDivider(theme.Border),
-                ..BuildDeviceSection("Input devices", audio.Inputs),
+                ..BuildDeviceSection(Icons.Microphone, "Input devices", audio.Inputs),
             ],
     };
 
     private IEnumerable<Node> BuildDeviceSection(
+        SvgAsset icon,
         string title,
         IReadOnlyList<AudioDeviceSnapshot> devices)
     {
-        yield return new TextNode(title, 14.0f, theme.Text);
+        yield return ModulesCommon.BuildTextWithIcon(theme, icon, title);
 
         if (devices.Count == 0)
         {

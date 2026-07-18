@@ -3,11 +3,40 @@ using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar;
 
 public sealed class MainDialog : IDrawableModule
 {
+    private class Tab : IMainDialogTab
+    {
+        private readonly IMainDialogTab _tab;
+        public ModulesCommon.BoxState BoxState { get; }
+
+        public Tab(IMainDialogTab tab)
+        {
+            _tab = tab;
+            BoxState = new();
+        }
+
+        public string Title => _tab.Title;
+        public SvgAsset Icon => _tab.Icon;
+
+        public void Activate() => _tab.Activate();
+
+        public void HandleTextInput(string text) => _tab.HandleTextInput(text);
+
+        public void HandleBackspace() => _tab.HandleBackspace();
+
+        public void MoveSelection(SelectionDirection direction) => _tab.MoveSelection(direction);
+
+        public void ActivateSelection() => _tab.ActivateSelection();
+
+        public Node Draw() => _tab.Draw();
+    }
+
     private const int KEY_ESCAPE = 1;
     private const int KEY_BACKSPACE = 14;
     private const int KEY_TAB = 15;
@@ -17,7 +46,8 @@ public sealed class MainDialog : IDrawableModule
     private const int KEY_RIGHT = 106;
     private const int KEY_DOWN = 108;
 
-    private readonly IMainDialogTab[] _tabs;
+    private readonly Tab[] _tabs;
+    private Theme _theme;
 
     private readonly IReadOnlyDictionary<int, Action> _actions;
 
@@ -26,14 +56,16 @@ public sealed class MainDialog : IDrawableModule
 
     public bool IsOpen { get; private set; }
 
-    internal MainDialog(ClipboardHistoryService clipboardHistory, IHyprctl hyprctl)
+    internal MainDialog(ClipboardHistoryService clipboardHistory, IHyprctl hyprctl, Theme theme)
     {
+        _theme = theme;
+        
         _tabs =
         [
-            new ApplicationLauncherTab(hyprctl, Close),
-            new CalculatorTab(),
-            new ClipboardManagerTab(clipboardHistory, Close),
-            new WallpapersTab(hyprctl, Close),
+            new Tab(new ApplicationLauncherTab(hyprctl, Close, theme)),
+            new Tab(new CalculatorTab()),
+            new Tab(new ClipboardManagerTab(clipboardHistory, Close, theme)),
+            new Tab(new WallpapersTab(hyprctl, Close, theme)),
         ];
 
         _actions = new Dictionary<int, Action>
@@ -93,7 +125,7 @@ public sealed class MainDialog : IDrawableModule
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(Theme.Default) with
+        Style = ModulesCommon.PopupStyle(_theme) with
         {
             Padding = 24,
             Spacing = 8,
@@ -113,25 +145,29 @@ public sealed class MainDialog : IDrawableModule
         Children = [.._tabs.Select(BuildTab)],
     };
 
-    private Node BuildTab(IMainDialogTab tab)
+    private Node BuildTab(Tab tab)
     {
         var index = Array.IndexOf(_tabs, tab);
+        var normal = index == _activeTabIndex ? _theme.Active : _theme.Panel;
+        var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
+        tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
+        
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => SelectTab(index),
-            Style = ModulesCommon.ModuleStyle(Theme.Default,
-                    index == _activeTabIndex ? Theme.Default.Active : Theme.Default.Panel) with
-                {
-                    Spacing = 8,
-                    BorderRadius = 8,
-                    BorderWidth = index == _activeTabIndex ? Theme.Default.BorderWidth : 0,
-                },
+            IsHovered = tab.BoxState.Hovered,
+            Style = ModulesCommon.ModuleStyle(_theme, tab.BoxState.Background) with
+            {
+                Spacing = 8,
+                BorderRadius = 8,
+                BorderWidth = index == _activeTabIndex ? _theme.BorderWidth : 0,
+            },
             Children =
             [
-                new ImageNode(tab.Icon, 18, 18, Theme.Default.Text),
-                new TextNode(tab.Title, 15, Theme.Default.Text),
+                new ImageNode(tab.Icon, 18, 18, _theme.Text),
+                new TextNode(tab.Title, 15, _theme.Text),
             ],
         };
     }

@@ -17,13 +17,12 @@ internal sealed class PowerModule(Theme theme) : IDrawableModule
         HorizontalAlignment = ItemsAlignment.End,
     };
 
-    public Node Draw() => _node.Draw(
-        [
+    public Node Draw() => _node.Draw([
             new BoxNode
             {
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(theme,
-                        ModulesCommon.ToBackground(theme, Color.FromRgb(210, 55, 55))) with
+                Style =
+                    ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.FromRgb(210, 55, 55))) with
                     {
                         BorderRadius = 12,
                         Padding = 8

@@ -6,14 +6,14 @@ using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 using FuzzySharp;
-using FuzzySharp.SimilarityRatio.Scorer.Composite;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog) : IMainDialogTab
+internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private readonly AppIconResolver _icons = new();
+    private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<DesktopApplication> _filteredApplications = [];
     private string _query = "";
@@ -93,49 +93,43 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         }
     }
 
-    public Node Draw()
+    public Node Draw() => new BoxNode
     {
-        var visibleApps = _filteredApplications
-            .Skip(_firstIndex)
-            .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
-            .ToArray();
-        var rows = new BoxNode
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
-            Children =
-            [
-                ..visibleApps.Select((app, visibleIndex) => BuildRow(app, _firstIndex + visibleIndex)),
-            ],
-        };
-        return new BoxNode
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
-            Children =
-            [
-                MainDialogTabUi.BuildSectionHeader(
-                    "Applications",
-                    MainDialogTabUi.ResultCount(
-                        _selectedIndex,
-                        _filteredApplications.Count,
-                        "No matching applications")),
-                MainDialogTabUi.BuildInput(_query, "Type to search..."),
-                MainDialogTabUi.BuildScrollableResults(
-                    rows,
-                    _firstIndex,
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = new Style { Spacing = 8 },
+        Children =
+        [
+            MainDialogTabUi.BuildSectionHeader(
+                "Applications",
+                MainDialogTabUi.ResultCount(
+                    _selectedIndex,
                     _filteredApplications.Count,
-                    MainDialogTabUi.VISIBLE_ROW_COUNT),
-            ],
-        };
-    }
+                    "No matching applications")),
+            MainDialogTabUi.BuildInput(_query, "Type to search..."),
+            MainDialogTabUi.BuildScrollableResults(
+                new BoxNode
+                {
+                    Direction = Direction.Vertical,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
+                    Style = new Style { Spacing = 8 },
+                    Children = _filteredApplications
+                        .Skip(_firstIndex)
+                        .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
+                        .Select((app, visibleIndex) => BuildRow(app, _firstIndex + visibleIndex))
+                        .ToArray(),
+                },
+                _firstIndex,
+                _filteredApplications.Count,
+                MainDialogTabUi.VISIBLE_ROW_COUNT),
+        ],
+    };
 
     private Node BuildRow(DesktopApplication app, int index)
     {
         var selected = index == _selectedIndex;
         var iconPath = string.IsNullOrWhiteSpace(app.Icon) ? null : _icons.TryResolveIcon(app.Icon);
+        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode(height: 66)
         {
             VerticalAlignment = ItemsAlignment.Center,
@@ -144,15 +138,14 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                 _selectedIndex = index;
                 ActivateSelection();
             },
-            Style = ModulesCommon.ModuleStyle(
-                    Theme.Default,
-                    selected ? Theme.Default.Active : Theme.Default.Panel) with
-                {
-                    BorderRadius = 8,
-                    BorderWidth = selected ? Theme.Default.BorderWidth : 0,
-                    Padding = new Insets(16, 10),
-                    Spacing = 14,
-                },
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(Theme.Default, state.Background) with
+            {
+                BorderRadius = 8,
+                BorderWidth = selected ? Theme.Default.BorderWidth : 0,
+                Padding = new Insets(16, 10),
+                Spacing = 14,
+            },
             Children =
             [
                 iconPath is not null
@@ -179,8 +172,9 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         _filteredApplications = string.IsNullOrWhiteSpace(_query)
             ? _applications
             : _applications
-                .Select(app => (App: app, 
-                    Score: PrimitivesMath.Lerp(Fuzz.WeightedRatio( _query, app.Name), Fuzz.WeightedRatio( _query, app.Comment ?? ""), 0.15f)))
+                .Select(app => (App: app,
+                    Score: PrimitivesMath.Lerp(Fuzz.WeightedRatio(_query, app.Name),
+                        Fuzz.WeightedRatio(_query, app.Comment ?? ""), 0.15f)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.App.Name, StringComparer.CurrentCultureIgnoreCase)

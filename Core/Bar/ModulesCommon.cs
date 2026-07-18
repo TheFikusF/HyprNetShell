@@ -18,7 +18,7 @@ public static class ModulesCommon
 
         private float _popupOpacity = 0f;
 
-        public int TopOffset { get; init; } = 32;
+        public int TopOffset { get; init; } = 33;
         public ItemsAlignment HorizontalAlignment { get; init; }
         public Func<bool, bool> GetShouldShowPopup { get; init; } = hovered => hovered;
 
@@ -107,11 +107,12 @@ public static class ModulesCommon
             Children = [new BoxNode(height: 2) { Style = new Style { BackgroundColor = color } }]
         };
 
-    public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null) =>
-        new BoxNode
+    public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null, Style? style = null, int? width = null) =>
+        new BoxNode(width)
         {
             VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Spacing = 8 },
+            HorizontalAlignment = ItemsAlignment.Center,
+            Style = (style ?? new Style()) with { Spacing = 8 },
             Children =
             [
                 new ImageNode(icon, 18, 18, color ?? theme.Text),
@@ -119,14 +120,14 @@ public static class ModulesCommon
             ],
         };
 
-    public static Node BuildBadge(string text, float fontSize, Color fill, Theme theme) =>
-        new BoxNode
+    public static Node BuildBadge(string text, Color fill, Theme theme) =>
+        new BoxNode(14, 14)
         {
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.BorderRadius) },
-            Children = { new TextNode(text, fontSize, theme.Text) },
+            Children = { new TextNode(text, 8, theme.Text) },
         };
 
     public static Node BuildAppBadge(string className, int iconSize, Color fill, Theme theme)
@@ -134,7 +135,7 @@ public static class ModulesCommon
         var imagePath = IconResolver.TryResolve(className);
         if (imagePath is null)
         {
-            return BuildBadge(AppBadge(className), MathF.Max(8.0f, iconSize - 6.0f), fill, theme);
+            return BuildBadge(AppBadge(className), fill, theme);
         }
 
         return new ImageNode(imagePath, iconSize, iconSize);
@@ -154,7 +155,7 @@ public static class ModulesCommon
         };
     }
 
-    public static Style PopupStyle(Theme theme) => ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.9f)) with
+    public static Style PopupStyle(Theme theme) => ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.85f)) with
     {
         BorderRadius = 8,
         Padding = 8,
@@ -186,5 +187,15 @@ public static class ModulesCommon
     {
         public RefBool Hovered { get; } = new();
         public Color Background { get; set; }
+
+        public BoxState UpdateColor(Color color)
+        {
+            var target = Hovered ? Color.Lighten(color, 0.18f) : color;
+            Background = Color.LerpSmooth(Background, target, 18.0f, DELTA_TIME);
+            return this;
+        }
+        
+        public static implicit operator Color(BoxState state) => state.Background;
+        public static implicit operator RefBool(BoxState state) => state.Hovered;
     }
 }

@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -73,16 +74,17 @@ internal sealed class WorkspacesModule : IDrawableModule
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = ModulesCommon.PopupStyle(theme),
-        Children = [..snapshot.Workspaces.Select(x => WorkspaceModule(x, theme))]
+        Children =
+        [
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Monitor, $"Monitor {snapshot.MonitorWorkspaces[0].Name}"),
+            ..snapshot.Workspaces.Select(x => WorkspaceModule(x, theme))
+        ]
     };
 
-    private Node WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
+    private BoxNode WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
     {
-        var normal = workspace.Active ? theme.Active : theme.Panel;
-        var state = _popupWorkspaceStates.GetState(workspace.Id, normal);
-        var target = state.Hovered ? Color.Lighten(normal, workspace.Active ? 0.18f : 0.12f) : normal;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
+        var state = _popupWorkspaceStates.GetState(workspace.Id, theme.Panel)
+            .UpdateColor(workspace.Active ? theme.Active : theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -91,23 +93,23 @@ internal sealed class WorkspacesModule : IDrawableModule
             OnClick = () => _ = _hyprctl.FocusWorkspaceAsync(workspace.Id),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
-                Spacing = 4,
+                Spacing = 8,
                 BorderRadius = 8,
                 BorderWidth = workspace.Active ? _theme.BorderWidth : 0,
             },
             Children =
             [
-                new TextNode($"Workspace {workspace.Id}", 14.0f, theme.Text),
-                ..workspace.Windows
-                    .Select(x => new BoxNode
-                    {
-                        Style = new Style { Spacing = 8 },
-                        Children =
-                        [
-                            ModulesCommon.BuildAppBadge(x.ClassName, 14, theme.Muted, theme),
-                            new TextNode(x.Title.Length > 45 ? x.Title[..42] + "..." : x.Title, 14, theme.Text)
-                        ]
-                    }),
+                new TextNode($"Workspace {workspace.Id}", theme.TextSize, theme.Text),
+                ..workspace.Windows.Select(x => new BoxNode
+                {
+                    Style = new Style { Spacing = 8, Padding = new Insets(0, 0, 0, 4) },
+                    HorizontalAlignment = ItemsAlignment.Stretch,
+                    Children =
+                    [
+                        ModulesCommon.BuildAppBadge(x.ClassName, 14, theme.Muted, theme),
+                        new TextNode(x.Title, theme.TextSize, theme.Text, wrapping: TextWrapping.Ellipsis)
+                    ]
+                }),
             ],
         };
     }

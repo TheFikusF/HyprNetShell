@@ -76,7 +76,7 @@ public sealed class StatusBar : IDisposable
         _notificationService = new NotificationService(_hyprland, _hyprctl);
         _superKey = new SuperKeyStateService(_hyprctl);
         _displayControlsService = new DisplayControlsModuleService(_hyprctl);
-        _mainDialog = new MainDialog(_clipboardHistory, _hyprctl);
+        _mainDialog = new MainDialog(_clipboardHistory, _hyprctl, Theme.Default);
         _dataServices =
         [
             _notificationService,

@@ -39,7 +39,7 @@ internal sealed class TrayModule(
         }
 
         var icon = string.IsNullOrWhiteSpace(item.IconPath)
-            ? ModulesCommon.BuildBadge(ModulesCommon.AppBadge(item.Title), 14.0f, theme.Panel, theme)
+            ? ModulesCommon.BuildBadge(ModulesCommon.AppBadge(item.Title), theme.Panel, theme)
             : new ImageNode(item.IconPath, 18, 18);
 
         return node.Draw([

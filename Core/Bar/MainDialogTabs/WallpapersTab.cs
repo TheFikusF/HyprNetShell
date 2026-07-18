@@ -7,7 +7,7 @@ using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMainDialogTab
+internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
@@ -20,6 +20,7 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMai
     };
 
     private readonly Lock _stateLock = new();
+    private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
     private IReadOnlyList<Wallpaper> _wallpapers = [];
     private IReadOnlyList<Wallpaper> _filteredWallpapers = [];
     private CancellationTokenSource? _loadCancellation;
@@ -222,6 +223,7 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMai
     private Node BuildTile(Wallpaper wallpaper, int index, int selectedIndex)
     {
         var selected = index == selectedIndex;
+        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -233,21 +235,21 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMai
                 {
                     _selectedIndex = index;
                 }
+
                 ActivateSelection();
             },
-            Style = ModulesCommon.ModuleStyle(
-                Theme.Default,
-                selected ? Theme.Default.Active : Theme.Default.Panel) with
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
-                Padding = 4 + (selected ? 0 : Theme.Default.BorderWidth),
+                Padding = 4 + (selected ? 0 : theme.BorderWidth),
                 Spacing = 4,
                 BorderRadius = 6,
-                BorderWidth = selected ? Theme.Default.BorderWidth : 0,
+                BorderWidth = selected ? theme.BorderWidth : 0,
             },
             Children =
             [
                 new ImageNode(wallpaper.Path, (int)(192 * 0.98f), (int)(108 * 0.98f), loadAsync: true),
-                new TextNode(MainDialogTabUi.Trim(wallpaper.Name, 24), 14.0f, Theme.Default.Text),
+                new TextNode(MainDialogTabUi.Trim(wallpaper.Name, 24), 14.0f, theme.Text),
             ],
         };
     }
@@ -292,10 +294,10 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog) : IMai
         {
             var wallpapers = new List<Wallpaper>();
             foreach (var path in Directory.EnumerateFiles(directory, "*", new EnumerationOptions
-                {
-                    IgnoreInaccessible = true,
-                    RecurseSubdirectories = true,
-                }))
+                     {
+                         IgnoreInaccessible = true,
+                         RecurseSubdirectories = true,
+                     }))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (SupportedExtensions.Contains(Path.GetExtension(path)))

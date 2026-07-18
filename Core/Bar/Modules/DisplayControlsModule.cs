@@ -63,7 +63,7 @@ internal sealed class DisplayControlsModule(
         };
     }
 
-    private BoxNode BuildPopup(DisplayControlsSnapshot controls) =>new (380)
+    private BoxNode BuildPopup(DisplayControlsSnapshot controls) => new(380)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -125,16 +125,24 @@ internal sealed class DisplayControlsModule(
                 new BoxNode
                 {
                     Direction = Direction.Horizontal,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
+                    HorizontalAlignment = ItemsAlignment.Spread,
                     VerticalAlignment = ItemsAlignment.Center,
                     Style = new Style { Spacing = 8 },
                     Children =
                     [
                         ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, "Screen temperature"),
-                        new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K",
-                            theme.TextSize,
-                            theme.Text),
-                        BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
+                        new BoxNode
+                        {
+                            VerticalAlignment = ItemsAlignment.Center,
+                            Style = new Style { Spacing = 8 },
+                            Children =
+                            [
+                                new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K",
+                                    theme.TextSize,
+                                    theme.Text),
+                                BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
+                            ]
+                        }
                     ],
                 },
                 automaticTemperatureEnabled
@@ -179,8 +187,8 @@ internal sealed class DisplayControlsModule(
             normalized => SetValue(
                 "temperature",
                 TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
-                                                                           (TemperatureCurveMath.MAXIMUM_TEMPERATURE -
-                                                                            TemperatureCurveMath.MINIMUM_TEMPERATURE)),
+                                                                            (TemperatureCurveMath.MAXIMUM_TEMPERATURE -
+                                                                             TemperatureCurveMath.MINIMUM_TEMPERATURE)),
                 service.SetTemperatureAsync),
             GetSliderDragging("temperature"));
     }
@@ -207,7 +215,7 @@ internal sealed class DisplayControlsModule(
                 new BoxNode
                 {
                     Direction = Direction.Horizontal,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
+                    HorizontalAlignment = ItemsAlignment.Spread,
                     VerticalAlignment = ItemsAlignment.Center,
                     Children =
                     [

@@ -170,18 +170,18 @@ internal sealed class MusicModule(
             {
                 Direction = Direction.Vertical,
                 VerticalAlignment = ItemsAlignment.Spread,
-                Style = new Style { Spacing = 5, Padding = new Insets(0, 12) },
+                Style = new Style { Padding = new Insets(0, 12) },
                 Children =
                 [
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
-                        Style = new Style { Spacing = 5 },
+                        Style = new Style { Spacing = 6 },
                         Children =
                         [
                             new MarqueeTextNode(music.Title, 42, 16.0f, theme.Text),
-                            new MarqueeTextNode(FormatSubtitle(music), 47, 14.0f, theme.Text),
-                            new MarqueeTextNode(music.Player, 47, 14.0f, theme.Text),
+                            new MarqueeTextNode(FormatSubtitle(music), 47, theme.TextSize, theme.Text),
+                            new MarqueeTextNode(music.Player, 47, theme.TextSize, theme.Text),
                         ]
                     },
                     new BoxNode

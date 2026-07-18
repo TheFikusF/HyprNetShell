@@ -34,25 +34,13 @@ internal sealed class BluetoothModule(
             : connectedCount == 0
                 ? Icons.Bluetooth
                 : Icons.BluetoothConnected;
-        return new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme,
-                    ModulesCommon.ToBackground(theme, Color.Lerp(Color.Lazure, Color.Blue, 0.3f)),
-                    left: false, right: false) with
-                {
-                    BorderWidth = new Insets(1, theme.BorderWidth),
-                    Spacing = 6,
-                },
-            Children =
-            [
-                new ImageNode(icon, 18, 18, theme.Text),
-                ..(connectedCount > 0
-                    ? new Node[] { new TextNode(connectedCount.ToString(), 14.0f, theme.Text) }
-                    : Array.Empty<Node>()),
-            ],
-        };
+
+        var bg = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Lazure, Color.Blue, 0.3f));
+        return ModulesCommon.BuildTextWithIcon(theme, icon, connectedCount.ToString(),
+            style: ModulesCommon.ModuleStyle(theme, bg, false, false) with
+            {
+                BorderWidth = new Insets(1, theme.BorderWidth)
+            }, width: 55);
     }
 
     private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new(360)
@@ -79,7 +67,6 @@ internal sealed class BluetoothModule(
         if (bluetooth.Devices.Count == 0)
         {
             yield return BuildPlainRow("No paired devices");
-            yield break;
         }
 
         foreach (var device in bluetooth.Devices.Take(8))
@@ -88,14 +75,10 @@ internal sealed class BluetoothModule(
         }
     }
 
-    private Node BuildDeviceRow(BluetoothDeviceSnapshot device)
+    private BoxNode BuildDeviceRow(BluetoothDeviceSnapshot device)
     {
         var connected = EffectiveConnected(device);
-        var state = _rowStates.GetState(device.Address, connected ? theme.Active : theme.Panel);
-        var baseColor = connected ? theme.Active : theme.Panel;
-        var target = state.Hovered ? Color.Lighten(baseColor, 0.12f) : baseColor;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
+        var state = _rowStates.GetState(device.Address, theme.Panel).UpdateColor(connected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,

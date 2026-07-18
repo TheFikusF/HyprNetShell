@@ -49,51 +49,40 @@ internal sealed class LanguageModule : IDrawableModule
         var layoutName = string.IsNullOrWhiteSpace(snapshot.LayoutName) ? "Unknown" : snapshot.LayoutName.Trim();
         var alias = _aliases.TryGetValue(layoutName, out var a) ? a : layoutName;
 
-        if (!string.Equals(_lastLayoutName, layoutName, StringComparison.Ordinal))
+        if (string.Equals(_lastLayoutName, layoutName, StringComparison.Ordinal) == false)
         {
             _lastLayoutName = layoutName;
             _showUntil = DateTime.UtcNow + ChangePopupDuration;
         }
 
         return _node.Draw([
-            new BoxNode(WIDTH)
+            new BoxNode(WIDTH, 18 + 6 * 2 + 3 * 2)
             {
                 Direction = Direction.Vertical,
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
                 OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(snapshot.KeyboardName),
                 Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
-                Children =
-                [
-                    new TextNode(alias, 14.0f, _theme.Text),
-                ],
+                Children = [new TextNode(alias, _theme.TextSize, _theme.Text)]
             }
         ], () => BuildPopup(snapshot.KeyboardName));
     }
 
-    private BoxNode BuildPopup(string keyboardName) => new (WIDTH + 30)
+    private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 30)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = ModulesCommon.PopupStyle(_theme),
-        Children =
-        [
-            .._aliases.Keys.Select((layout, index) => BuildPopupRow(layout,
-                keyboardName, index))
-        ],
+        Children = [.._aliases.Keys.Select((layout, index) => BuildPopupRow(layout, keyboardName, index))]
     };
 
     private BoxNode BuildPopupRow(string text, string keyboardName, int index)
     {
         var alias = _aliases[text];
-
         var normal = text == _lastLayoutName ? _theme.Active : _theme.Panel;
         float fontSize = text == _lastLayoutName ? 20.0f : 14.0f;
-        var state = _languagesRowStates.GetState(text, normal);
-        var target = state.Hovered ? Color.Lighten(normal, text == _lastLayoutName ? 0.18f : 0.12f) : normal;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
+        var state = _languagesRowStates.GetState(text, normal).UpdateColor(normal);
         return new BoxNode
         {
             Direction = Direction.Horizontal,
@@ -106,10 +95,7 @@ internal sealed class LanguageModule : IDrawableModule
                 BorderRadius = 8,
                 BorderWidth = text == _lastLayoutName ? _theme.BorderWidth : 0,
             },
-            Children =
-            [
-                new TextNode(alias, fontSize, _theme.Text)
-            ]
+            Children = [new TextNode(alias, fontSize, _theme.Text)]
         };
     }
 }

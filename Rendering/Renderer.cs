@@ -78,7 +78,11 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _textureRepository = new TextureRepository(_gl);
 
         _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.BlendFuncSeparate(
+            BlendingFactor.SrcAlpha,
+            BlendingFactor.OneMinusSrcAlpha,
+            BlendingFactor.One,
+            BlendingFactor.OneMinusSrcAlpha);
     }
 
     public void BeginFrame(int width, int height)

@@ -8,9 +8,11 @@ using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog) : IMainDialogTab
+internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog, Theme theme)
+    : IMainDialogTab
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
+    private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -103,9 +105,10 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
         };
     }
 
-    private Node BuildRow(ClipboardHistoryEntry entry, int index)
+    private BoxNode BuildRow(ClipboardHistoryEntry entry, int index)
     {
         var selected = index == _selectedIndex;
+        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             VerticalAlignment = ItemsAlignment.Center,
@@ -114,21 +117,20 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                 _selectedIndex = index;
                 ActivateSelection();
             },
-            Style = ModulesCommon.ModuleStyle(
-                    Theme.Default,
-                    selected ? Theme.Default.Active : Theme.Default.Panel) with
-                {
-                    BorderRadius = 8,
-                    BorderWidth = selected ? Theme.Default.BorderWidth : 0,
-                    Padding = new Insets(16, 8),
-                    Spacing = 14,
-                },
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                BorderRadius = 8,
+                BorderWidth = selected ? theme.BorderWidth : 0,
+                Padding = new Insets(16, 8),
+                Spacing = 14,
+            },
             Children =
             [
                 entry.Image is not null
                     ? new ImageNode(entry.Image, 46, 46)
-                    : new ImageNode(Icons.Copy, 30, 30, Theme.Default.Text),
-                new TextNode(entry.Preview, 15, Theme.Default.Text, wrapping: TextWrapping.Wrap, maxLines: 5),
+                    : new ImageNode(Icons.Copy, 30, 30, theme.Text),
+                new TextNode(entry.Preview, 15, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 5),
             ],
         };
     }

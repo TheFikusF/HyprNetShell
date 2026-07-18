@@ -17,8 +17,8 @@ public readonly record struct Color(float R, float G, float B, float A)
     public static Color Darken(Color color, float amount) => PrimitivesMath.Darken(color, amount);
     public static Color Lerp(Color a, Color b, float t) => PrimitivesMath.Lerp(a, b, t);
 
-    public static Color LerpSmooth(Color a, Color b, float decay, float dt) =>
-        PrimitivesMath.LerpSmooth(a, b, decay, dt);
+    public static Color LerpSmooth(Color a, Color b, float decay, float dt) => a.LerpSmooth(b, decay, dt);
+    public Color LerpSmooth(Color b, float decay, float dt) => PrimitivesMath.LerpSmooth(this, b, decay, dt);
 
     public static readonly Color Red = FromRgb(255, 0, 0);
     public static readonly Color Green = FromRgb(0, 255, 0);
