@@ -18,9 +18,18 @@ internal sealed class Hyprctl : IHyprctl
     public Task<bool> LaunchDesktopEntryAsync(
         string desktopFile,
         CancellationToken cancellationToken = default) =>
-        DispatchAsync(
-            $"hl.dsp.exec_cmd({LuaString($"gio launch {ShellQuote(desktopFile)}")})",
+        LaunchThroughHelperAsync(
+            ["--launch-desktop-entry", desktopFile],
             $"launch desktop entry {desktopFile}",
+            cancellationToken);
+
+    public Task<bool> LaunchDesktopActionAsync(
+        string desktopFile,
+        string actionId,
+        CancellationToken cancellationToken = default) =>
+        LaunchThroughHelperAsync(
+            ["--launch-desktop-action", desktopFile, actionId],
+            $"launch desktop action {actionId} from {desktopFile}",
             cancellationToken);
 
     public Task<bool> FocusWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default) =>
@@ -125,6 +134,25 @@ internal sealed class Hyprctl : IHyprctl
         string operation,
         CancellationToken cancellationToken) =>
         EvalAsync($"hl.dispatch({dispatcherExpression})", operation, cancellationToken);
+
+    private Task<bool> LaunchThroughHelperAsync(
+        IReadOnlyList<string> arguments,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            AppLogger.Error("Hyprctl", "Could not determine the HyprNetShell executable path");
+            return Task.FromResult(false);
+        }
+
+        var command = string.Join(' ', new[] { executable }.Concat(arguments).Select(ShellQuote));
+        return DispatchAsync(
+            $"hl.dsp.exec_cmd({LuaString(command)})",
+            operation,
+            cancellationToken);
+    }
 
     private async Task<bool> EvalAsync(
         string luaExpression,

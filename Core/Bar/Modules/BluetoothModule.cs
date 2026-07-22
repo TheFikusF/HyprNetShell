@@ -51,7 +51,7 @@ internal sealed class BluetoothModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            new TextNode("Bluetooth devices", 14.0f, theme.Text),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Bluetooth, "Bluetooth devices"),
             ..BuildDeviceRows(bluetooth),
         ],
     };
@@ -78,7 +78,8 @@ internal sealed class BluetoothModule(
     private BoxNode BuildDeviceRow(BluetoothDeviceSnapshot device)
     {
         var connected = EffectiveConnected(device);
-        var state = _rowStates.GetState(device.Address, theme.Panel).UpdateColor(connected ? theme.Active : theme.Panel);
+        var state = _rowStates.GetState(device.Address, theme.Panel)
+            .UpdateColor(connected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -122,27 +123,25 @@ internal sealed class BluetoothModule(
         };
     }
 
-    private Node BuildPlainRow(string text) =>
-        new BoxNode
-        {
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-            Children = [new TextNode(text, 13.0f, theme.Muted)],
-        };
+    private BoxNode BuildPlainRow(string text) => new()
+    {
+        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
+        Children = [new TextNode(text, theme.TextSize, theme.Muted)],
+    };
 
     private bool EffectiveConnected(BluetoothDeviceSnapshot device)
     {
-        if (_connectionOverrides.TryGetValue(device.Address, out var connected))
+        if (_connectionOverrides.TryGetValue(device.Address, out var connected) == false)
         {
-            if (connected == device.Connected)
-            {
-                _connectionOverrides.Remove(device.Address);
-            }
-            else
-            {
-                return connected;
-            }
+            return device.Connected;
         }
 
+        if (connected != device.Connected)
+        {
+            return connected;
+        }
+
+        _connectionOverrides.Remove(device.Address);
         return device.Connected;
     }
 

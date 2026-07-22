@@ -100,26 +100,22 @@ internal sealed class AudioModule(
             },
             Children =
             [
-                new BoxNode
+                new BoxNode(new Style { Spacing = 8 }, verticalAlignment: ItemsAlignment.Center)
                 {
-                    Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        new BoxNode(262, 28)
-                        {
-                            Direction = Direction.Horizontal,
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Children = [new TextNode(Trim(device.Name, 32), 13.0f, theme.Text)],
-                        },
-                        BuildActionButton(
-                            device.Active ? "●" : "○",
-                            theme.Panel,
-                            device.Active ? null : () => _ = AudioModuleService.SetDefaultAsync(device.Id)),
-                        BuildActionButton(
-                            EffectiveMuted(device) ? Icons.VolumeMuted : VolumeIcon(volume),
-                            EffectiveMuted(device) ? theme.Warning : theme.Panel,
-                            () => SetMuted(device, !EffectiveMuted(device))),
-                    ]
+                    new BoxNode(262, 28)
+                    {
+                        Direction = Direction.Horizontal,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        Children = [new TextNode(Trim(device.Name, 32), 13.0f, theme.Text)],
+                    },
+                    BuildActionButton(
+                        device.Active ? "●" : "○",
+                        theme.Panel,
+                        device.Active ? null : () => _ = AudioModuleService.SetDefaultAsync(device.Id)),
+                    BuildActionButton(
+                        EffectiveMuted(device) ? Icons.VolumeMuted : VolumeIcon(volume),
+                        EffectiveMuted(device) ? theme.Warning : theme.Panel,
+                        () => SetMuted(device, !EffectiveMuted(device))),
                 },
                 new BoxNode()
                 {
@@ -183,44 +179,41 @@ internal sealed class AudioModule(
             _ => 2,
         }];
 
-    private Node BuildPlainRow(string text) =>
-        new BoxNode
-        {
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-            Children = [new TextNode(text, 13.0f, theme.Muted)],
-        };
+    private BoxNode BuildPlainRow(string text) => new BoxNode
+    {
+        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
+        Children = [new TextNode(text, theme.TextSize, theme.Muted)],
+    };
 
     private int EffectiveVolume(AudioDeviceSnapshot device)
     {
-        if (_volumeOverrides.TryGetValue(device.Id, out var volume))
+        if (_volumeOverrides.TryGetValue(device.Id, out var volume) == false)
         {
-            if (device.Volume == volume)
-            {
-                _volumeOverrides.Remove(device.Id);
-            }
-            else
-            {
-                return volume;
-            }
+            return device.Volume;
         }
 
+        if (device.Volume != volume)
+        {
+            return volume;
+        }
+
+        _volumeOverrides.Remove(device.Id);
         return device.Volume;
     }
 
     private bool EffectiveMuted(AudioDeviceSnapshot device)
     {
-        if (_muteOverrides.TryGetValue(device.Id, out var muted))
+        if (_muteOverrides.TryGetValue(device.Id, out var muted) == false)
         {
-            if (device.Muted == muted)
-            {
-                _muteOverrides.Remove(device.Id);
-            }
-            else
-            {
-                return muted;
-            }
+            return device.Muted;
         }
 
+        if (device.Muted != muted)
+        {
+            return muted;
+        }
+
+        _muteOverrides.Remove(device.Id);
         return device.Muted;
     }
 
@@ -265,7 +258,7 @@ internal sealed class AudioModule(
 
     private sealed class VolumeUpdateQueue(string deviceId)
     {
-        private readonly object _sync = new();
+        private readonly Lock _sync = new();
         private int _latest;
         private int _sent = -1;
         private bool _running;

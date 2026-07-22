@@ -7,7 +7,7 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class CalendarWidget(Theme theme)
 {
     public const int WIDTH = 360;
-    
+
     public Node Draw(DateTime now)
     {
         var first = new DateTime(now.Year, now.Month, 1);
@@ -25,15 +25,10 @@ internal sealed class CalendarWidget(Theme theme)
             },
             Children =
             [
-                new BoxNode
+                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        new ImageNode(Icons.Calendar, 22, 22, theme.Text),
-                        new TextNode(now.ToString("MMMM yyyy"), 22, theme.Text)
-                    ]
+                    new ImageNode(Icons.Calendar, 22, 22, theme.Text),
+                    new TextNode(now.ToString("MMMM yyyy"), 22, theme.Text)
                 },
                 BuildWeekHeader(),
                 ..BuildWeeks(offset, days, now.Day),
@@ -41,14 +36,11 @@ internal sealed class CalendarWidget(Theme theme)
         };
     }
 
-    private Node BuildWeekHeader() => new BoxNode
+    private BoxNode BuildWeekHeader() => new (Style.Spacer)
     {
-        Style = new Style { Spacing = 8 },
-        Children =
-        [
-            ..new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" }
-                .Select(day => BuildCell(day, false)),
-        ],
+        Children = ((string[])["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+            .Select(day => BuildCell(day, false))
+            .ToArray(),
     };
 
     private IEnumerable<Node> BuildWeeks(int offset, int days, int today)
@@ -58,7 +50,7 @@ internal sealed class CalendarWidget(Theme theme)
         {
             yield return new BoxNode
             {
-                Style = new Style { Spacing = 8 },
+                Style = Style.Spacer,
                 Children =
                 [
                     ..week
@@ -69,7 +61,7 @@ internal sealed class CalendarWidget(Theme theme)
         }
     }
 
-    private Node BuildCell(string text, bool active) => new BoxNode(42, 30)
+    private BoxNode BuildCell(string text, bool active) => new (42, 30)
     {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,

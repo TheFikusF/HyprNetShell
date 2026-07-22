@@ -10,8 +10,6 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class CenterModule : IDrawableModule
 {
-    private const int POPUP_WIDTH = 620;
-
     private readonly Func<NotificationsSnapshot> _notifications;
     private readonly Theme _theme;
     private readonly CalendarWidget _calendar;

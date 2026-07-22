@@ -12,7 +12,7 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class WeatherWidget
 {
     public const int WIDTH = 260;
-    
+
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan FailureRetryInterval = TimeSpan.FromMinutes(10);
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(12) };
@@ -66,31 +66,19 @@ internal sealed class WeatherWidget
             },
             Children =
             [
-                new BoxNode
+                new BoxNode(Style.Spacer, ItemsAlignment.Center, ItemsAlignment.Center)
                 {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    HorizontalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        new ImageNode(Icons.CloudSun, 22, 22, _theme.Text),
-                        new TextNode("Weather", 22, _theme.Text)
-                    ]
+                    new ImageNode(Icons.CloudSun, 22, 22, _theme.Text),
+                    new TextNode("Weather", 22, _theme.Text)
                 },
-                new BoxNode
+                new BoxNode(Style.Spacer, ItemsAlignment.End, ItemsAlignment.Center)
                 {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    HorizontalAlignment = ItemsAlignment.End,
-                    Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        new TextNode(_location, _theme.TextSize, _theme.Muted),
-                        new TextNode(
-                            refreshing ? "Updating…" :
-                            state.UpdatedAt is null ? "Weather" : state.UpdatedAt.Value.ToString("HH:mm"),
-                            _theme.TextSize,
-                            _theme.Muted),
-                    ]
+                    new TextNode(_location, _theme.TextSize, _theme.Muted),
+                    new TextNode(
+                        refreshing ? "Updating…" :
+                        state.UpdatedAt is null ? "Weather" : state.UpdatedAt.Value.ToString("HH:mm"),
+                        _theme.TextSize,
+                        _theme.Muted),
                 },
                 ..BuildWeatherContent(state, refreshing),
             ],
@@ -312,7 +300,6 @@ internal sealed class WeatherWidget
     }
 
     private sealed record ForecastDay(DateOnly Date, double Minimum, double Maximum, int WeatherCode);
-
 }
 
 file sealed class TemperatureRangeNode(

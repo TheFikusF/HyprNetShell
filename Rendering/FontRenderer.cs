@@ -8,7 +8,7 @@ using StbTrueTypeSharp;
 
 namespace HyprNetShell.Rendering;
 
-internal sealed unsafe class FontRenderer : IDisposable
+internal sealed unsafe partial class FontRenderer : IDisposable
 {
     private const int SYMBOL_ATLAS_WIDTH = 2048;
     private const int SYMBOL_ATLAS_HEIGHT = 2048;
@@ -449,7 +449,7 @@ internal sealed unsafe class FontRenderer : IDisposable
 
     private sealed record SymbolAtlas(UnicodeRange Range, uint Texture, StbTrueType.stbtt_bakedchar[] Chars);
 
-    private static class ColorEmojiRenderer
+    private static partial class ColorEmojiRenderer
     {
         private const int CAIRO_FORMAT_ARGB32 = 0;
         private const int PANGO_SCALE = 1024;
@@ -488,7 +488,7 @@ internal sealed unsafe class FontRenderer : IDisposable
                 layout = pango_cairo_create_layout(context);
                 pango_layout_set_font_description(layout, font);
                 SetLayoutText(layout, text);
-                cairo_move_to(context, 2.0, 2.0);
+                cairo_move_to(context, 2.0, 1.0);
                 pango_cairo_show_layout(context, layout);
                 cairo_surface_flush(surface);
 
@@ -582,61 +582,61 @@ internal sealed unsafe class FontRenderer : IDisposable
             }
         }
 
-        [DllImport("cairo")]
-        private static extern IntPtr cairo_image_surface_create(int format, int width, int height);
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_image_surface_create(int format, int width, int height);
 
-        [DllImport("cairo")]
-        private static extern void cairo_surface_destroy(IntPtr surface);
+        [LibraryImport("cairo")]
+        private static partial void cairo_surface_destroy(IntPtr surface);
 
-        [DllImport("cairo")]
-        private static extern void cairo_surface_flush(IntPtr surface);
+        [LibraryImport("cairo")]
+        private static partial void cairo_surface_flush(IntPtr surface);
 
-        [DllImport("cairo")]
-        private static extern IntPtr cairo_image_surface_get_data(IntPtr surface);
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_image_surface_get_data(IntPtr surface);
 
-        [DllImport("cairo")]
-        private static extern int cairo_image_surface_get_stride(IntPtr surface);
+        [LibraryImport("cairo")]
+        private static partial int cairo_image_surface_get_stride(IntPtr surface);
 
-        [DllImport("cairo")]
-        private static extern IntPtr cairo_create(IntPtr surface);
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_create(IntPtr surface);
 
-        [DllImport("cairo")]
-        private static extern void cairo_destroy(IntPtr context);
+        [LibraryImport("cairo")]
+        private static partial void cairo_destroy(IntPtr context);
 
-        [DllImport("cairo")]
-        private static extern void cairo_move_to(IntPtr context, double x, double y);
+        [LibraryImport("cairo")]
+        private static partial void cairo_move_to(IntPtr context, double x, double y);
 
-        [DllImport("pango-1.0")]
-        private static extern IntPtr pango_font_description_from_string(
+        [LibraryImport("pango-1.0")]
+        private static partial IntPtr pango_font_description_from_string(
             [MarshalAs(UnmanagedType.LPUTF8Str)] string str);
 
-        [DllImport("pango-1.0")]
-        private static extern void pango_font_description_free(IntPtr desc);
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_font_description_free(IntPtr desc);
 
-        [DllImport("pango-1.0")]
-        private static extern void pango_font_description_set_absolute_size(IntPtr desc, double size);
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_font_description_set_absolute_size(IntPtr desc, double size);
 
-        [DllImport("pango-1.0")]
-        private static extern void pango_layout_set_font_description(IntPtr layout, IntPtr desc);
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_set_font_description(IntPtr layout, IntPtr desc);
 
-        [DllImport("pango-1.0")]
-        private static extern void pango_layout_set_text(IntPtr layout, byte[] text, int length);
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_set_text(IntPtr layout, byte[] text, int length);
 
-        [DllImport("pango-1.0")]
-        private static extern void pango_layout_get_pixel_size(IntPtr layout, out int width, out int height);
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_get_pixel_size(IntPtr layout, out int width, out int height);
 
-        [DllImport("pangocairo-1.0")]
-        private static extern IntPtr pango_cairo_create_layout(IntPtr context);
+        [LibraryImport("pangocairo-1.0")]
+        private static partial IntPtr pango_cairo_create_layout(IntPtr context);
 
-        [DllImport("pangocairo-1.0")]
-        private static extern void pango_cairo_show_layout(IntPtr context, IntPtr layout);
+        [LibraryImport("pangocairo-1.0")]
+        private static partial void pango_cairo_show_layout(IntPtr context, IntPtr layout);
 
-        [DllImport("gobject-2.0")]
-        private static extern void g_object_unref(IntPtr obj);
+        [LibraryImport("gobject-2.0")]
+        private static partial void g_object_unref(IntPtr obj);
 
-        [DllImport("fontconfig")]
+        [LibraryImport("fontconfig")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool FcConfigAppFontAddFile(IntPtr config, byte[] file);
+        private static partial bool FcConfigAppFontAddFile(IntPtr config, byte[] file);
     }
 
     private sealed record RenderedGlyph(int Width, int Height, byte[] Pixels, float Advance);

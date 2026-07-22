@@ -54,8 +54,21 @@ internal static class NotificationCard
         NotificationSnapshot notification,
         string? iconPath,
         NotificationService service,
-        Theme theme) =>
-        new BoxNode
+        Theme theme)
+    {
+        TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
+            ? [new TextNode(notification.Title, theme.TextSize, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 3)]
+            :
+            [
+                new TextNode(notification.Title, 16, theme.Text, wrapping: TextWrapping.Ellipsis),
+                new TextNode(
+                    notification.Body,
+                    theme.TextSize,
+                    theme.Text,
+                    wrapping: TextWrapping.Wrap,
+                    maxLines: 3),
+            ];
+        return new BoxNode
         {
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -72,15 +85,10 @@ internal static class NotificationCard
                     Style = new Style { Spacing = 4 },
                     Children =
                     [
-                        new TextNode(notification.Title, 16, theme.Text, wrapping: TextWrapping.Ellipsis),
-                        new TextNode(
-                            notification.Body,
-                            theme.TextSize,
-                            theme.Text,
-                            wrapping: TextWrapping.Wrap,
-                            maxLines: 3),
+                        ..children,
                         ..(!string.IsNullOrWhiteSpace(notification.AppName)
-                            ? (List<TextNode>)[
+                            ? (List<TextNode>)
+                            [
                                 new TextNode(
                                     notification.AppName,
                                     11,
@@ -92,6 +100,7 @@ internal static class NotificationCard
                 },
             ],
         };
+    }
 
     private static Node BuildCloseButton(uint id, NotificationService service, Theme theme) =>
         new BoxNode(22, 22)
@@ -162,5 +171,4 @@ internal static class NotificationCard
             yield return new ImageNode(iconPath, size, size);
         }
     }
-
 }

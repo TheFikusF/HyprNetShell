@@ -64,6 +64,69 @@ internal static class Dbus
         MessageBodyWriter? writeBody = null) =>
         connection.CallMethodAsync(Call(connection, destination, path, @interface, member, signature, writeBody));
 
+    public static async Task<T> WaitAsync<T>(Task<T> task, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await task.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            ObserveCompletion(task);
+            throw;
+        }
+    }
+
+    public static async Task WaitAsync(Task task, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await task.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            ObserveCompletion(task);
+            throw;
+        }
+    }
+
+    public static async Task<T> WaitAsync<T>(Task<T> task, TimeSpan timeout)
+    {
+        try
+        {
+            return await task.WaitAsync(timeout);
+        }
+        catch
+        {
+            ObserveCompletion(task);
+            throw;
+        }
+    }
+
+    private static void ObserveCompletion(Task task)
+    {
+        if (task.IsCompleted)
+        {
+            _ = task.Exception;
+            return;
+        }
+
+        _ = ObserveCompletionAsync(task);
+    }
+
+    private static async Task ObserveCompletionAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch
+        {
+            // The caller already observed the timeout/cancellation. Observe the
+            // eventual D-Bus result so a later error is not raised by finalization.
+        }
+    }
+
     public static async Task<uint> RequestNameAsync(DBusConnection connection, string name, uint flags) =>
         await CallAsync(
             connection,

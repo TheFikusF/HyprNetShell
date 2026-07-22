@@ -8,7 +8,7 @@ namespace HyprNetShell.Core.Bar;
 
 internal static class NotificationPopupLayout
 {
-    private const int WIDTH = 380;
+    private const int WIDTH = 460;
     private const int MAXIMUM_VISIBLE = 5;
 
     public static Node Draw(

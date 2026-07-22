@@ -79,10 +79,10 @@ internal sealed class NetworkModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            new TextNode("Available Wi-Fi", 14.0f, theme.Text),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.WifiStrength[^1], "Available Wi-Fi"),
             ..BuildWifiRows(),
             ModulesCommon.BuildDivider(theme.Border),
-            new TextNode("Details", 14.0f, theme.Text),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Info, "Details"),
             BuildIpRow(network.Device),
             ..BuildIpRows(network),
         ]

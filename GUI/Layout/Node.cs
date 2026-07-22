@@ -38,6 +38,9 @@ public struct Style
     public Color? BorderColor;
     public BorderRadius BorderRadius;
     public Insets BorderWidth;
+
+    public static readonly Style Empty = new ();
+    public static readonly Style Spacer = new() { Spacing = 8 };
 }
 
 public abstract class Node

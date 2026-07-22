@@ -81,7 +81,7 @@ internal sealed class LanguageModule : IDrawableModule
     {
         var alias = _aliases[text];
         var normal = text == _lastLayoutName ? _theme.Active : _theme.Panel;
-        float fontSize = text == _lastLayoutName ? 20.0f : 14.0f;
+        var fontSize = text == _lastLayoutName ? 20.0f : _theme.TextSize;
         var state = _languagesRowStates.GetState(text, normal).UpdateColor(normal);
         return new BoxNode
         {

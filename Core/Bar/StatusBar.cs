@@ -133,9 +133,10 @@ public sealed class StatusBar : IDisposable
 
         if (_mainDialog.IsOpen)
         {
-            using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
-            layout.AddNode(_mainDialog.Draw());
         }
+
+        using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
+        layout.AddNode(_mainDialog.Draw());
     }
 
     private void DrawLeftRight()

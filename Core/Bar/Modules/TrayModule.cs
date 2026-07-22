@@ -43,14 +43,14 @@ internal sealed class TrayModule(
             : new ImageNode(item.IconPath, 18, 18);
 
         return node.Draw([
-            new BoxNode(height: 32)
+            new BoxNode
             {
                 Direction = Direction.Horizontal,
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
                 {
-                    Padding = new Insets(4, right ? 8 : 4, 4, left ? 8 : 4),
+                    Padding = new Insets(6, right ? 8 : 4, 6, left ? 8 : 4),
                 },
                 Children = [icon],
             }

@@ -71,7 +71,7 @@ internal sealed class DisplayControlsModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            new TextNode("Display controls", theme.TextSize, theme.Text),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Brightness[0], "Display controls"),
             BuildBacklightControl("display", "Screen brightness", Icons.Brightness[0], controls.Display),
             BuildBacklightControl("keyboard", "Keyboard brightness", Icons.Keyboard, controls.Keyboard),
             BuildTemperatureSchedule(controls),

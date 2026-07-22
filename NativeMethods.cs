@@ -19,6 +19,7 @@ public sealed class HyprLayer : IDisposable
     private int _shutdownRequested;
     private int _returnCode;
     private bool _lastPointerDown;
+    private bool _keyboardInteractive;
 
     public (int width, int height) LayerSize { get; private set; }
     public LayoutInput Input { get; private set; } = LayoutInput.None;
@@ -144,9 +145,10 @@ public sealed class HyprLayer : IDisposable
 
     public void SetKeyboardInteractivity(bool enabled)
     {
-        if (_window != IntPtr.Zero)
+        if (_window != IntPtr.Zero && _keyboardInteractive != enabled)
         {
             NativeMethods.hypr_layer_set_keyboard_interactivity(_window, enabled ? 1 : 0);
+            _keyboardInteractive = enabled;
         }
     }
 
@@ -166,64 +168,64 @@ public sealed class HyprLayer : IDisposable
     }
 }
 
-file static class NativeMethods
+internal static partial class NativeMethods
 {
     private const string HyprLayerLibrary = "hypr_layer";
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern IntPtr hypr_layer_create_top_bar(int reservedHeight);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial IntPtr hypr_layer_create_top_bar(int reservedHeight);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_destroy(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_destroy(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_make_current(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_make_current(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_swap_buffers(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_swap_buffers(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_poll_events(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_poll_events(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_set_input_regions(IntPtr window, int[] rectangles, int rectangleCount);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_set_input_regions(IntPtr window, int[] rectangles, int rectangleCount);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern void hypr_layer_set_keyboard_interactivity(IntPtr window, int enabled);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial void hypr_layer_set_keyboard_interactivity(IntPtr window, int enabled);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_get_width(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_get_width(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_get_height(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_get_height(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern double hypr_layer_get_pointer_x(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial double hypr_layer_get_pointer_x(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern double hypr_layer_get_pointer_y(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial double hypr_layer_get_pointer_y(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_pointer_inside(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_pointer_inside(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_pointer_button_down(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_pointer_button_down(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_take_key(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_take_key(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_take_text(IntPtr window, [Out] byte[] buffer, int bufferSize);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_take_text(IntPtr window, [Out] byte[] buffer, int bufferSize);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern double hypr_layer_take_scroll(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial double hypr_layer_take_scroll(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_should_close(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_should_close(IntPtr window);
 
-    [DllImport(HyprLayerLibrary)]
-    internal static extern int hypr_layer_has_error(IntPtr window);
+    [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_has_error(IntPtr window);
 
-    [DllImport(HyprLayerLibrary, CharSet = CharSet.Ansi)]
-    internal static extern IntPtr hypr_layer_get_proc_address(string name);
+    [LibraryImport(HyprLayerLibrary, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial IntPtr hypr_layer_get_proc_address(string name);
 }

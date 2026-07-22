@@ -43,7 +43,7 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Them
     public Node Draw()
     {
         var stats = snapshot();
-        
+
         Lerp(ref _currentCpuColor, _cpuGradient, (float)(stats.CpuPercent ?? 0) / 100);
         Lerp(ref _currentRamColor, _ramGradient, (float)(stats.RamPercent ?? 0) / 100);
         Lerp(ref _currentTempColor, _tempGradient, (float)(stats.TemperatureCelsius ?? 0) / 100);
@@ -58,7 +58,10 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Them
                 ModulesCommon.BuildTextWithIcon(theme, Icons.Cpu, FormatPercent(stats.CpuPercent),
                     style: ModulesCommon.ModuleStyle(theme, _currentCpuColor, right: false), width: WIDTH),
                 ModulesCommon.BuildTextWithIcon(theme, Icons.Memory, FormatPercent(stats.RamPercent),
-                    style: ModulesCommon.ModuleStyle(theme, _currentRamColor, false, false), width: WIDTH),
+                    style: ModulesCommon.ModuleStyle(theme, _currentRamColor, false, false) with
+                    {
+                        BorderWidth = new Insets(1, theme.BorderWidth)
+                    }, width: WIDTH),
                 ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, FormatTemperature(stats.TemperatureCelsius),
                     style: ModulesCommon.ModuleStyle(theme, _currentTempColor, left: false), width: WIDTH),
             ],

@@ -71,7 +71,10 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
                     if (notification.HasValue)
                     {
                         var change = notification.Value;
-                        _ = ((StatusNotifierWatcher)notification.State!).HandleNameOwnerChangedAsync(change.Item1, change.Item3);
+                        var watcher = (StatusNotifierWatcher)notification.State!;
+                        watcher.RunInBackground(
+                            watcher.HandleNameOwnerChangedAsync(change.Item1, change.Item3),
+                            $"Could not process owner change for {change.Item1}");
                     }
                 },
                 false,
@@ -79,7 +82,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
                 watcher);
 
             watcher.EmitHostSignal("StatusNotifierHostRegistered");
-            _ = watcher.DiscoverExistingItemsAsync();
+            watcher.RunInBackground(watcher.DiscoverExistingItemsAsync(), "Could not discover existing tray items");
             return watcher;
         }
         catch (Exception exception)
@@ -296,11 +299,12 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         {
             try
             {
-                var properties = await Dbus.CallAsync(
-                    _connection, busName, objectPath, "org.freedesktop.DBus.Properties", "GetAll",
-                    reader => reader.ReadDictionaryOfStringToVariantValue(),
-                    "s", (ref MessageWriter writer) => writer.WriteString(itemInterface))
-                    .WaitAsync(TimeSpan.FromSeconds(2));
+                var properties = await Dbus.WaitAsync(
+                    Dbus.CallAsync(
+                        _connection, busName, objectPath, "org.freedesktop.DBus.Properties", "GetAll",
+                        reader => reader.ReadDictionaryOfStringToVariantValue(),
+                        "s", (ref MessageWriter writer) => writer.WriteString(itemInterface)),
+                    TimeSpan.FromSeconds(2));
                 if (properties.Count > 0) return true;
             }
             catch { }
@@ -315,9 +319,11 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
     {
         try
         {
-            return await Dbus.CallAsync(
-                _connection, busName, objectPath, "org.freedesktop.DBus.Introspectable", "Introspect",
-                reader => reader.ReadString()).WaitAsync(TimeSpan.FromSeconds(2));
+            return await Dbus.WaitAsync(
+                Dbus.CallAsync(
+                    _connection, busName, objectPath, "org.freedesktop.DBus.Introspectable", "Introspect",
+                    reader => reader.ReadString()),
+                TimeSpan.FromSeconds(2));
         }
         catch { return null; }
     }
@@ -329,6 +335,25 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         else if (!string.IsNullOrEmpty(newOwner) &&
                  (name.StartsWith("org.kde.StatusNotifierItem") || name.StartsWith("org.ayatana.NotificationItem")))
             await DiscoverBusNameAsync(newOwner);
+    }
+
+    private void RunInBackground(Task task, string failureMessage) =>
+        _ = ObserveBackgroundTaskAsync(task, failureMessage);
+
+    private static async Task ObserveBackgroundTaskAsync(Task task, string failureMessage)
+    {
+        try
+        {
+            await task;
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown can race an in-flight discovery callback.
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("TrayWatcher", failureMessage, exception);
+        }
     }
 
     private void RemoveBusName(string uniqueName)

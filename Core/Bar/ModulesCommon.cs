@@ -104,10 +104,11 @@ public static class ModulesCommon
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
-            Children = [new BoxNode(height: 2) { Style = new Style { BackgroundColor = color } }]
+            Children = [new BoxNode(height: 1) { Style = new Style { BackgroundColor = color } }]
         };
 
-    public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null, Style? style = null, int? width = null) =>
+    public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null,
+        Style? style = null, int? width = null) =>
         new BoxNode(width)
         {
             VerticalAlignment = ItemsAlignment.Center,
@@ -120,40 +121,33 @@ public static class ModulesCommon
             ],
         };
 
-    public static Node BuildBadge(string text, Color fill, Theme theme) =>
-        new BoxNode(14, 14)
-        {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.BorderRadius) },
-            Children = { new TextNode(text, 8, theme.Text) },
-        };
+    public static Node BuildBadge(string text, Color fill, Theme theme) => new BoxNode(14, 14)
+    {
+        Direction = Direction.Horizontal,
+        HorizontalAlignment = ItemsAlignment.Center,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.BorderRadius) },
+        Children = { new TextNode(text, 8, theme.Text) },
+    };
 
     public static Node BuildAppBadge(string className, int iconSize, Color fill, Theme theme)
     {
         var imagePath = IconResolver.TryResolve(className);
-        if (imagePath is null)
-        {
-            return BuildBadge(AppBadge(className), fill, theme);
-        }
-
-        return new ImageNode(imagePath, iconSize, iconSize);
+        return imagePath is null
+            ? BuildBadge(AppBadge(className), fill, theme)
+            : new ImageNode(imagePath, iconSize, iconSize);
     }
 
-    public static Style ModuleStyle(Theme theme, Color fill, bool left = true, bool right = true)
+    public static Style ModuleStyle(Theme theme, Color fill, bool left = true, bool right = true) => new()
     {
-        return new Style
-        {
-            BackgroundColor = fill,
-            BorderColor = theme.Border,
-            BorderRadius = new BorderRadius(left ? theme.BorderRadius : 0, right ? theme.BorderRadius : 0,
-                right ? theme.BorderRadius : 0, left ? theme.BorderRadius : 0),
-            BorderWidth = new Insets(theme.BorderWidth, right ? theme.BorderWidth : 0,
-                theme.BorderWidth, left ? theme.BorderWidth : 0),
-            Padding = new Insets(8, 6)
-        };
-    }
+        BackgroundColor = fill,
+        BorderColor = theme.Border,
+        BorderRadius = new BorderRadius(left ? theme.BorderRadius : 0, right ? theme.BorderRadius : 0,
+            right ? theme.BorderRadius : 0, left ? theme.BorderRadius : 0),
+        BorderWidth = new Insets(theme.BorderWidth, right ? theme.BorderWidth : 0,
+            theme.BorderWidth, left ? theme.BorderWidth : 0),
+        Padding = new Insets(8, 6)
+    };
 
     public static Style PopupStyle(Theme theme) => ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.85f)) with
     {
@@ -183,18 +177,18 @@ public static class ModulesCommon
         return state;
     }
 
+    public static TState UpdateColor<TState>(this TState state, Color color) where TState : BoxState, new()
+    {
+        var target = state.Hovered ? Color.Lighten(color, 0.18f) : color;
+        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, DELTA_TIME);
+        return state;
+    }
+
     public class BoxState
     {
         public RefBool Hovered { get; } = new();
         public Color Background { get; set; }
 
-        public BoxState UpdateColor(Color color)
-        {
-            var target = Hovered ? Color.Lighten(color, 0.18f) : color;
-            Background = Color.LerpSmooth(Background, target, 18.0f, DELTA_TIME);
-            return this;
-        }
-        
         public static implicit operator Color(BoxState state) => state.Background;
         public static implicit operator RefBool(BoxState state) => state.Hovered;
     }

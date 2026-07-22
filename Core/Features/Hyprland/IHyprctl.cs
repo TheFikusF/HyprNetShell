@@ -3,6 +3,10 @@ namespace HyprNetShell.Core.Features.Hyprland;
 internal interface IHyprctl : IDisposable
 {
     Task<bool> LaunchDesktopEntryAsync(string desktopFile, CancellationToken cancellationToken = default);
+    Task<bool> LaunchDesktopActionAsync(
+        string desktopFile,
+        string actionId,
+        CancellationToken cancellationToken = default);
     Task<bool> FocusWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default);
     Task<bool> FocusWindowAsync(string windowAddress, CancellationToken cancellationToken = default);
     Task<bool> Bind(

@@ -124,6 +124,13 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         _explicitHeight = height;
     }
 
+    public BoxNode(Style style, ItemsAlignment? horizontalAlignment = null, ItemsAlignment? verticalAlignment = null)
+    {
+        Style = style;
+        HorizontalAlignment = horizontalAlignment ?? HorizontalAlignment;
+        VerticalAlignment = verticalAlignment ?? VerticalAlignment;
+    }
+
     public void SetMaxWidth(int maxWidth, bool stretch)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxWidth);

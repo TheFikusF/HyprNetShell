@@ -47,7 +47,9 @@ public sealed class MainDialog : IDrawableModule
     private const int KEY_DOWN = 108;
 
     private readonly Tab[] _tabs;
-    private Theme _theme;
+    private readonly Theme _theme;
+
+    private float _opacity;
 
     private readonly IReadOnlyDictionary<int, Action> _actions;
 
@@ -59,7 +61,7 @@ public sealed class MainDialog : IDrawableModule
     internal MainDialog(ClipboardHistoryService clipboardHistory, IHyprctl hyprctl, Theme theme)
     {
         _theme = theme;
-        
+
         _tabs =
         [
             new Tab(new ApplicationLauncherTab(hyprctl, Close, theme)),
@@ -120,24 +122,23 @@ public sealed class MainDialog : IDrawableModule
         }
     }
 
-    public Node Draw() => new BoxNode(900)
+    public Node Draw()
     {
-        Direction = Direction.Vertical,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(_theme) with
-        {
-            Padding = 24,
-            Spacing = 8,
-        },
-        Children =
-        [
-            BuildTabs(),
-            ActiveTab.Draw(),
-        ],
-    };
+        _opacity = PrimitivesMath.LerpSmooth(_opacity, IsOpen ? 1 : 0, 24.0f, ModulesCommon.DELTA_TIME);
+        return _opacity > 0.1f
+            ? new BoxNode(900)
+            {
+                Direction = Direction.Vertical,
+                HorizontalAlignment = ItemsAlignment.Stretch,
+                VerticalAlignment = ItemsAlignment.Start,
+                Opacity = _opacity,
+                Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 8 },
+                Children = [BuildTabs(), ActiveTab.Draw()],
+            }
+            : new SpacerNode();
+    }
 
-    private Node BuildTabs() => new BoxNode(height: 46)
+    private BoxNode BuildTabs() => new(height: 46)
     {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
@@ -151,7 +152,7 @@ public sealed class MainDialog : IDrawableModule
         var normal = index == _activeTabIndex ? _theme.Active : _theme.Panel;
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
         tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-        
+
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,

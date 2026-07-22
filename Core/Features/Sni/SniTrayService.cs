@@ -90,15 +90,17 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         string[] registered;
         try
         {
-            var property = await Dbus.CallAsync(
-                _connection, WATCHER_NAME, WATCHER_PATH, PROPERTIES_INTERFACE, "Get",
-                reader => reader.ReadVariantValue(),
-                "ss",
-                (ref MessageWriter writer) =>
-                {
-                    writer.WriteString(WATCHER_INTERFACE);
-                    writer.WriteString("RegisteredStatusNotifierItems");
-                }).WaitAsync(cancellationToken);
+            var property = await Dbus.WaitAsync(
+                Dbus.CallAsync(
+                    _connection, WATCHER_NAME, WATCHER_PATH, PROPERTIES_INTERFACE, "Get",
+                    reader => reader.ReadVariantValue(),
+                    "ss",
+                    (ref MessageWriter writer) =>
+                    {
+                        writer.WriteString(WATCHER_INTERFACE);
+                        writer.WriteString("RegisteredStatusNotifierItems");
+                    }),
+                cancellationToken);
             registered = property.Unwrap().GetArray<string>();
         }
         catch { return []; }
@@ -153,10 +155,12 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         {
             try
             {
-                return await Dbus.CallAsync(
-                    _connection, bus, path, PROPERTIES_INTERFACE, "GetAll",
-                    reader => reader.ReadDictionaryOfStringToVariantValue(),
-                    "s", (ref MessageWriter writer) => writer.WriteString(itemInterface)).WaitAsync(cancellationToken);
+                return await Dbus.WaitAsync(
+                    Dbus.CallAsync(
+                        _connection, bus, path, PROPERTIES_INTERFACE, "GetAll",
+                        reader => reader.ReadDictionaryOfStringToVariantValue(),
+                        "s", (ref MessageWriter writer) => writer.WriteString(itemInterface)),
+                    cancellationToken);
             }
             catch { }
         }
@@ -175,30 +179,34 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         {
             try
             {
-                await Dbus.CallAsync(
-                    _connection, bus, menuPath, MENU_INTERFACE, "AboutToShow", "i",
-                    (ref MessageWriter writer) => writer.WriteInt32(0)).WaitAsync(cancellationToken);
+                await Dbus.WaitAsync(
+                    Dbus.CallAsync(
+                        _connection, bus, menuPath, MENU_INTERFACE, "AboutToShow", "i",
+                        (ref MessageWriter writer) => writer.WriteInt32(0)),
+                    cancellationToken);
             }
             catch { }
 
-            var root = await Dbus.CallAsync(
-                _connection, bus, menuPath, MENU_INTERFACE, "GetLayout",
-                reader =>
-                {
-                    _ = reader.ReadUInt32();
-                    reader.AlignStruct();
-                    var nodeId = reader.ReadInt32();
-                    var properties = reader.ReadDictionaryOfStringToVariantValue();
-                    var children = reader.ReadArrayOfVariantValue();
-                    return new MenuNode(nodeId, properties, children.Select(ParseMenuNode).Where(node => node is not null).Select(node => node!).ToArray());
-                },
-                "iias",
-                (ref MessageWriter writer) =>
-                {
-                    writer.WriteInt32(0);
-                    writer.WriteInt32(-1);
-                    writer.WriteArray(new[] { "label", "enabled", "visible", "children-display", "type" });
-                }).WaitAsync(cancellationToken);
+            var root = await Dbus.WaitAsync(
+                Dbus.CallAsync(
+                    _connection, bus, menuPath, MENU_INTERFACE, "GetLayout",
+                    reader =>
+                    {
+                        _ = reader.ReadUInt32();
+                        reader.AlignStruct();
+                        var nodeId = reader.ReadInt32();
+                        var properties = reader.ReadDictionaryOfStringToVariantValue();
+                        var children = reader.ReadArrayOfVariantValue();
+                        return new MenuNode(nodeId, properties, children.Select(ParseMenuNode).Where(node => node is not null).Select(node => node!).ToArray());
+                    },
+                    "iias",
+                    (ref MessageWriter writer) =>
+                    {
+                        writer.WriteInt32(0);
+                        writer.WriteInt32(-1);
+                        writer.WriteArray(new[] { "label", "enabled", "visible", "children-display", "type" });
+                    }),
+                cancellationToken);
 
             var rows = new List<PopupRowSnapshot>();
             AppendMenuRows(rows, root.Children, 0);

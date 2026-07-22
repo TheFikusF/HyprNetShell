@@ -9,7 +9,7 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class WorldClocksWidget(Theme theme)
 {
     public const int WIDTH = 220;
-    
+
     private readonly Dictionary<string, ModulesCommon.BoxState> _dateCopyButtons = new();
 
     public Node Draw(DateTime now) => new BoxNode(WIDTH)
@@ -28,7 +28,7 @@ internal sealed class WorldClocksWidget(Theme theme)
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
-                Style = new Style { Spacing = 8 },
+                Style = Style.Spacer,
                 Children =
                 [
                     new ImageNode(Icons.Clock, 22, 22, theme.Text),
@@ -45,42 +45,27 @@ internal sealed class WorldClocksWidget(Theme theme)
         ],
     };
 
-    private Node BuildRow(string label, DateTime time)
+    private BoxNode BuildRow(string label, DateTime time)
     {
-        var state = _dateCopyButtons.GetState(label, theme.Panel);
-        var target = state.Hovered
-            ? Color.Lighten(theme.Panel, 0.12f)
-            : theme.Panel;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
-
-        return new BoxNode
+        var state = _dateCopyButtons.GetState(label, theme.Panel).UpdateColor(theme.Panel);
+        return new BoxNode(Style.Empty, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
-            HorizontalAlignment = ItemsAlignment.Spread,
-            VerticalAlignment = ItemsAlignment.Center,
-            Children =
-            [
-                new TextNode(label, theme.TextSize, theme.Text),
+            new TextNode(label, theme.TextSize, theme.Text),
+            new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+            {
+                new TextNode(time.ToString("HH:mm"), theme.TextSize, theme.Text),
                 new BoxNode
                 {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        new TextNode(time.ToString("HH:mm"), theme.TextSize, theme.Text),
-                        new BoxNode
-                        {
-                            IsHovered = state.Hovered,
-                            OnClick = () => Utils.CopyToClipboard($"{label} - {time:HH:mm}"),
-                            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
-                            {
-                                Padding = 4,
-                                BorderRadius = 8,
-                            },
-                            Children = [new ImageNode(Icons.Copy, 14, 14, theme.Text)]
-                        }
-                    ]
+                    IsHovered = state.Hovered,
+                    OnClick = () => Utils.CopyToClipboard($"{label} - {time:HH:mm}"),
+                    Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+                    {
+                        Padding = 4,
+                        BorderRadius = 8,
+                    },
+                    Children = [new ImageNode(Icons.Copy, 14, 14, theme.Text)]
                 }
-            ],
+            }
         };
     }
 

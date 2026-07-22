@@ -9,7 +9,9 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class NotificationsWidget(NotificationService service, Theme theme)
 {
-    public Node Draw(NotificationsSnapshot snapshot) => new BoxNode(CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH)
+    public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
+
+    public Node Draw(NotificationsSnapshot snapshot) => new BoxNode(WIDTH)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -17,24 +19,18 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
         Style = new Style { Spacing = 8 },
         Children =
         [
-            new BoxNode
+            new BoxNode(new Style(), ItemsAlignment.Spread, ItemsAlignment.Center)
             {
-                VerticalAlignment = ItemsAlignment.Center,
-                HorizontalAlignment = ItemsAlignment.Spread,
-                Children =
-                [
-                    new BoxNode
-                    {
-                        VerticalAlignment = ItemsAlignment.Center,
-                        Style = new Style { Spacing = 8 },
-                        Children =
-                        [
-                            new ImageNode(Icons.Bell, 22, 22, theme.Text),
-                            new TextNode("Notifications", 22, theme.Text),
-                        ],
-                    },
+                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                {
+                    new ImageNode(Icons.Bell, 22, 22, theme.Text),
+                    new TextNode("Notifications", 22, theme.Text),
+                },
+                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                {
+                    new TextNode($"{snapshot.Count}", 22, theme.Text),
                     BuildClearButton(snapshot.Count),
-                ]
+                }
             },
             ..BuildRows(snapshot),
         ],

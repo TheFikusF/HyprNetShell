@@ -47,31 +47,24 @@ internal sealed class BatteryModule(
         };
     }
 
-    private BoxNode BuildPopup(BatterySnapshot battery) => new ()
+    private BoxNode BuildPopup(BatterySnapshot battery) => new()
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            BuildPopupRow("Device", battery.Device),
-            BuildPopupRow("Capacity", $"{battery.Percentage}%"),
-            BuildPopupRow("Status", battery.Status),
+            BuildRow("Device", battery.Device),
+            BuildRow("Capacity", $"{battery.Percentage}%"),
+            BuildRow("Status", battery.Status),
         ],
     };
 
-    private Node BuildPopupRow(string label, string value) =>
-        new BoxNode
+    private BoxNode BuildRow(string label, string value) =>
+        new(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Spread,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Spacing = 8 },
-            Children =
-            [
-                new TextNode(label, 14.0f, theme.Text),
-                new TextNode(value, 14.0f, theme.Text),
-            ],
+            new TextNode(label, theme.TextSize, theme.Text),
+            new TextNode(value, theme.TextSize, theme.Text),
         };
 
     private static (Color Left, Color Right) BatteryGradient(int percentage)
@@ -84,13 +77,11 @@ internal sealed class BatteryModule(
             : (green, Color.Lerp(red, green, (charge - 50) / 50.0f));
     }
 
-    public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[
-        percentage switch
-        {
-            <= 10 => 0,
-            <= 35 => 1,
-            <= 70 => 2,
-            _ => 3,
-        }
-    ];
+    public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[percentage switch
+    {
+        <= 10 => 0,
+        <= 35 => 1,
+        <= 70 => 2,
+        _ => 3,
+    }];
 }

@@ -170,4 +170,7 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/trash.svg")]
     public static partial SvgAsset Trash { get; }
+
+    [SvgAsset("assets/icons/lucide/info.svg")]
+    public static partial SvgAsset Info { get; }
 }

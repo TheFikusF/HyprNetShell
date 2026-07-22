@@ -100,7 +100,7 @@ internal sealed class MusicModule(
                 },
                 new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
             ], left: false, padding: new Insets(6, 8, 6, 40),
-            horizontalAlignment: ItemsAlignment.Start, darken: 0.4f
+            horizontalAlignment: ItemsAlignment.Start, darken: 0.5f
         );
 
     private Node BuildSurface(
@@ -118,10 +118,7 @@ internal sealed class MusicModule(
         ItemsAlignment verticalAlignment = ItemsAlignment.Center,
         float darken = 0)
     {
-        var style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
-        {
-            Spacing = 8
-        };
+        var style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with { Spacing = 8 };
 
         if (radius.HasValue)
         {
