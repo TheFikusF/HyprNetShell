@@ -22,6 +22,8 @@ internal sealed class DisplayControlsModule(
     private readonly Dictionary<string, int> _overrides = [];
     private readonly Dictionary<string, ValueUpdateQueue> _updateQueues = [];
     private readonly TemperatureCurveDragState _curveDragState = new();
+    private readonly RefFloat _automaticTemperatureSwitchAnimation =
+        new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
 
     public Node Draw()
     {
@@ -159,18 +161,20 @@ internal sealed class DisplayControlsModule(
     }
 
     private Node BuildAutomaticTemperatureToggle(bool enabled) =>
-        new BoxNode(72, 26)
+        new BoxNode(44, 28)
         {
-            Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => service.SetAutomaticTemperatureEnabled(!enabled),
-            Style = new Style
-            {
-                BackgroundColor = enabled ? theme.Active : theme.Muted,
-                BorderRadius = 8,
-            },
-            Children = [new TextNode(enabled ? "Auto ON" : "Auto OFF", theme.TextSize, theme.Text)],
+            Children =
+            [
+                new SwitchNode(enabled, _automaticTemperatureSwitchAnimation)
+                {
+                    OffTrackColor = theme.Muted,
+                    OnTrackColor = theme.Active,
+                    KnobColor = theme.Text,
+                },
+            ],
         };
 
     private Node BuildManualTemperatureSlider(DisplayControlsSnapshot controls)

@@ -166,8 +166,6 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     {
         var hovered = Layout.Input.Contains(new Rect(x, y, Width, Height));
         var clicked = hovered && Layout.Input.PointerPressed;
-        bool childHovered;
-        bool childClicked;
 
 #if DEBUG_HOVERS
         if (hovered)
@@ -191,14 +189,9 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         var contentWidth = Math.Max(0, Width - HorizontalInset);
         var contentHeight = Math.Max(0, Height - VerticalInset);
 
-        if (Direction == Direction.Horizontal)
-        {
-            (childHovered, childClicked) = DrawHorizontal(renderer, contentX, contentY, contentHeight, contentWidth);
-        }
-        else
-        {
-            (childHovered, childClicked) = DrawVertical(renderer, contentX, contentY, contentHeight, contentWidth);
-        }
+        var (childHovered, childClicked) = Direction == Direction.Horizontal
+            ? DrawHorizontal(renderer, contentX, contentY, contentHeight, contentWidth)
+            : DrawVertical(renderer, contentX, contentY, contentHeight, contentWidth);
 
         foreach (var child in EphemeralChildren)
         {
@@ -214,7 +207,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         DrawDebugBounds(renderer, x, y);
     }
 
-    private void DrawDebugBounds(IRenderApi renderer, int x, int y)
+    private static void DrawDebugBounds(IRenderApi renderer, int x, int y)
     {
 #if DEBUG_BOX_BOUNDS
         renderer.StrokeRect(new Rect(x, y, Width, Height), 1.0f, Color.FromRgb(0, 255, 0));
@@ -283,7 +276,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         return (childHovered, childClicked);
     }
 
-    private void StretchChildWidths(IReadOnlyList<Node> children, int availableWidth)
+    private void StretchChildWidths(Node[] children, int availableWidth)
     {
         var stretchable = children
             .OfType<IWidthBoundNode>()
@@ -297,7 +290,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         var fixedWidth = children
             .Where(child => child is not IWidthBoundNode { AcceptsWidthBound: true })
             .Sum(child => child.Width);
-        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Count - 1));
+        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Length - 1));
         for (var i = 0; i < stretchable.Length; i++)
         {
             var targetWidth = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
@@ -411,15 +404,6 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         }
     }
 
-    private static Insets NormalizeBorderThickness(Insets width)
-    {
-        return new Insets(
-            MathF.Max(0.0f, width.Top),
-            MathF.Max(0.0f, width.Right),
-            MathF.Max(0.0f, width.Bottom),
-            MathF.Max(0.0f, width.Left));
-    }
-
     private int GetSpacing(ItemsAlignment alignment, int available, int childrenSize, int childrenCount)
     {
         if (alignment != ItemsAlignment.Spread || childrenCount < 2)
@@ -432,7 +416,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         return Style.Spacing + extraSpace / (childrenCount - 1);
     }
 
-    private int GetOffset(ItemsAlignment alignment, int available, int childrenSize, int spacing, int childrenCount)
+    private static int GetOffset(ItemsAlignment alignment, int available, int childrenSize, int spacing, int childrenCount)
     {
         var usedSize = childrenSize + spacing * Math.Max(0, childrenCount - 1);
         var extraSpace = Math.Max(0, available - usedSize);

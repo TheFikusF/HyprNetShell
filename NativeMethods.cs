@@ -8,7 +8,7 @@ namespace HyprNetShell;
 
 public sealed class HyprLayer : IDisposable
 {
-    private const float TARGET_FRAMERATE = 60.0f;
+    private const float TARGET_FRAMERATE = 30.0f;
 
     private static readonly TimeSpan TargetFrameDuration = TimeSpan.FromSeconds(1.0 / TARGET_FRAMERATE);
 

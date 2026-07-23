@@ -87,6 +87,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void BeginFrame(int width, int height)
     {
+        _textureRepository.RemoveUnusedPathResources();
+
         Width = Math.Max(width, 1);
         Height = Math.Max(height, 1);
 

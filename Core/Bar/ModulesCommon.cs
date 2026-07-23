@@ -91,7 +91,7 @@ public static class ModulesCommon
         }
     }
 
-    public const float DELTA_TIME = 1.0f / 60.0f;
+    public const float DELTA_TIME = 1.0f / 30.0f;
 
     private static readonly AppIconResolver IconResolver = new();
 

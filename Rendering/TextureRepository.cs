@@ -1,4 +1,8 @@
+#pragma warning disable CA1416
+
 using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Runtime;
 using System.Security.Cryptography;
 using ImageMagick;
 using SkiaSharp;
@@ -12,6 +16,11 @@ public readonly record struct Texture(uint Id);
 public sealed unsafe class TextureRepository : IDisposable
 {
     private const int MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024;
+    private static readonly TimeSpan PathTextureIdleTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan PathTextureCleanupInterval = TimeSpan.FromSeconds(1);
+
+    private static readonly ConcurrentExclusiveSchedulerPair PathImageDecodeScheduler =
+        new(TaskScheduler.Default, maxConcurrencyLevel: 2);
 
     private readonly GL _gl;
     private readonly Dictionary<PathTextureKey, PathTexture> _pathTextures = [];
@@ -20,7 +29,18 @@ public sealed unsafe class TextureRepository : IDisposable
     private readonly Dictionary<RawImageData, Texture> _imageTextures = [];
     private readonly Dictionary<EncodedImageData, Texture> _encodedImageTextures = [];
     private readonly Dictionary<SvgAsset, Texture> _assetTextures = [];
+
+    private readonly Queue<PathTextureKey> _pathTextureKeysBuffer = new();
+
+    private long _lastPathTextureCleanupTimestamp = Stopwatch.GetTimestamp();
     private bool _disposed;
+
+    static TextureRepository()
+    {
+        ResourceLimits.Area = 1_000_000;
+        ResourceLimits.Memory = 32 * 1024 * 1024;
+        ResourceLimits.MaxMemoryRequest = 16 * 1024 * 1024;
+    }
 
     public TextureRepository(GL gl)
     {
@@ -37,6 +57,8 @@ public sealed unsafe class TextureRepository : IDisposable
 
         try
         {
+            RemoveUnusedPathResources();
+
             if (!File.Exists(path))
             {
                 return null;
@@ -47,6 +69,7 @@ public sealed unsafe class TextureRepository : IDisposable
             var key = new PathTextureKey(path, decodeWidth, decodeHeight);
             if (_pathTextures.TryGetValue(key, out var cached) && cached.Modified == modified)
             {
+                _pathTextures[key] = cached with { LastAccessTimestamp = Stopwatch.GetTimestamp() };
                 return cached.Texture;
             }
 
@@ -64,15 +87,66 @@ public sealed unsafe class TextureRepository : IDisposable
                 return null;
             }
 
-            _pendingPathTextures.Remove(key);
+            if (_pendingPathTextures.Remove(key, out var completedDecode))
+            {
+                completedDecode.Cancellation.Dispose();
+            }
+
             var texture = UploadTexture(image.Value.Pixels, image.Value.Width, image.Value.Height);
-            _pathTextures[key] = new PathTexture(texture, modified);
+            _pathTextures[key] = new PathTexture(texture, modified, Stopwatch.GetTimestamp());
             return texture;
         }
         catch
         {
             return null;
         }
+    }
+
+    public void RemoveUnusedPathResources()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var now = Stopwatch.GetTimestamp();
+        if (Stopwatch.GetElapsedTime(_lastPathTextureCleanupTimestamp, now) < PathTextureCleanupInterval)
+        {
+            return;
+        }
+
+        _lastPathTextureCleanupTimestamp = now;
+        var removedResources = false;
+        foreach (var (key, _) in _pathTextures.Where(x =>
+                     Stopwatch.GetElapsedTime(x.Value.LastAccessTimestamp, now) >= PathTextureIdleTimeout))
+        {
+            _pathTextureKeysBuffer.Enqueue(key);
+        }
+
+        while (_pathTextureKeysBuffer.TryDequeue(out var key) && _pathTextures.Remove(key, out var texture))
+        {
+            _gl.DeleteTexture(texture.Texture.Id);
+            removedResources = true;
+        }
+
+        foreach (var (key, _) in _pendingPathTextures.Where(x =>
+                     Stopwatch.GetElapsedTime(x.Value.LastAccessTimestamp, now) >= PathTextureIdleTimeout))
+        {
+            _pathTextureKeysBuffer.Enqueue(key);
+        }
+
+        while (_pathTextureKeysBuffer.TryDequeue(out var key) && _pendingPathTextures.Remove(key, out var pending))
+        {
+            pending.Cancellation.Cancel();
+            pending.Cancellation.Dispose();
+            removedResources = true;
+        }
+
+        if (!removedResources)
+        {
+            return;
+        }
+
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        ResourceLimits.TrimMemory();
     }
 
     public Texture GetTexture(ReadOnlySpan<byte> rgbaPixels, int width, int height)
@@ -162,28 +236,52 @@ public sealed unsafe class TextureRepository : IDisposable
         int decodeWidth,
         int decodeHeight)
     {
-        if (_pendingPathTextures.TryGetValue(key, out var pending) && pending.Modified == modified)
+        if (_pendingPathTextures.TryGetValue(key, out var pending))
         {
-            if (!pending.Decode.IsCompleted)
+            if (pending.Modified == modified)
             {
-                return null;
+                _pendingPathTextures[key] = pending with { LastAccessTimestamp = Stopwatch.GetTimestamp() };
+                if (!pending.Decode.IsCompleted)
+                {
+                    return null;
+                }
+
+                try
+                {
+                    return pending.Decode.GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    return null;
+                }
             }
 
-            try
-            {
-                return pending.Decode.GetAwaiter().GetResult();
-            }
-            catch
-            {
-                return null;
-            }
+            pending.Cancellation.Cancel();
+            pending.Cancellation.Dispose();
+            _pendingPathTextures.Remove(key);
         }
 
+        var cancellation = new CancellationTokenSource();
         _pendingPathTextures[key] = new PendingPathTexture(
             modified,
-            Task.Run(() => LoadImage(path, decodeWidth, decodeHeight)));
+            QueuePathImageDecode(path, decodeWidth, decodeHeight, cancellation.Token),
+            cancellation,
+            Stopwatch.GetTimestamp());
         return null;
     }
+
+    private static Task<DecodedImage?> QueuePathImageDecode(
+        string path,
+        int decodeWidth,
+        int decodeHeight,
+        CancellationToken cancellationToken) => Task.Factory.StartNew(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return LoadImage(path, decodeWidth, decodeHeight);
+        },
+        cancellationToken,
+        TaskCreationOptions.DenyChildAttach,
+        PathImageDecodeScheduler.ConcurrentScheduler);
 
     private Texture UploadTexture(ReadOnlySpan<byte> rgbaPixels, int width, int height)
     {
@@ -239,10 +337,17 @@ public sealed unsafe class TextureRepository : IDisposable
 
     private static DecodedImage? LoadImage(string path, int decodeWidth, int decodeHeight)
     {
-        return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
-               Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
-            ? LoadSvg(path)
-            : LoadRasterImage(path, decodeWidth, decodeHeight);
+        try
+        {
+            return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+                   Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
+                ? LoadSvg(path)
+                : LoadRasterImage(path, decodeWidth, decodeHeight);
+        }
+        finally
+        {
+            ResourceLimits.TrimMemory();
+        }
     }
 
     private static DecodedImage? LoadSvg(string path)
@@ -333,6 +438,12 @@ public sealed unsafe class TextureRepository : IDisposable
         }
 
         _pathTextures.Clear();
+        foreach (var pending in _pendingPathTextures.Values)
+        {
+            pending.Cancellation.Cancel();
+            pending.Cancellation.Dispose();
+        }
+
         _pendingPathTextures.Clear();
         _rawTextures.Clear();
         _imageTextures.Clear();
@@ -342,8 +453,16 @@ public sealed unsafe class TextureRepository : IDisposable
     }
 
     private readonly record struct PathTextureKey(string Path, int Width, int Height);
-    private readonly record struct PathTexture(Texture Texture, DateTime Modified);
-    private readonly record struct PendingPathTexture(DateTime Modified, Task<DecodedImage?> Decode);
+
+    private readonly record struct PathTexture(Texture Texture, DateTime Modified, long LastAccessTimestamp);
+
+    private readonly record struct PendingPathTexture(
+        DateTime Modified,
+        Task<DecodedImage?> Decode,
+        CancellationTokenSource Cancellation,
+        long LastAccessTimestamp);
+
     private readonly record struct RawTextureKey(int Width, int Height, ulong A, ulong B, ulong C, ulong D);
+
     private readonly record struct DecodedImage(int Width, int Height, byte[] Pixels);
 }

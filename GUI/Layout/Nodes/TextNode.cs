@@ -13,25 +13,44 @@ public enum TextWrapping
 
 public class TextNode : Node, IWidthBoundNode
 {
+    private int? _measuredWidth;
+    private int? _measuredHeight;
+    
     private int? _parentMaxWidth;
 
     public override int Width
     {
         get
         {
+            if (_measuredWidth.HasValue)
+            {
+                return _measuredWidth.Value;
+            }
+            
             var lines = GetLines(Layout.Renderer);
-            var contentWidth = lines.Count == 0
-                ? 0
-                : lines.Max(line => Layout.Renderer.MeasureText(line, FontSize));
+            var contentWidth = lines.Count != 0
+                ? lines.Max(line => Layout.Renderer.MeasureText(line, FontSize))
+                : 0;
             var measuredWidth = (int)MathF.Ceiling(contentWidth + Style.Padding.Left + Style.Padding.Right);
             var maxWidth = EffectiveMaxWidth;
-            return maxWidth.HasValue ? Math.Min(measuredWidth, maxWidth.Value) : measuredWidth;
+            _measuredWidth = maxWidth.HasValue ? Math.Min(measuredWidth, maxWidth.Value) : measuredWidth;
+            return _measuredWidth.Value;
         }
     }
 
-    public override int Height =>
-        GetLines(Layout.Renderer).Count * LineHeight +
-        (int)MathF.Ceiling(Style.Padding.Top + Style.Padding.Bottom);
+    public override int Height
+    {
+        get
+        {
+            if (_measuredHeight.HasValue)
+            {
+                return _measuredHeight.Value;
+            }
+            _measuredHeight = GetLines(Layout.Renderer).Count * LineHeight +
+                              (int)MathF.Ceiling(Style.Padding.Top + Style.Padding.Bottom);
+            return _measuredHeight.Value;
+        }
+    }
 
     private string Text { get; }
     private float FontSize { get; }
@@ -74,7 +93,7 @@ public class TextNode : Node, IWidthBoundNode
 
         Text = text;
         FontSize = fontSize;
-        Color = color ?? Color.FromRgb(255, 255, 255);
+        Color = color ?? Color.White;
         MaxWidth = maxWidth;
         Wrapping = wrapping;
         MaxLines = maxLines;
@@ -119,7 +138,7 @@ public class TextNode : Node, IWidthBoundNode
             ? Math.Max(0, maxWidth.Value - (int)MathF.Ceiling(Style.Padding.Left + Style.Padding.Right))
             : (int?)null;
 
-        IReadOnlyList<string> lines = Wrapping switch
+        var lines = Wrapping switch
         {
             TextWrapping.Wrap when availableWidth.HasValue => WrapText(renderer, availableWidth.Value),
             TextWrapping.Ellipsis when availableWidth.HasValue =>
@@ -173,7 +192,6 @@ public class TextNode : Node, IWidthBoundNode
                 if (currentLine.Length > 0)
                 {
                     lines.Add(currentLine);
-                    currentLine = string.Empty;
                 }
 
                 if (Fits(renderer, word, availableWidth))
@@ -218,13 +236,13 @@ public class TextNode : Node, IWidthBoundNode
 
     private string Ellipsize(IRenderApi renderer, string text, int availableWidth, bool force = false)
     {
-        const string ellipsis = "…";
+        const string ELLIPSIS = "…";
         if (!force && Fits(renderer, text, availableWidth))
         {
             return text;
         }
 
-        if (!Fits(renderer, ellipsis, availableWidth))
+        if (!Fits(renderer, ELLIPSIS, availableWidth))
         {
             return string.Empty;
         }
@@ -235,7 +253,7 @@ public class TextNode : Node, IWidthBoundNode
         while (low < high)
         {
             var middle = (low + high + 1) / 2;
-            var candidate = string.Concat(elements.Take(middle)).TrimEnd() + ellipsis;
+            var candidate = string.Concat(elements.Take(middle)).TrimEnd() + ELLIPSIS;
             if (Fits(renderer, candidate, availableWidth))
             {
                 low = middle;
@@ -246,7 +264,7 @@ public class TextNode : Node, IWidthBoundNode
             }
         }
 
-        return string.Concat(elements.Take(low)).TrimEnd() + ellipsis;
+        return string.Concat(elements.Take(low)).TrimEnd() + ELLIPSIS;
     }
 
     private string Truncate(IRenderApi renderer, string text, int availableWidth)

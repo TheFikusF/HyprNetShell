@@ -3,20 +3,22 @@ using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme theme) : IMainDialogTab
 {
-    private readonly ModulesCommon.BoxState _toggleState = new();
+    private readonly RefFloat _slideshowSwitchAnimation = new(wallpapers.SlideshowEnabled ? 1.0f : 0.0f);
     private readonly ModulesCommon.BoxState _decreaseState = new();
     private readonly ModulesCommon.BoxState _increaseState = new();
-    private int _selectedIndex;
 
     public string Title => "Configuration";
     public SvgAsset Icon => Icons.Settings;
 
-    public void Activate() => _selectedIndex = 0;
+    public void Activate()
+    {
+    }
 
     public void HandleTextInput(string text)
     {
@@ -28,30 +30,10 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme 
 
     public void MoveSelection(SelectionDirection direction)
     {
-        _selectedIndex = direction switch
-        {
-            SelectionDirection.Up => 0,
-            SelectionDirection.Down when _selectedIndex == 0 => 1,
-            SelectionDirection.Left when _selectedIndex > 0 => 1,
-            SelectionDirection.Right when _selectedIndex > 0 => 2,
-            _ => _selectedIndex,
-        };
     }
 
     public void ActivateSelection()
     {
-        switch (_selectedIndex)
-        {
-            case 0:
-                wallpapers.SetSlideshowEnabled(!wallpapers.SlideshowEnabled);
-                break;
-            case 1:
-                wallpapers.SetDurationMinutes(wallpapers.DurationMinutes - 1);
-                break;
-            case 2:
-                wallpapers.SetDurationMinutes(wallpapers.DurationMinutes + 1);
-                break;
-        }
     }
 
     public Node Draw() => new BoxNode
@@ -68,48 +50,43 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme 
         ],
     };
 
-    private Node BuildSlideshowToggle()
+    private BoxNode BuildSlideshowToggle()
     {
         var enabled = wallpapers.SlideshowEnabled;
-        var state = _toggleState.UpdateColor(_selectedIndex == 0 ? theme.Active : theme.Panel);
-        return new BoxNode(height: 64)
+        return new (height: 64)
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => wallpapers.SetSlideshowEnabled(!enabled),
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
+                Padding = new Insets(18, 0),
                 BorderRadius = 8,
-                BorderWidth = _selectedIndex == 0 ? theme.BorderWidth : 0,
+                BorderWidth = 0,
             },
             Children =
             [
                 new TextNode("Wallpaper slideshow", 16, theme.Text),
-                new BoxNode(74, 28)
+                new SwitchNode(enabled, _slideshowSwitchAnimation)
                 {
-                    HorizontalAlignment = ItemsAlignment.Center,
-                    VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style
-                    {
-                        BackgroundColor = enabled ? theme.Active : theme.Muted,
-                        BorderRadius = 8,
-                    },
-                    Children = [new TextNode(enabled ? "ON" : "OFF", theme.TextSize, theme.Text)],
+                    OffTrackColor = theme.Muted,
+                    OnTrackColor = theme.Active,
+                    KnobColor = theme.Text,
                 },
             ],
         };
     }
 
-    private Node BuildDurationControl()
+    private BoxNode BuildDurationControl()
     {
         var duration = wallpapers.DurationMinutes;
-        return new BoxNode(height: 78)
+        return new (height: 78)
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
+                Padding = new Insets(18, 0),
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
@@ -131,24 +108,24 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme 
                     Style = new Style { Spacing = 8 },
                     Children =
                     [
-                        BuildDurationButton("-", -1, 1, _decreaseState),
+                        BuildDurationButton("-", -1, _decreaseState),
                         new BoxNode(92, 34)
                         {
                             HorizontalAlignment = ItemsAlignment.Center,
                             VerticalAlignment = ItemsAlignment.Center,
                             Children = [new TextNode($"{duration} min", 16, theme.Text)],
                         },
-                        BuildDurationButton("+", 1, 2, _increaseState),
+                        BuildDurationButton("+", 1, _increaseState),
                     ],
                 },
             ],
         };
     }
 
-    private Node BuildDurationButton(string label, int delta, int index, ModulesCommon.BoxState buttonState)
+    private BoxNode BuildDurationButton(string label, int delta, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(_selectedIndex == index ? theme.Active : theme.Muted);
-        return new BoxNode(38, 34)
+        var state = buttonState.UpdateColor(theme.Muted);
+        return new (38, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
@@ -158,7 +135,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme 
             {
                 Padding = 0,
                 BorderRadius = 8,
-                BorderWidth = _selectedIndex == index ? theme.BorderWidth : 0,
+                BorderWidth = 0,
             },
             Children = [new TextNode(label, 20, theme.Text)],
         };
