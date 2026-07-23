@@ -55,6 +55,7 @@ public sealed class StatusBar : IDisposable
     private readonly TrayModule _trayModule;
     private readonly PowerModule _powerModule;
     private readonly ClipboardHistoryService _clipboardHistory = new();
+    private readonly WallpaperModuleService _wallpaperService;
     private readonly MainDialog _mainDialog;
     private readonly SniTrayService _trayService = new();
 
@@ -66,8 +67,8 @@ public sealed class StatusBar : IDisposable
     private DateTime _lastRefresh = DateTime.MinValue;
     private Task? _refreshTask;
 
-    private ICollection<IDrawableModule> _leftModules;
-    private ICollection<IDrawableModule> _rightModules;
+    private readonly ICollection<IDrawableModule> _leftModules;
+    private readonly ICollection<IDrawableModule> _rightModules;
 
     public StatusBar(IRenderApi renderer, int barHeight)
     {
@@ -76,7 +77,8 @@ public sealed class StatusBar : IDisposable
         _notificationService = new NotificationService(_hyprland, _hyprctl);
         _superKey = new SuperKeyStateService(_hyprctl);
         _displayControlsService = new DisplayControlsModuleService(_hyprctl);
-        _mainDialog = new MainDialog(_clipboardHistory, _hyprctl, Theme.Default);
+        _wallpaperService = new WallpaperModuleService(_hyprctl);
+        _mainDialog = new MainDialog(_clipboardHistory, _hyprctl, _wallpaperService, Theme.Default);
         _dataServices =
         [
             _notificationService,
@@ -130,11 +132,11 @@ public sealed class StatusBar : IDisposable
         DrawLeftRight();
         DrawCenter();
         DrawNotificationPopups();
+        DrawMainDialog();
+    }
 
-        if (_mainDialog.IsOpen)
-        {
-        }
-
+    private void DrawMainDialog()
+    {
         using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
         layout.AddNode(_mainDialog.Draw());
     }
@@ -216,6 +218,7 @@ public sealed class StatusBar : IDisposable
         _clipboardHistory.Dispose();
         _musicService.Dispose();
         _trayService.Dispose();
+        _wallpaperService.Dispose();
         _hyprctl.Dispose();
     }
 }

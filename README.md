@@ -33,6 +33,7 @@ ninja
 dotnet-sdk
 wireplumber (for the `wpctl` audio controls)
 bluez-utils (for the `bluetoothctl` device controls)
+hyprpaper (wallpaper daemon and slideshow)
 xkbcommon (for keyboard-layout-aware launcher input)
 socat (for Hyprland hotkey notifications)
 wl-clipboard (Wayland clipboard transport; history is managed in-process)
@@ -85,6 +86,11 @@ Run this inside Hyprland or another compositor implementing `zwlr_layer_shell_v1
 
 The built-in Hyprland key watcher registers `SUPER+R` to toggle the application launcher and removes the
 binding during shutdown.
+
+The bar starts `hyprpaper` and uses images under `~/Pictures/wp` for its wallpaper picker and slideshow.
+Slideshow state and its interval (10 minutes by default) can be changed in the main dialog's Configuration
+tab. These settings are stored in `$XDG_CONFIG_HOME/hyprnetshell/wallpapers.json` (normally
+`~/.config/hyprnetshell/wallpapers.json`).
 
 Runtime messages and full exception details are written to stderr and to
 `$XDG_STATE_HOME/hyprnetshell/hyprnetshell.log` (normally

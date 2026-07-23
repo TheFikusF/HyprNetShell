@@ -14,6 +14,7 @@ public sealed class MainDialog : IDrawableModule
     {
         private readonly IMainDialogTab _tab;
         public ModulesCommon.BoxState BoxState { get; }
+        public IMainDialogTab InternalTab => _tab;
 
         public Tab(IMainDialogTab tab)
         {
@@ -58,7 +59,11 @@ public sealed class MainDialog : IDrawableModule
 
     public bool IsOpen { get; private set; }
 
-    internal MainDialog(ClipboardHistoryService clipboardHistory, IHyprctl hyprctl, Theme theme)
+    internal MainDialog(
+        ClipboardHistoryService clipboardHistory,
+        IHyprctl hyprctl,
+        WallpaperModuleService wallpapers,
+        Theme theme)
     {
         _theme = theme;
 
@@ -67,7 +72,8 @@ public sealed class MainDialog : IDrawableModule
             new Tab(new ApplicationLauncherTab(hyprctl, Close, theme)),
             new Tab(new CalculatorTab()),
             new Tab(new ClipboardManagerTab(clipboardHistory, Close, theme)),
-            new Tab(new WallpapersTab(hyprctl, Close, theme)),
+            new Tab(new WallpapersTab(wallpapers, Close, theme)),
+            new Tab(new ConfigurationTab(wallpapers, theme)),
         ];
 
         _actions = new Dictionary<int, Action>
@@ -153,7 +159,7 @@ public sealed class MainDialog : IDrawableModule
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
         tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
 
-        return new BoxNode
+        return new BoxNode(tab.InternalTab is ConfigurationTab ? 46 : null)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
@@ -165,11 +171,9 @@ public sealed class MainDialog : IDrawableModule
                 BorderRadius = 8,
                 BorderWidth = index == _activeTabIndex ? _theme.BorderWidth : 0,
             },
-            Children =
-            [
-                new ImageNode(tab.Icon, 18, 18, _theme.Text),
-                new TextNode(tab.Title, 15, _theme.Text),
-            ],
+            Children = tab.InternalTab is ConfigurationTab
+                ? [new ImageNode(tab.Icon, 18, 18, _theme.Text)]
+                : [new ImageNode(tab.Icon, 18, 18, _theme.Text), new TextNode(tab.Title, 15, _theme.Text)],
         };
     }
 

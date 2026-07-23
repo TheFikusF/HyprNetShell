@@ -98,6 +98,9 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/wallpaper.svg")]
     public static partial SvgAsset Wallpaper { get; }
 
+    [SvgAsset("assets/icons/lucide/settings.svg")]
+    public static partial SvgAsset Settings { get; }
+
     [SvgAsset("assets/icons/lucide/power.svg")]
     public static partial SvgAsset Power { get; }
 
@@ -155,6 +158,12 @@ public static partial class Icons
     
     [SvgAsset("assets/icons/lucide/calendar-days.svg")]
     public static partial SvgAsset Calendar { get; }
+
+    [SvgAsset("assets/icons/lucide/chevron-left.svg")]
+    public static partial SvgAsset ChevronLeft { get; }
+
+    [SvgAsset("assets/icons/lucide/chevron-right.svg")]
+    public static partial SvgAsset ChevronRight { get; }
     
     [SvgAsset("assets/icons/lucide/clock.svg")]
     public static partial SvgAsset Clock { get; }

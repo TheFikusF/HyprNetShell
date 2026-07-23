@@ -1,5 +1,5 @@
 using HyprNetShell.Core.Assets;
-using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -7,17 +7,12 @@ using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab
+internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action closeDialog, Theme theme) : IMainDialogTab
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
     private const int ROWS = 4;
     private const int VISIBLE_WALLPAPER_COUNT = COLUMNS * ROWS;
-
-    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".avif", ".bmp", ".gif", ".heic", ".jpeg", ".jpg", ".jxl", ".png", ".tif", ".tiff", ".webp",
-    };
 
     private readonly Lock _stateLock = new();
     private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
@@ -140,7 +135,7 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog, Theme 
             path = _filteredWallpapers[_selectedIndex].Path;
         }
 
-        _ = hyprctl.SetWallpaperAsync(path);
+        _ = wallpapers.SetWallpaperAsync(path);
         closeDialog();
     }
 
@@ -256,10 +251,14 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog, Theme 
 
     private async Task LoadWallpapersAsync(CancellationTokenSource cancellation)
     {
-        IReadOnlyList<Wallpaper> wallpapers;
+        IReadOnlyList<Wallpaper> loadedWallpapers;
         try
         {
-            wallpapers = await Task.Run(() => LoadWallpapers(cancellation.Token), cancellation.Token);
+            loadedWallpapers = await Task.Run(
+                () => wallpapers.GetWallpaperPaths(cancellation.Token)
+                    .Select(path => new Wallpaper(path, Path.GetFileName(path)))
+                    .ToArray(),
+                cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -273,50 +272,9 @@ internal sealed class WallpapersTab(IHyprctl hyprctl, Action closeDialog, Theme 
                 return;
             }
 
-            _wallpapers = wallpapers;
+            _wallpapers = loadedWallpapers;
             _isLoading = false;
             ApplyFilterLocked();
-        }
-    }
-
-    private static IReadOnlyList<Wallpaper> LoadWallpapers(CancellationToken cancellationToken)
-    {
-        var directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Pictures",
-            "wp");
-        if (!Directory.Exists(directory))
-        {
-            return [];
-        }
-
-        try
-        {
-            var wallpapers = new List<Wallpaper>();
-            foreach (var path in Directory.EnumerateFiles(directory, "*", new EnumerationOptions
-                     {
-                         IgnoreInaccessible = true,
-                         RecurseSubdirectories = true,
-                     }))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (SupportedExtensions.Contains(Path.GetExtension(path)))
-                {
-                    wallpapers.Add(new Wallpaper(Path.GetFullPath(path), Path.GetFileName(path)));
-                }
-            }
-
-            return wallpapers
-                .OrderBy(wallpaper => wallpaper.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToArray();
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            return [];
         }
     }
 

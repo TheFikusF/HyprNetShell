@@ -8,16 +8,29 @@ internal sealed class CalendarWidget(Theme theme)
 {
     public const int WIDTH = 360;
 
+    private readonly ModulesCommon.BoxState _previousMonthState = new();
+    private readonly ModulesCommon.BoxState _nextMonthState = new();
+    private DateTime? _displayedMonth;
+    private DateTime? _lastCurrentMonth;
+
     public Node Draw(DateTime now)
     {
-        var first = new DateTime(now.Year, now.Month, 1);
-        var days = DateTime.DaysInMonth(now.Year, now.Month);
+        var currentMonth = new DateTime(now.Year, now.Month, 1);
+        if (_displayedMonth is null || _displayedMonth == _lastCurrentMonth)
+        {
+            _displayedMonth = currentMonth;
+        }
+
+        _lastCurrentMonth = currentMonth;
+        var first = _displayedMonth.Value;
+        var days = DateTime.DaysInMonth(first.Year, first.Month);
         var offset = ((int)first.DayOfWeek + 6) % 7;
+        var today = first == currentMonth ? now.Day : 0;
 
         return new BoxNode(WIDTH)
         {
             Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
                 BorderRadius = 8,
@@ -25,14 +38,48 @@ internal sealed class CalendarWidget(Theme theme)
             },
             Children =
             [
-                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-                {
-                    new ImageNode(Icons.Calendar, 22, 22, theme.Text),
-                    new TextNode(now.ToString("MMMM yyyy"), 22, theme.Text)
-                },
+                BuildMonthHeader(first),
                 BuildWeekHeader(),
-                ..BuildWeeks(offset, days, now.Day),
+                ..BuildWeeks(offset, days, today),
             ],
+        };
+    }
+
+    private Node BuildMonthHeader(DateTime month) => new BoxNode
+    {
+        HorizontalAlignment = ItemsAlignment.Spread,
+        VerticalAlignment = ItemsAlignment.Center,
+        Children =
+        [
+            BuildMonthButton(Icons.ChevronLeft, -1, _previousMonthState),
+            new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+            {
+                new ImageNode(Icons.Calendar, 22, 22, theme.Text),
+                new TextNode(month.ToString("MMMM yyyy"), 22, theme.Text),
+            },
+            BuildMonthButton(Icons.ChevronRight, 1, _nextMonthState),
+        ],
+    };
+
+    private Node BuildMonthButton(
+        Rendering.SvgAsset icon,
+        int monthDelta,
+        ModulesCommon.BoxState buttonState)
+    {
+        var state = buttonState.UpdateColor(theme.Panel);
+        return new BoxNode(34, 34)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = () => _displayedMonth = (_displayedMonth ?? DateTime.Today).AddMonths(monthDelta),
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                Padding = 0,
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children = [new ImageNode(icon, 20, 20, theme.Text)],
         };
     }
 
@@ -45,7 +92,7 @@ internal sealed class CalendarWidget(Theme theme)
 
     private IEnumerable<Node> BuildWeeks(int offset, int days, int today)
     {
-        var cells = Enumerable.Repeat(0, offset).Concat(Enumerable.Range(1, days)).ToArray();
+        var cells = Enumerable.Repeat(-1, offset).Concat(Enumerable.Range(1, days)).ToArray();
         foreach (var week in cells.Chunk(7))
         {
             yield return new BoxNode
@@ -54,8 +101,8 @@ internal sealed class CalendarWidget(Theme theme)
                 Children =
                 [
                     ..week
-                        .Concat(Enumerable.Repeat(0, 7 - week.Length))
-                        .Select(day => BuildCell(day == 0 ? "" : day.ToString(), day == today)),
+                        .Concat(Enumerable.Repeat(-1, 7 - week.Length))
+                        .Select(day => BuildCell(day == -1 ? "" : day.ToString(), day == today)),
                 ],
             };
         }
