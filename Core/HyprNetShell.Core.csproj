@@ -20,6 +20,10 @@
 
     <ItemGroup>
         <AdditionalFiles Include="../assets/icons/**/*.svg" />
+        <EmbeddedResource Include="../assets/clock.png" LogicalName="HyprNetShell.Assets.Clock.png" />
+        <EmbeddedResource Include="../assets/clock_2.png" LogicalName="HyprNetShell.Assets.Clock_2.png" />
+        <EmbeddedResource Include="../assets/clock_3.png" LogicalName="HyprNetShell.Assets.Clock_3.png" />
+        <EmbeddedResource Include="../assets/clock_4.png" LogicalName="HyprNetShell.Assets.Clock_4.png" />
     </ItemGroup>
 
     <Target Name="BuildDependencies" BeforeTargets="ResolveAssemblyReferences">

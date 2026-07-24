@@ -339,7 +339,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _font.DrawText(text, x, y, fontSize, charDistance, color);
     }
 
-    public void DrawImage(string imagePath, Rect rect, Color multiplicativeColor, bool loadAsync = false)
+    public void DrawImage(
+        string imagePath,
+        Rect rect,
+        Color multiplicativeColor,
+        bool loadAsync = false,
+        float rotationRadians = 0)
     {
         if (rect.Width <= 0 || rect.Height <= 0 || string.IsNullOrWhiteSpace(imagePath))
         {
@@ -357,10 +362,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-            _textureLocation, _textureColorLocation);
+            _textureLocation, _textureColorLocation, rotationRadians);
     }
 
-    public void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor)
+    public void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
         {
@@ -369,10 +374,14 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
         var texture = _textureRepository.GetTexture(image);
         DrawTexture(texture, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-            _textureLocation, _textureColorLocation);
+            _textureLocation, _textureColorLocation, rotationRadians);
     }
 
-    public void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor)
+    public void DrawImage(
+        EncodedImageData image,
+        Rect rect,
+        Color multiplicativeColor,
+        float rotationRadians = 0)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
         {
@@ -383,7 +392,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         if (texture is not null)
         {
             DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-                _textureLocation, _textureColorLocation);
+                _textureLocation, _textureColorLocation, rotationRadians);
         }
     }
 
@@ -394,20 +403,25 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         uint program,
         int viewportLocation,
         int textureLocation,
-        int colorLocation)
+        int colorLocation,
+        float rotationRadians = 0)
     {
         var x = rect.X;
         var y = rect.Y;
         var width = rect.Width;
         var height = rect.Height;
+        var topLeft = RotatePoint(x, y, rect, rotationRadians);
+        var topRight = RotatePoint(x + width, y, rect, rotationRadians);
+        var bottomRight = RotatePoint(x + width, y + height, rect, rotationRadians);
+        var bottomLeft = RotatePoint(x, y + height, rect, rotationRadians);
         Span<float> vertices =
         [
-            x, y, 0.0f, 0.0f,
-            x + width, y, 1.0f, 0.0f,
-            x + width, y + height, 1.0f, 1.0f,
-            x, y, 0.0f, 0.0f,
-            x + width, y + height, 1.0f, 1.0f,
-            x, y + height, 0.0f, 1.0f,
+            topLeft.X, topLeft.Y, 0.0f, 0.0f,
+            topRight.X, topRight.Y, 1.0f, 0.0f,
+            bottomRight.X, bottomRight.Y, 1.0f, 1.0f,
+            topLeft.X, topLeft.Y, 0.0f, 0.0f,
+            bottomRight.X, bottomRight.Y, 1.0f, 1.0f,
+            bottomLeft.X, bottomLeft.Y, 0.0f, 1.0f,
         ];
 
         _gl.UseProgram(program);
@@ -431,7 +445,25 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
     }
 
-    public void DrawImage(SvgAsset asset, Rect rect, Color color)
+    private static (float X, float Y) RotatePoint(float x, float y, Rect rect, float radians)
+    {
+        if (radians == 0)
+        {
+            return (x, y);
+        }
+
+        var centerX = rect.X + rect.Width * 0.5f;
+        var centerY = rect.Y + rect.Height * 0.5f;
+        var offsetX = x - centerX;
+        var offsetY = y - centerY;
+        var cosine = MathF.Cos(radians);
+        var sine = MathF.Sin(radians);
+        return (
+            centerX + offsetX * cosine - offsetY * sine,
+            centerY + offsetX * sine + offsetY * cosine);
+    }
+
+    public void DrawImage(SvgAsset asset, Rect rect, Color color, float rotationRadians = 0)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
         {
@@ -445,7 +477,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         DrawTexture(texture.Value, rect, color, _svgTextureProgram, _svgTextureViewportLocation,
-            _svgTextureLocation, _svgTextureColorLocation);
+            _svgTextureLocation, _svgTextureColorLocation, rotationRadians);
     }
 
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
