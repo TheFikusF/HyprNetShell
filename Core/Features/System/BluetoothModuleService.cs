@@ -9,6 +9,25 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 {
     public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
     {
+        var controllerOutput = await CommandRunner.TryReadAsync(
+            "bluetoothctl",
+            "show",
+            TimeSpan.FromMilliseconds(700),
+            cancellationToken);
+
+        if (controllerOutput is null)
+        {
+            state.Bluetooth = BluetoothSnapshot.Empty;
+            return;
+        }
+
+        var powered = PoweredLine().IsMatch(controllerOutput);
+        if (!powered)
+        {
+            state.Bluetooth = new BluetoothSnapshot(true, false, []);
+            return;
+        }
+
         var devicesOutput = await CommandRunner.TryReadAsync(
             "bluetoothctl",
             "devices Paired",
@@ -17,7 +36,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
         if (devicesOutput is null)
         {
-            state.Bluetooth = BluetoothSnapshot.Empty;
+            state.Bluetooth = new BluetoothSnapshot(true, true, []);
             return;
         }
 
@@ -33,8 +52,16 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
         state.Bluetooth = new BluetoothSnapshot(
             true,
+            true,
             devices.OrderByDescending(device => device.Connected).ThenBy(device => device.Name).ToArray());
     }
+
+    internal static Task SetPoweredAsync(bool powered) =>
+        CommandRunner.TryRunAsync(
+            "bluetoothctl",
+            ["power", powered ? "on" : "off"],
+            TimeSpan.FromSeconds(3),
+            CancellationToken.None);
 
     internal static Task SetConnectedAsync(string address, bool connected) =>
         CommandRunner.TryRunAsync(
@@ -87,6 +114,9 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
     [GeneratedRegex(@"^\s*Connected:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ConnectedLine();
+
+    [GeneratedRegex(@"^\s*Powered:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PoweredLine();
 
     [GeneratedRegex(@"^\s*Battery Percentage:\s*(?:0x[0-9A-Fa-f]+\s+)?\((?<percentage>\d+)\)\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BatteryLine();

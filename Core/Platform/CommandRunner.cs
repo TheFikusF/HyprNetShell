@@ -4,6 +4,29 @@ namespace HyprNetShell.Core.Platform;
 
 internal static class CommandRunner
 {
+    public static void TryStart(string fileName, IEnumerable<string> arguments)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            Process.Start(startInfo)?.Dispose();
+        }
+        catch
+        {
+            // Optional desktop commands may not be installed.
+        }
+    }
+
     public static async Task<string?> TryReadAsync(
         string fileName,
         string arguments,

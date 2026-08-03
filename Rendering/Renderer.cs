@@ -463,7 +463,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             centerY + offsetX * sine + offsetY * cosine);
     }
 
-    public void DrawImage(SvgAsset asset, Rect rect, Color color, float rotationRadians = 0)
+    public void DrawImage(
+        SvgAsset asset,
+        Rect rect,
+        Color? color,
+        float rotationRadians = 0,
+        float opacity = 1)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
         {
@@ -476,8 +481,17 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        DrawTexture(texture.Value, rect, color, _svgTextureProgram, _svgTextureViewportLocation,
-            _svgTextureLocation, _svgTextureColorLocation, rotationRadians);
+        var renderedColor = (color ?? Color.White).PushOpacity(opacity);
+        if (color is null)
+        {
+            DrawTexture(texture.Value, rect, renderedColor, _textureProgram, _textureViewportLocation,
+                _textureLocation, _textureColorLocation, rotationRadians);
+        }
+        else
+        {
+            DrawTexture(texture.Value, rect, renderedColor, _svgTextureProgram, _svgTextureViewportLocation,
+                _svgTextureLocation, _svgTextureColorLocation, rotationRadians);
+        }
     }
 
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)

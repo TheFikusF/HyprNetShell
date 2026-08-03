@@ -75,7 +75,8 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
                 _filteredApplications.Count);
-            
+
+            NormalizeActionSelection();
             return;
         }
 
@@ -84,8 +85,14 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
             return;
         }
 
-        var state = _buttonsState[_selectedIndex];
+        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
         var desktopEntry = _filteredApplications[_selectedIndex];
+        if (desktopEntry.Actions.Count == 0)
+        {
+            state.ActionIndex = 0;
+            _selectedColumn = Column.Default;
+            return;
+        }
 
         if (_selectedColumn == Column.Actions)
         {
@@ -110,9 +117,16 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         }
 
         var application = _filteredApplications[_selectedIndex];
-        var state = _buttonsState[_selectedIndex];
-        _launching = true;
+        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
+        if (_selectedColumn == Column.Actions &&
+            (state.ActionIndex < 0 || state.ActionIndex >= application.Actions.Count))
+        {
+            _selectedColumn = Column.Default;
+            state.ActionIndex = 0;
+            return;
+        }
 
+        _launching = true;
         _ = _selectedColumn == Column.Default 
             ? LaunchAsync(application) 
             : LaunchActionAsync(application, application.Actions[state.ActionIndex]);
@@ -218,6 +232,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                     OnClick = () =>
                     {
                         _selectedIndex = index;
+                        _selectedColumn = Column.Default;
                         ActivateSelection();
                     },
                     IsHovered = state.Hovered,
@@ -300,6 +315,28 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;
+        _selectedColumn = Column.Default;
+    }
+
+    private void NormalizeActionSelection()
+    {
+        if (_selectedIndex < 0 || _selectedIndex >= _filteredApplications.Count)
+        {
+            _selectedColumn = Column.Default;
+            return;
+        }
+
+        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
+        var actionCount = _filteredApplications[_selectedIndex].Actions.Count;
+        if (actionCount == 0)
+        {
+            state.ActionIndex = 0;
+            _selectedColumn = Column.Default;
+        }
+        else if (state.ActionIndex < 0 || state.ActionIndex >= actionCount)
+        {
+            state.ActionIndex = 0;
+        }
     }
 
     private static DesktopApplication[] LoadApplications()

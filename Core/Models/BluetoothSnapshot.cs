@@ -9,7 +9,8 @@ public sealed record BluetoothDeviceSnapshot(
 
 public sealed record BluetoothSnapshot(
     bool Available,
+    bool Powered,
     IReadOnlyList<BluetoothDeviceSnapshot> Devices)
 {
-    public static BluetoothSnapshot Empty { get; } = new(false, []);
+    public static BluetoothSnapshot Empty { get; } = new(false, false, []);
 }

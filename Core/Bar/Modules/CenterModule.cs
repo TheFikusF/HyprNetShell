@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -50,9 +51,23 @@ internal sealed class CenterModule : IDrawableModule
 
         return _node.Draw([
                 new BoxNode(400 - 27 - 27)
-                    { BuildDateBadge(now), BuildTimeWidget(now), BuildNotificationsBadge(snapshot) }
+                {
+                    BuildDateBadge(now), new BoxNode(148, 32)
+                    {
+                        Direction = Direction.Horizontal,
+                        HorizontalAlignment = ItemsAlignment.Center,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, false, false) with
+                        {
+                            Padding = new Insets(6, 4),
+                            Spacing = 6,
+                        }
+                    },
+                    BuildTimeWidget(now), BuildNotificationsBadge(snapshot)
+                }
             ],
             () => BuildPopup(now, snapshot));
+        // () => new SpacerNode());
     }
 
     private Node BuildDateBadge(DateTime now) => new BoxNode
@@ -65,55 +80,96 @@ internal sealed class CenterModule : IDrawableModule
 
     private Node BuildTimeWidget(DateTime now)
     {
+        const int CLOCK_SIZE = 160;
+        const int SUN_SIZE = 48;
+        const int SUN_ORBIT_RADIUS = 67;
+        const int OVERLAY_CENTER_X = 80;
+        const int OVERLAY_CENTER_Y = -38;
         var targetRotation = _node.IsHovered ? DayRotation(now) + (float)Math.PI : DayRotation(now);
         _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, ModulesCommon.DELTA_TIME);
-        return new BoxNode(148, 32)
+        // _clockRotation += 0.05f;
+        return new BoxNode(CLOCK_SIZE + 6)
         {
-            Direction = Direction.Horizontal,
+            Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) /2,
+            IgnoreLayout = true,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, false, false) with
-            {
-                Padding = new Insets(6, 4),
-                Spacing = 6,
-            },
             OnClick = OpenClocks,
             Children =
             [
-                new BoxNode
+                new BoxNode()
                 {
-                    Style = new Style { Padding = new Insets(-96, 0, 0, 0) },
                     IgnoreLayout = true,
+                    Top = OVERLAY_CENTER_Y - CLOCK_SIZE / 2,
                     Children =
                     [
                         new BoxNode(new Style
-                            {
-                                BorderColor = Color.White,
-                                BorderWidth = _theme.BorderWidth,
-                                BorderRadius = 999,
-                                BackgroundColor = Color.Black
-                            })
-                            { new ImageNode(ClockImage, 160, 160) { RotationRadians = _clockRotation } }
+                        {
+                            BorderColor = Color.White,
+                            BorderWidth = _theme.BorderWidth,
+                            BorderRadius = 999,
+                            BackgroundColor = Color.Black
+                        })
+                        {
+                            new ImageNode(OtherAssets.ClockFace, CLOCK_SIZE, CLOCK_SIZE)
+                                { RotationRadians = _clockRotation }
+                        }
                     ]
                 },
-                new BoxNode
+                new BoxNode(CLOCK_SIZE + 6, CLOCK_SIZE + 6)
                 {
-                    Style = new Style { Padding = new Insets(-96 - 10, 0, 0, 0) },
                     IgnoreLayout = true,
+                    Top = OVERLAY_CENTER_Y - CLOCK_SIZE / 2,
                     Children =
                     [
-                        new ImageNode(SunMoonImage, 180, 180) { RotationRadians = _clockRotation }
+                        new BoxNode(SUN_SIZE, SUN_SIZE)
+                        {
+                            HorizontalAlignment = ItemsAlignment.Center,
+                            VerticalAlignment = ItemsAlignment.Center,
+                            IgnoreLayout = true,
+                            Left = (OVERLAY_CENTER_X + 3) - SUN_SIZE / 2 +
+                                   (int)(Math.Cos(_clockRotation) * SUN_ORBIT_RADIUS),
+                            Top = (OVERLAY_CENTER_X + 3) - SUN_SIZE / 2 +
+                                  (int)(Math.Sin(_clockRotation) * SUN_ORBIT_RADIUS),
+                            Children =
+                            [
+                                new ImageNode(OtherAssets.Sun, SUN_SIZE, SUN_SIZE)
+                                {
+                                    RotationRadians = _clockRotation - (float)Math.PI * 0.5f +
+                                                      (float)Math.Sin(GradientOffset()) * 0.15f
+                                }
+                            ]
+                        },
+
+                        new BoxNode(SUN_SIZE, SUN_SIZE)
+                        {
+                            HorizontalAlignment = ItemsAlignment.Center,
+                            VerticalAlignment = ItemsAlignment.Center,
+                            IgnoreLayout = true,
+                            Left = (OVERLAY_CENTER_X + 3) - SUN_SIZE / 2 +
+                                   (int)(Math.Cos(_clockRotation + Math.PI) * SUN_ORBIT_RADIUS),
+                            Top = (OVERLAY_CENTER_X + 3) - SUN_SIZE / 2 +
+                                  (int)(Math.Sin(_clockRotation + Math.PI) * SUN_ORBIT_RADIUS),
+                            Children =
+                            [
+                                new ImageNode(OtherAssets.Moon, SUN_SIZE, SUN_SIZE)
+                                {
+                                    RotationRadians = _clockRotation + (float)Math.PI * 0.5f +
+                                                      (float)Math.Sin(GradientOffset()) * 0.15f
+                                }
+                            ]
+                        }
                     ]
                 },
                 new BoxNode
                 {
-                    Style = new Style { Padding = new Insets(-32, 0, 0, 0) },
+                    Style = new Style { Padding = new Insets(-2, 0, 0, 0) },
                     IgnoreLayout = true,
                     Children =
                     [
                         new TextNode(now.ToString("HH:mm"), 24, _theme.Text)
                         {
-                            ShadowColor = Color.FromRgb(0, 0, 0, 0.7f),
+                            ShadowColor = Color.FromRgb(0, 0, 0, 0.9f),
                             ShadowDistance = 2,
                         },
                     ]
@@ -147,7 +203,7 @@ internal sealed class CenterModule : IDrawableModule
         ],
     };
 
-    private static float GradientOffset() => (float)(Environment.TickCount64 % 4600 / 4600.0);
+    private static double GradientOffset() => (Environment.TickCount64 % 4600 / 4600.0) * Math.PI * 2;
 
     private static float DayRotation(DateTime now) =>
         (float)((now.TimeOfDay.TotalDays * Math.Tau) - 0.5 * Math.PI);
@@ -155,7 +211,7 @@ internal sealed class CenterModule : IDrawableModule
     private static EncodedImageData LoadClockImage(string path)
     {
         using var stream = typeof(CenterModule).Assembly.GetManifestResourceStream(path)
-            ?? throw new InvalidOperationException($"Embedded clock image '{path}' was not found.");
+                           ?? throw new InvalidOperationException($"Embedded clock image '{path}' was not found.");
         using var buffer = new MemoryStream((int)stream.Length);
         stream.CopyTo(buffer);
         return new EncodedImageData("image/png", buffer.ToArray());

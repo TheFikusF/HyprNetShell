@@ -192,16 +192,23 @@ public sealed class StatusBar : IDisposable
 
     private async Task RefreshStateAsync()
     {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         try
         {
             var builder = new BarStateBuilder();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
             foreach (var service in _dataServices)
             {
                 await service.UpdateAsync(builder, cts.Token);
             }
 
             _snapshot = builder.Build();
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // The refresh has a fixed time budget. Keep the previous snapshot when
+            // a slower service uses it up, without logging an expected cancellation
+            // as an exception.
+            AppLogger.Warning("StatusBar", "Bar state refresh timed out; keeping the previous snapshot");
         }
         catch (Exception exception)
         {

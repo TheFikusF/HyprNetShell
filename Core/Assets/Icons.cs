@@ -110,6 +110,9 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/rotate-ccw.svg")]
     public static partial SvgAsset Reboot { get; }
 
+    [SvgAsset("assets/icons/lucide/lock.svg")]
+    public static partial SvgAsset Lock { get; }
+
     [SvgAsset("assets/icons/lucide/copy.svg")]
     public static partial SvgAsset Copy { get; }
 

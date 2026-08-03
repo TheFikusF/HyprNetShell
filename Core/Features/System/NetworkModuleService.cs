@@ -10,13 +10,24 @@ internal sealed class NetworkModuleService : IBarDataService
 {
     public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
     {
-        var output = await CommandRunner.TryReadAsync(
+        var radioTask = CommandRunner.TryReadAsync(
+            "nmcli",
+            "radio wifi",
+            TimeSpan.FromMilliseconds(800),
+            cancellationToken);
+        var devicesTask = CommandRunner.TryReadAsync(
             "nmcli",
             "-t -f DEVICE,TYPE,STATE,CONNECTION device",
             TimeSpan.FromMilliseconds(800),
             cancellationToken);
+        await Task.WhenAll(radioTask, devicesTask);
 
-        var snapshot = NetworkSnapshot.Empty;
+        var radioOutput = await radioTask;
+        var output = await devicesTask;
+        var wifiAvailable = radioOutput is not null;
+        var wifiEnabled = radioOutput?.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase) == true;
+
+        var snapshot = new NetworkSnapshot(wifiAvailable, wifiEnabled, false, "", "", "", [], null);
 
         if (!string.IsNullOrWhiteSpace(output))
         {
@@ -33,25 +44,38 @@ internal sealed class NetworkModuleService : IBarDataService
                 var stateName = parts[2];
                 var connection = parts[3];
 
-                if (stateName == "connected" && !string.IsNullOrWhiteSpace(connection))
+                if (stateName != "connected" || string.IsNullOrWhiteSpace(connection))
                 {
-                    var wifiSignal = type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-                        ? await ReadWifiSignalAsync(device, cancellationToken)
-                        : null;
-                    snapshot = new NetworkSnapshot(
-                        true,
-                        device,
-                        type,
-                        connection,
-                        ReadIpAddresses(device),
-                        wifiSignal);
-                    break;
+                    continue;
                 }
+
+                var wifiSignal = type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
+                    ? await ReadWifiSignalAsync(device, cancellationToken)
+                    : null;
+                
+                snapshot = new NetworkSnapshot(
+                    wifiAvailable,
+                    wifiEnabled,
+                    true,
+                    device,
+                    type,
+                    connection,
+                    ReadIpAddresses(device),
+                    wifiSignal);
+                
+                break;
             }
         }
 
         state.Network = snapshot;
     }
+
+    internal static Task SetWifiEnabledAsync(bool enabled) =>
+        CommandRunner.TryRunAsync(
+            "nmcli",
+            ["radio", "wifi", enabled ? "on" : "off"],
+            TimeSpan.FromSeconds(3),
+            CancellationToken.None);
 
     private static async Task<int?> ReadWifiSignalAsync(string device, CancellationToken cancellationToken)
     {

@@ -33,6 +33,10 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private int? _stretchedHeight;
 
     public bool IgnoreLayout { get; init; }
+    public int? Top { get; init; }
+    public int? Right { get; init; }
+    public int? Bottom { get; init; }
+    public int? Left { get; init; }
     public ItemsAlignment HorizontalAlignment { get; init; }
     public ItemsAlignment VerticalAlignment { get; init; }
     public Direction Direction { get; init; }
@@ -196,8 +200,8 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         foreach (var child in EphemeralChildren)
         {
             child.Opacity *= Opacity;
-            var childX = contentX + GetAnchorOffset(HorizontalAlignment, contentWidth, child.Width);
-            var childY = contentY + GetAnchorOffset(VerticalAlignment, contentHeight, child.Height);
+            var childX = contentX + GetAbsoluteHorizontalOffset(child, contentWidth);
+            var childY = contentY + GetAbsoluteVerticalOffset(child, contentHeight);
             child.Draw(renderer, childX, childY);
             childHovered |= child.LastHoveredInTree;
             childClicked |= child.LastClickedInTree;
@@ -207,7 +211,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         DrawDebugBounds(renderer, x, y);
     }
 
-    private static void DrawDebugBounds(IRenderApi renderer, int x, int y)
+    private void DrawDebugBounds(IRenderApi renderer, int x, int y)
     {
 #if DEBUG_BOX_BOUNDS
         renderer.StrokeRect(new Rect(x, y, Width, Height), 1.0f, Color.FromRgb(0, 255, 0));
@@ -441,6 +445,36 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
             ItemsAlignment.Spread or ItemsAlignment.Stretch => 0,
             _ => 0,
         });
+    }
+
+    private int GetAbsoluteHorizontalOffset(Node child, int available)
+    {
+        if (child is BoxNode { Left: { } left })
+        {
+            return left;
+        }
+
+        if (child is BoxNode { Right: { } right })
+        {
+            return available - child.Width - right;
+        }
+
+        return GetAnchorOffset(HorizontalAlignment, available, child.Width);
+    }
+
+    private int GetAbsoluteVerticalOffset(Node child, int available)
+    {
+        if (child is BoxNode { Top: { } top })
+        {
+            return top;
+        }
+
+        if (child is BoxNode { Bottom: { } bottom })
+        {
+            return available - child.Height - bottom;
+        }
+
+        return GetAnchorOffset(VerticalAlignment, available, child.Height);
     }
 
     private static int GetAnchorOffset(ItemsAlignment alignment, int available, int childSize)

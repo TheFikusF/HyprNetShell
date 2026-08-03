@@ -11,7 +11,7 @@ public class ImageNode : Node
     private readonly RawImageData? _rawImage;
     private readonly EncodedImageData? _encodedImage;
     private readonly SvgAsset? _svgAsset;
-    private readonly Color _color;
+    private readonly Color? _color;
     private readonly bool _loadAsync;
 
     public float RotationRadians { get; init; }
@@ -30,7 +30,7 @@ public class ImageNode : Node
         Height = height;
     }
 
-    public ImageNode(SvgAsset svgAsset, int width, int height, Color color)
+    public ImageNode(SvgAsset svgAsset, int width, int height, Color? color = null)
     {
         _svgAsset = svgAsset;
         _color = color;
@@ -61,19 +61,19 @@ public class ImageNode : Node
         var rect = new Rect(x, y, Width, Height);
         if (_svgAsset is not null)
         {
-            renderer.DrawImage(_svgAsset, rect, _color.PushOpacity(Opacity), RotationRadians);
+            renderer.DrawImage(_svgAsset, rect, _color, RotationRadians, Opacity);
         }
         else if (_rawImage is not null)
         {
-            renderer.DrawImage(_rawImage, rect, _color.PushOpacity(Opacity), RotationRadians);
+            renderer.DrawImage(_rawImage, rect, _color!.Value.PushOpacity(Opacity), RotationRadians);
         }
         else if (_encodedImage is not null)
         {
-            renderer.DrawImage(_encodedImage, rect, _color.PushOpacity(Opacity), RotationRadians);
+            renderer.DrawImage(_encodedImage, rect, _color!.Value.PushOpacity(Opacity), RotationRadians);
         }
         else if (_imagePath is not null)
         {
-            renderer.DrawImage(_imagePath, rect, _color.PushOpacity(Opacity), _loadAsync, RotationRadians);
+            renderer.DrawImage(_imagePath, rect, _color!.Value.PushOpacity(Opacity), _loadAsync, RotationRadians);
         }
     }
 }

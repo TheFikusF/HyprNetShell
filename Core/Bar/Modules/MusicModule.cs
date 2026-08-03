@@ -19,7 +19,7 @@ internal sealed class MusicModule(
         Next,
     }
 
-    private const int VISIBLE_CHARACTERS = 40;
+    private const int VISIBLE_CHARACTERS = 35;
     private const int IMAGE_SIZE = 34;
     private const int POPUP_WIDTH = 512 + 64;
     private const int POPUP_IMAGE_SIZE = 128 + 64;

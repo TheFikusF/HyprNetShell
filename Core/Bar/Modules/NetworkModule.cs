@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
@@ -18,6 +19,8 @@ internal sealed class NetworkModule(
     private IReadOnlyList<WifiNetworkSnapshot> _wifiNetworks = [];
     private DateTime _lastWifiScan = DateTime.MinValue;
     private Task? _wifiScanTask;
+    private readonly RefFloat _wifiSwitchAnimation = new();
+    private bool? _wifiEnabledOverride;
 
     private readonly ModulesCommon.NodeWithPopup _node = new("network_module")
     {
@@ -29,13 +32,13 @@ internal sealed class NetworkModule(
         var network = snapshot();
         if (_node.IsHovered)
         {
-            RefreshWifiNetworks();
+            RefreshWifiNetworks(EffectiveWifiEnabled(network));
         }
 
         return _node.Draw([BuildStateModule(network)], () => BuildPopup(network));
     }
 
-    private Node WifiIcon(int strength, int size)
+    private BoxNode WifiIcon(int strength, int size)
     {
         return new BoxNode(size, size)
         {
@@ -51,9 +54,9 @@ internal sealed class NetworkModule(
         };
     }
 
-    private Node BuildStateModule(NetworkSnapshot network)
+    private BoxNode BuildStateModule(NetworkSnapshot network)
     {
-        var icon = !network.Connected
+        Node icon = !network.Connected
             ? new ImageNode(Icons.WifiOff, 18, 18, theme.Text)
             : network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
                 ? WifiIcon(WifiStrengthIndex(network.WifiSignal), 18)
@@ -79,8 +82,8 @@ internal sealed class NetworkModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.WifiStrength[^1], "Available Wi-Fi"),
-            ..BuildWifiRows(),
+            BuildWifiPowerRow(network),
+            ..BuildWifiRows(EffectiveWifiEnabled(network)),
             ModulesCommon.BuildDivider(theme.Border),
             ModulesCommon.BuildTextWithIcon(theme, Icons.Info, "Details"),
             BuildIpRow(network.Device),
@@ -88,8 +91,41 @@ internal sealed class NetworkModule(
         ]
     };
 
-    private IEnumerable<Node> BuildWifiRows()
+    private BoxNode BuildWifiPowerRow(NetworkSnapshot network)
     {
+        var enabled = EffectiveWifiEnabled(network);
+        return new BoxNode
+        {
+            HorizontalAlignment = ItemsAlignment.Spread,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = network.WifiAvailable ? () => SetWifiEnabled(network, !enabled) : null,
+            Style = new Style()
+            {
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children =
+            [
+                new BoxNode(48),
+                ModulesCommon.BuildTextWithIcon(theme, Icons.WifiStrength[^1], "Wi-Fi"),
+                new SwitchNode(enabled, _wifiSwitchAnimation)
+                {
+                    OffTrackColor = theme.Muted,
+                    OnTrackColor = theme.Active,
+                    KnobColor = theme.Text,
+                },
+            ],
+        };
+    }
+
+    private IEnumerable<Node> BuildWifiRows(bool enabled)
+    {
+        if (!enabled)
+        {
+            yield return BuildPlainRow("Wi-Fi is off");
+            yield break;
+        }
+
         if (_wifiScanTask is { IsCompleted: false } && _wifiNetworks.Count == 0)
         {
             yield return BuildPlainRow("Scanning...");
@@ -177,8 +213,14 @@ internal sealed class NetworkModule(
             Children = [new TextNode(text, 14.0f, theme.Muted)],
         };
 
-    private void RefreshWifiNetworks()
+    private void RefreshWifiNetworks(bool enabled)
     {
+        if (!enabled)
+        {
+            _wifiNetworks = [];
+            return;
+        }
+
         if (_wifiScanTask is { IsCompleted: false } || DateTime.UtcNow - _lastWifiScan < WifiScanInterval)
         {
             return;
@@ -194,6 +236,35 @@ internal sealed class NetworkModule(
                 CancellationToken.None);
             _wifiNetworks = ParseWifiNetworks(output);
         });
+    }
+
+    private bool EffectiveWifiEnabled(NetworkSnapshot network)
+    {
+        if (_wifiEnabledOverride is not { } enabled)
+        {
+            return network.WifiEnabled;
+        }
+
+        if (enabled != network.WifiEnabled)
+        {
+            return enabled;
+        }
+
+        _wifiEnabledOverride = null;
+        return network.WifiEnabled;
+    }
+
+    private void SetWifiEnabled(NetworkSnapshot network, bool enabled)
+    {
+        if (!network.WifiAvailable)
+        {
+            return;
+        }
+
+        _wifiEnabledOverride = enabled;
+        _wifiNetworks = [];
+        _lastWifiScan = DateTime.MinValue;
+        _ = NetworkModuleService.SetWifiEnabledAsync(enabled);
     }
 
     private static IReadOnlyList<WifiNetworkSnapshot> ParseWifiNetworks(string? output)

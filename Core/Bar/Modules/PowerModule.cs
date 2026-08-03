@@ -9,6 +9,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class PowerModule(Theme theme) : IDrawableModule
 {
+    private readonly RefBool _lockHovered = new();
     private readonly RefBool _powerOffHovered = new();
     private readonly RefBool _rebootHovered = new();
 
@@ -39,12 +40,15 @@ internal sealed class PowerModule(Theme theme) : IDrawableModule
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            BuildAction("Power off", Icons.PowerOff, Color.FromRgb(210, 55, 55), _powerOffHovered, "poweroff"),
-            BuildAction("Reboot", Icons.Reboot, Color.FromRgb(230, 145, 45), _rebootHovered, "reboot"),
+            BuildAction("Lock screen", Icons.Lock, Color.FromRgb(70, 125, 210), _lockHovered, LockScreen),
+            BuildAction("Power off", Icons.PowerOff, Color.FromRgb(210, 55, 55), _powerOffHovered,
+                () => RunSystemctl("poweroff")),
+            BuildAction("Reboot", Icons.Reboot, Color.FromRgb(230, 145, 45), _rebootHovered,
+                () => RunSystemctl("reboot")),
         ],
     };
 
-    private Node BuildAction(string label, SvgAsset icon, Color accent, RefBool hovered, string command)
+    private Node BuildAction(string label, SvgAsset icon, Color accent, RefBool hovered, Action onClick)
     {
         var background = ModulesCommon.ToBackground(theme, accent);
         if (hovered)
@@ -56,7 +60,7 @@ internal sealed class PowerModule(Theme theme) : IDrawableModule
         {
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = hovered,
-            OnClick = () => RunSystemctl(command),
+            OnClick = onClick,
             Style = ModulesCommon.ModuleStyle(theme, background) with
             {
                 BorderWidth = 0,
@@ -70,6 +74,8 @@ internal sealed class PowerModule(Theme theme) : IDrawableModule
             ],
         };
     }
+
+    private static void LockScreen() => CommandRunner.TryStart("hyprlock", []);
 
     private static void RunSystemctl(string command)
     {

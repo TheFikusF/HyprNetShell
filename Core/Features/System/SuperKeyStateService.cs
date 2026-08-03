@@ -74,7 +74,7 @@ internal sealed class SuperKeyStateService : IDisposable
             SUPER_DOWN_BIND,
             () =>
             {
-                SetHeld(true, "super_down");
+                SetHeld(true);
                 _lastLoggedSuperDown = DateTime.Now;
             },
             new HyprlandBindOptions(Transparent: true),
@@ -82,7 +82,7 @@ internal sealed class SuperKeyStateService : IDisposable
 
         await _hyprctl.Bind(
             SUPER_UP_BIND,
-            () => SetHeld(false, "super_up"),
+            () => SetHeld(false),
             new HyprlandBindOptions(Release: true, Transparent: true),
             cancellationToken);
 
@@ -95,16 +95,10 @@ internal sealed class SuperKeyStateService : IDisposable
         Log("installed Hyprland Super press/release and launcher binds");
     }
 
-    private void SetHeld(bool held, string message)
+    private void SetHeld(bool held)
     {
         var value = held ? 1 : 0;
-        var previous = Interlocked.Exchange(ref _isHeld, value) != 0;
-        Log($"received {message}; held={held}");
-
-        if (previous != held)
-        {
-            Log($"state changed: held={held}");
-        }
+        Interlocked.Exchange(ref _isHeld, value);
     }
 
     private static void Log(string message) => AppLogger.Info("SuperKeyState", message);

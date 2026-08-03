@@ -41,6 +41,15 @@
         <LinkerArg Include="-lxkbcommon" />
     </ItemGroup>
 
+    <ItemGroup>
+      <AdditionalFiles Include="assets\clock.svg">
+        <Link>assets\svgs\clock.svg</Link>
+      </AdditionalFiles>
+      <AdditionalFiles Include="assets\sun.svg">
+        <Link>assets\svgs\sun.svg</Link>
+      </AdditionalFiles>
+    </ItemGroup>
+
     <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="ComputeIlcCompileInputs" Condition="'$(PublishAot)' == 'true'">
         <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot; --reconfigure" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
         <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot;" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />

@@ -23,6 +23,11 @@ public interface IRenderApi
         float rotationRadians = 0);
     void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
-    void DrawImage(SvgAsset asset, Rect rect, Color color, float rotationRadians = 0);
+    void DrawImage(
+        SvgAsset asset,
+        Rect rect,
+        Color? color,
+        float rotationRadians = 0,
+        float opacity = 1);
     void DrawText(string text, float x, float y, float fontSize, Color color, float charDistance = 0);
 }

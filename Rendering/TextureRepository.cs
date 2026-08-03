@@ -385,7 +385,7 @@ public sealed unsafe class TextureRepository : IDisposable
             using var image = new MagickImage(path);
             if (image.Width > decodeWidth || image.Height > decodeHeight)
             {
-                image.Resize((uint)decodeWidth, (uint)decodeHeight);
+                image.Resize((uint)decodeWidth, (uint)decodeHeight, FilterType.CubicSpline);
             }
 
             return DecodeMagickImage(image);

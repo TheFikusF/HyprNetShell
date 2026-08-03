@@ -14,6 +14,8 @@ internal sealed class BluetoothModule(
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, bool> _connectionOverrides = [];
+    private readonly RefFloat _powerSwitchAnimation = new();
+    private bool? _poweredOverride;
 
     private readonly ModulesCommon.NodeWithPopup _node = new("bluetooth_module")
     {
@@ -28,8 +30,9 @@ internal sealed class BluetoothModule(
 
     private Node BuildStateModule(BluetoothSnapshot bluetooth)
     {
-        var connectedCount = bluetooth.Devices.Count(EffectiveConnected);
-        var icon = !bluetooth.Available
+        var powered = EffectivePowered(bluetooth);
+        var connectedCount = powered ? bluetooth.Devices.Count(EffectiveConnected) : 0;
+        var icon = !bluetooth.Available || !powered
             ? Icons.BluetoothOff
             : connectedCount == 0
                 ? Icons.Bluetooth
@@ -51,16 +54,49 @@ internal sealed class BluetoothModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Bluetooth, "Bluetooth devices"),
-            ..BuildDeviceRows(bluetooth),
+            BuildPowerRow(bluetooth),
+            ..BuildDeviceRows(bluetooth, EffectivePowered(bluetooth)),
         ],
     };
 
-    private IEnumerable<Node> BuildDeviceRows(BluetoothSnapshot bluetooth)
+    private BoxNode BuildPowerRow(BluetoothSnapshot bluetooth)
+    {
+        var powered = EffectivePowered(bluetooth);
+        return new BoxNode
+        {
+            HorizontalAlignment = ItemsAlignment.Spread,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = bluetooth.Available ? () => SetPowered(bluetooth, !powered) : null,
+            Style = new Style
+            {
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children =
+            [
+                new BoxNode(48),
+                ModulesCommon.BuildTextWithIcon(theme, Icons.Bluetooth, "Bluetooth"),
+                new SwitchNode(powered, _powerSwitchAnimation)
+                {
+                    OffTrackColor = theme.Muted,
+                    OnTrackColor = theme.Active,
+                    KnobColor = theme.Text,
+                },
+            ],
+        };
+    }
+
+    private IEnumerable<Node> BuildDeviceRows(BluetoothSnapshot bluetooth, bool powered)
     {
         if (!bluetooth.Available)
         {
             yield return BuildPlainRow("Bluetooth unavailable");
+            yield break;
+        }
+
+        if (!powered)
+        {
+            yield return BuildPlainRow("Bluetooth is off");
             yield break;
         }
 
@@ -143,6 +179,33 @@ internal sealed class BluetoothModule(
 
         _connectionOverrides.Remove(device.Address);
         return device.Connected;
+    }
+
+    private bool EffectivePowered(BluetoothSnapshot bluetooth)
+    {
+        if (_poweredOverride is not { } powered)
+        {
+            return bluetooth.Powered;
+        }
+
+        if (powered != bluetooth.Powered)
+        {
+            return powered;
+        }
+
+        _poweredOverride = null;
+        return bluetooth.Powered;
+    }
+
+    private void SetPowered(BluetoothSnapshot bluetooth, bool powered)
+    {
+        if (!bluetooth.Available)
+        {
+            return;
+        }
+
+        _poweredOverride = powered;
+        _ = BluetoothModuleService.SetPoweredAsync(powered);
     }
 
     private void ToggleConnection(BluetoothDeviceSnapshot device)
