@@ -4,9 +4,10 @@ namespace HyprNetShell.Core.Models;
 
 public sealed record NotificationsSnapshot(
     int Count,
-    IReadOnlyList<NotificationSnapshot> Items)
+    IReadOnlyList<NotificationSnapshot> Items,
+    bool DoNotDisturb)
 {
-    public static NotificationsSnapshot Empty { get; } = new(0, []);
+    public static NotificationsSnapshot Empty { get; } = new(0, [], false);
 }
 
 public sealed record NotificationSnapshot(

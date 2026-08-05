@@ -18,6 +18,7 @@ internal sealed class CenterModule : IDrawableModule
     private static readonly EncodedImageData SunMoonImage = LoadClockImage(SUN_MOON_IMAGE_RESOURCE_NAME);
 
     private readonly Func<NotificationsSnapshot> _notifications;
+    private readonly NotificationService _notificationService;
     private readonly Theme _theme;
     private readonly CalendarWidget _calendar;
     private readonly WorldClocksWidget _worldClocks;
@@ -37,6 +38,7 @@ internal sealed class CenterModule : IDrawableModule
         Theme theme)
     {
         _notifications = notifications;
+        _notificationService = notificationService;
         _theme = theme;
         _calendar = new CalendarWidget(theme);
         _worldClocks = new WorldClocksWidget(theme);
@@ -52,7 +54,7 @@ internal sealed class CenterModule : IDrawableModule
         return _node.Draw([
                 new BoxNode(400 - 27 - 27)
                 {
-                    BuildDateBadge(now), new BoxNode(148, 32)
+                    BuildDateBadge(now), new BoxNode(148, 36)
                     {
                         Direction = Direction.Horizontal,
                         HorizontalAlignment = ItemsAlignment.Center,
@@ -70,15 +72,15 @@ internal sealed class CenterModule : IDrawableModule
         // () => new SpacerNode());
     }
 
-    private Node BuildDateBadge(DateTime now) => new BoxNode
+    private BoxNode BuildDateBadge(DateTime now) => new (height: 36)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Center,
         Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, right: false),
-        Children = [new TextNode(now.ToString("ddd dd, MMM"), 14, _theme.Text)],
+        Children = [new TextNode(now.ToString(" ddd dd, MMM"), 14, _theme.Text)],
     };
 
-    private Node BuildTimeWidget(DateTime now)
+    private BoxNode BuildTimeWidget(DateTime now)
     {
         const int CLOCK_SIZE = 160;
         const int SUN_SIZE = 48;
@@ -178,15 +180,19 @@ internal sealed class CenterModule : IDrawableModule
         };
     }
 
-    private Node BuildNotificationsBadge(NotificationsSnapshot snapshot) => new BoxNode
+    private BoxNode BuildNotificationsBadge(NotificationsSnapshot snapshot) => new ()
     {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
+        OnClick = _notificationService.ToggleDoNotDisturb,
         Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, left: false),
-        Children = [new TextNode($"🔔 {snapshot.Count}", 14, _theme.Text)]
+        Children =
+        [
+            ModulesCommon.BuildTextWithIcon(_theme, snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, $"{snapshot.Count}")
+        ],
     };
 
-    private Node BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new BoxNode
+    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new ()
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -215,13 +221,6 @@ internal sealed class CenterModule : IDrawableModule
         using var buffer = new MemoryStream((int)stream.Length);
         stream.CopyTo(buffer);
         return new EncodedImageData("image/png", buffer.ToArray());
-    }
-
-    private static Color TimeBlue(DateTime now)
-    {
-        var hour = now.TimeOfDay.TotalHours;
-        var dayAmount = MathF.Max(0, MathF.Sin((float)((hour - 6) / 12 * Math.PI)));
-        return Color.Lerp(Color.FromRgb(49, 2, 110), Color.FromRgb(92, 191, 255), dayAmount);
     }
 
     private static void OpenClocks()

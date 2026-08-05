@@ -18,10 +18,12 @@ internal static class NotificationPopupLayout
         int screenHeight,
         int barHeight)
     {
-        var visible = snapshot.Items
-            .Where(notification => notification.PopupUntil > DateTime.UtcNow)
-            .Take(MAXIMUM_VISIBLE)
-            .ToArray();
+        var visible = snapshot.DoNotDisturb
+            ? []
+            : snapshot.Items
+                .Where(notification => notification.PopupUntil > DateTime.UtcNow)
+                .Take(MAXIMUM_VISIBLE)
+                .ToArray();
 
         return new BoxNode(height: screenHeight)
         {

@@ -10,11 +10,12 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class NotificationsWidget(NotificationService service, Theme theme)
 {
     public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
+    private readonly RefFloat _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
 
     public Node Draw(NotificationsSnapshot snapshot) => new BoxNode(WIDTH)
     {
         Direction = Direction.Vertical,
-        VerticalAlignment = ItemsAlignment.Start,
+        VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 8 },
         Children =
@@ -23,16 +24,40 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             {
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    new ImageNode(Icons.Bell, 22, 22, theme.Text),
+                    new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, theme.Text),
                     new TextNode("Notifications", 22, theme.Text),
                 },
-                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+
+                new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
                 {
-                    new TextNode($"{snapshot.Count}", 22, theme.Text),
-                    BuildClearButton(snapshot.Count),
+                    BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
+                    new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                    new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                    {
+                        new TextNode($"{snapshot.Count}", 22, theme.Text),
+                        BuildClearButton(snapshot.Count),
+                    }
                 }
             },
             ..BuildRows(snapshot),
+        ],
+    };
+
+    private BoxNode BuildDoNotDisturbToggle(bool enabled) => new(height: 48)
+    {
+        HorizontalAlignment = ItemsAlignment.Spread,
+        VerticalAlignment = ItemsAlignment.Center,
+        OnClick = service.ToggleDoNotDisturb,
+        Style = new Style { Spacing = 8 },
+        Children =
+        [
+            new ImageNode(enabled ? Icons.BellOff : Icons.Bell, 18, 18, theme.Text),
+            new SwitchNode(enabled, _doNotDisturbSwitchAnimation)
+            {
+                OffTrackColor = theme.Muted,
+                OnTrackColor = theme.Active,
+                KnobColor = theme.Text,
+            },
         ],
     };
 
@@ -40,8 +65,12 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     {
         if (snapshot.Items.Count == 0)
         {
-            yield return new TextNode("No notifications", 14, theme.Muted);
-            yield break;
+            yield return new BoxNode(height: 64)
+            {
+                HorizontalAlignment = ItemsAlignment.Center,
+                VerticalAlignment = ItemsAlignment.Center,
+                Children = [new TextNode("No notifications", 18, theme.Muted)]
+            };
         }
 
         foreach (var notification in snapshot.Items.Take(5))
@@ -50,7 +79,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
         }
     }
 
-    private Node BuildClearButton(int count) => new BoxNode
+    private BoxNode BuildClearButton(int count) => new()
     {
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = count > 0 ? service.Clear : null,

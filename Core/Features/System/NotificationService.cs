@@ -30,6 +30,7 @@ internal sealed partial class NotificationService : IBarDataService, IPathMethod
     private readonly List<NotificationSnapshot> _items = [];
     private uint _nextId = 1;
     private bool _ownsName;
+    private bool _doNotDisturb;
 
     public string Path => OBJECT_PATH;
     public bool HandlesChildPaths => false;
@@ -49,7 +50,22 @@ internal sealed partial class NotificationService : IBarDataService, IPathMethod
         {
             lock (_gate)
             {
-                return new NotificationsSnapshot(_items.Count, _items.ToArray());
+                return new NotificationsSnapshot(_items.Count, _items.ToArray(), _doNotDisturb);
+            }
+        }
+    }
+
+    public void ToggleDoNotDisturb()
+    {
+        lock (_gate)
+        {
+            _doNotDisturb = !_doNotDisturb;
+            if (_doNotDisturb)
+            {
+                for (var index = 0; index < _items.Count; index++)
+                {
+                    _items[index] = _items[index] with { PopupUntil = DateTime.MinValue };
+                }
             }
         }
     }
@@ -234,7 +250,7 @@ internal sealed partial class NotificationService : IBarDataService, IPathMethod
                 actions,
                 BoolHint(hints, "resident"),
                 now,
-                now + PopupDuration);
+                _doNotDisturb ? DateTime.MinValue : now + PopupDuration);
 
             if (replacementIndex >= 0)
             {

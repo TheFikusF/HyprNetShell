@@ -177,6 +177,9 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/bell.svg")]
     public static partial SvgAsset Bell { get; }
 
+    [SvgAsset("assets/icons/lucide/bell-off.svg")]
+    public static partial SvgAsset BellOff { get; }
+
     [SvgAsset("assets/icons/lucide/x.svg")]
     public static partial SvgAsset X { get; }
 
