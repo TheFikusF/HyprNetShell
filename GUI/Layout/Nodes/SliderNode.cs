@@ -11,7 +11,8 @@ public sealed class SliderNode(
     Color fillColor,
     Color thumbColor,
     Action<float> onValueChanged,
-    RefBool dragging) : Node
+    RefBool dragging,
+    float scrollStep = 0.05f) : Node
 {
     private const float TRACK_HEIGHT = 6.0f;
     private const float THUMB_SIZE = 14.0f;
@@ -35,6 +36,12 @@ public sealed class SliderNode(
         if (dragging.Value && Layout.Input.HasPointer)
         {
             onValueChanged(Math.Clamp((Layout.Input.PointerX - x) / Math.Max(1.0f, Width), 0.0f, 1.0f));
+        }
+
+        if (hovered && Layout.Input.ScrollDelta != 0.0f)
+        {
+            var direction = Layout.Input.ScrollDelta < 0.0f ? 1.0f : -1.0f;
+            onValueChanged(Math.Clamp(value + direction * scrollStep, 0.0f, 1.0f));
         }
         
         var normalizedValue = Math.Clamp(value, 0.0f, 1.0f);

@@ -9,14 +9,36 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class AudioModule(
-    Func<AudioSnapshot> snapshot,
+    AudioModuleService service,
+    BluetoothModuleService bluetoothService,
     Theme theme) : IDrawableModule
 {
-    private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
+    private const int NoteCapacity = 20;
+    private const long NoteSpawnIntervalMs = 500;
+    private const long NoteLifetimeMs = 2400;
+    private const float LabelAnimationDecay = 18.0f;
+    private const int LabelSpacing = 7;
+
     private readonly Dictionary<string, RefBool> _sliderDragging = [];
+    private readonly Dictionary<string, RefFloat> _muteSwitchAnimations = [];
     private readonly Dictionary<string, int> _volumeOverrides = [];
     private readonly Dictionary<string, bool> _muteOverrides = [];
     private readonly Dictionary<string, VolumeUpdateQueue> _volumeQueues = [];
+    private readonly Queue<NoteParticle> _notes = new(NoteCapacity);
+    private readonly RefBool _widgetHovered = new();
+    private readonly RefBool _microphoneHovered = new();
+    private readonly RefBool _volumeHovered = new();
+
+    private bool _wasWidgetHovered;
+    private float _microphoneLabelWidth;
+    private float _microphoneLabelSpacing;
+    private float _volumeLabelWidth;
+    private float _volumeLabelSpacing;
+    private Color? _microphoneLabelColor;
+    private Color? _volumeLabelColor;
+    private float _noteFieldOpacity;
+    private long _nextNoteSpawnMs;
+    private long _noteSequence;
 
     private readonly ModulesCommon.NodeWithPopup _node = new("audio_module")
     {
@@ -25,23 +47,243 @@ internal sealed class AudioModule(
 
     public Node Draw()
     {
-        var audio = snapshot();
+        var audio = service.Snapshot;
         return _node.Draw([BuildStateModule(audio)], () => BuildPopup(audio));
     }
 
     private Node BuildStateModule(AudioSnapshot audio)
     {
         var output = audio.ActiveOutput;
+        var input = audio.ActiveInput;
         var volume = output is null ? 0 : EffectiveVolume(output);
-        var icon = !audio.Available || output is null
+        var inputMuted = input is not null && EffectiveMuted(input);
+        var volumeIcon = !audio.Available || output is null
             ? Icons.VolumeOff
             : EffectiveMuted(output)
                 ? Icons.VolumeMuted
                 : VolumeIcon(volume);
+        var microphoneIcon = !audio.Available || input is null || inputMuted
+            ? Icons.MicrophoneOff
+            : Icons.Microphone;
+        var microphoneColor = !audio.Available || input is null
+            ? theme.Muted
+            : theme.Text;
 
         var bg = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f));
-        return ModulesCommon.BuildTextWithIcon(theme, icon, output is not null ? $"{volume}%" : "?",
-            style: ModulesCommon.ModuleStyle(theme, bg, right: false), width: 75);
+        var microphoneControl = BuildHoverLabel(
+            BuildMicrophoneIcon(microphoneIcon, microphoneColor, audio.IsRecording),
+            input is not null ? $"{EffectiveVolume(input)}%" : "?",
+            _microphoneHovered,
+            ref _microphoneLabelWidth,
+            ref _microphoneLabelSpacing,
+            ref _microphoneLabelColor,
+            input is null ? null : () => SetMuted(input, !EffectiveMuted(input)),
+            input is null ? null : delta => AdjustVolume(input, delta));
+
+        var volumeControl = BuildHoverLabel(
+            new ImageNode(volumeIcon, 18, 18, theme.Text),
+            output is not null ? $"{volume}%" : "?",
+            _volumeHovered,
+            ref _volumeLabelWidth,
+            ref _volumeLabelSpacing,
+            ref _volumeLabelColor,
+            output is null ? null : () => SetMuted(output, !EffectiveMuted(output)),
+            output is null ? null : delta => AdjustVolume(output, delta));
+
+        var widget = new BoxNode
+        {
+            VerticalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Center,
+            IsHovered = _widgetHovered,
+            Style = ModulesCommon.ModuleStyle(theme, bg, right: false) with
+            {
+                Spacing = 0,
+                Padding = new Insets(4, 0)
+            },
+            Children =
+            [
+                microphoneControl,
+                volumeControl,
+            ],
+        };
+
+        foreach (var particle in BuildNoteParticles(widget.Width))
+        {
+            widget.Children.Add(particle);
+        }
+
+        return widget;
+    }
+
+    private BoxNode BuildHoverLabel(
+        Node icon,
+        string text,
+        RefBool hovered,
+        ref float animatedWidth,
+        ref float animatedSpacing,
+        ref Color? animatedColor,
+        Action? onClick,
+        Action<float>? onScroll)
+    {
+        var label = new TextNode(text, theme.TextSize, theme.Text);
+        var targetWidth = hovered.Value ? label.Width : 0.0f;
+        var targetSpacing = hovered.Value ? LabelSpacing : 0.0f;
+        var hiddenColor = theme.Text with { A = 0.0f };
+        var targetColor = hovered.Value ? theme.Text : hiddenColor;
+
+        animatedWidth = PrimitivesMath.LerpSmooth(
+            animatedWidth,
+            targetWidth,
+            LabelAnimationDecay,
+            ModulesCommon.DELTA_TIME);
+        animatedSpacing = PrimitivesMath.LerpSmooth(
+            animatedSpacing,
+            targetSpacing,
+            LabelAnimationDecay,
+            ModulesCommon.DELTA_TIME);
+        animatedColor = (animatedColor ?? hiddenColor).LerpSmooth(
+            targetColor,
+            LabelAnimationDecay,
+            ModulesCommon.DELTA_TIME);
+
+        if (MathF.Abs(animatedWidth - targetWidth) < 0.05f)
+        {
+            animatedWidth = targetWidth;
+        }
+
+        if (MathF.Abs(animatedSpacing - targetSpacing) < 0.05f)
+        {
+            animatedSpacing = targetSpacing;
+        }
+
+        var visibleWidth = (int)MathF.Ceiling(animatedWidth);
+        var children = new List<Node> { icon };
+        if (visibleWidth > 0)
+        {
+            children.Add(new BoxNode(visibleWidth)
+            {
+                VerticalAlignment = ItemsAlignment.Center,
+                Children =
+                [
+                    new TextNode(text, theme.TextSize, animatedColor.Value, maxWidth: visibleWidth),
+                ],
+            });
+        }
+
+        return new BoxNode
+        {
+            VerticalAlignment = ItemsAlignment.Center,
+            IsHovered = hovered,
+            OnClick = onClick,
+            OnScroll = onScroll,
+            Style = new Style { Spacing = (int)MathF.Round(animatedSpacing), Padding = new Insets(4, 6)},
+            Children = children,
+        };
+    }
+
+    private Node BuildMicrophoneIcon(SvgAsset icon, Color color, bool isRecording) => new BoxNode(18, 18)
+    {
+        Children =
+        [
+            new ImageNode(icon, 18, 18, color),
+            isRecording
+                ? new BoxNode(7, 7)
+                {
+                    IgnoreLayout = true,
+                    Right = -2,
+                    Bottom = -2,
+                    Opacity = RecordingIndicatorOpacity(),
+                    Style = new Style
+                    {
+                        BackgroundColor = Color.FromRgb(245, 45, 55),
+                        BorderColor = theme.Panel,
+                        BorderRadius = 3.5f,
+                        BorderWidth = 1,
+                    },
+                }
+                : new SpacerNode(),
+        ],
+    };
+
+    private static float RecordingIndicatorOpacity()
+    {
+        const double periodMs = 1800.0;
+        var phase = Environment.TickCount64 % periodMs / periodMs * Math.PI * 2.0;
+        return 0.58f + 0.42f * (float)((Math.Sin(phase) + 1.0) * 0.5);
+    }
+
+    private IReadOnlyList<Node> BuildNoteParticles(int widgetWidth)
+    {
+        var now = Environment.TickCount64;
+        var hovered = _widgetHovered.Value;
+
+        while (_notes.TryPeek(out var note) && now - note.SpawnedAtMs >= NoteLifetimeMs)
+        {
+            _notes.Dequeue();
+        }
+
+        if (hovered && !_wasWidgetHovered)
+        {
+            _nextNoteSpawnMs = now;
+        }
+
+        if (hovered)
+        {
+            var spawned = 0;
+            while (now >= _nextNoteSpawnMs && spawned < NoteCapacity)
+            {
+                if (_notes.Count == NoteCapacity)
+                {
+                    _notes.Dequeue();
+                }
+
+                _notes.Enqueue(new NoteParticle(_nextNoteSpawnMs, _noteSequence++));
+                _nextNoteSpawnMs += NoteSpawnIntervalMs;
+                spawned++;
+            }
+
+            if (now - _nextNoteSpawnMs > NoteSpawnIntervalMs * NoteCapacity)
+            {
+                _nextNoteSpawnMs = now + NoteSpawnIntervalMs;
+            }
+        }
+
+        _wasWidgetHovered = hovered;
+        _noteFieldOpacity = PrimitivesMath.LerpSmooth(
+            _noteFieldOpacity,
+            hovered ? 1.0f : 0.0f,
+            14.0f,
+            ModulesCommon.DELTA_TIME);
+
+        if (_noteFieldOpacity < 0.01f || _notes.Count == 0)
+        {
+            return [];
+        }
+
+        var color = Color.Lerp(theme.Text, Color.Orange, 0.55f);
+        return _notes.Select(note =>
+        {
+            var progress = Math.Clamp((now - note.SpawnedAtMs) / (float)NoteLifetimeMs, 0.0f, 1.0f);
+            var fadeIn = Math.Min(1.0f, progress / 0.12f);
+            var fadeOut = Math.Min(1.0f, (1.0f - progress) / 0.25f);
+            var opacity = _noteFieldOpacity * Math.Min(fadeIn, fadeOut) * 0.62f;
+            var size = note.Sequence % 3 == 0 ? 10 : 8;
+            var availableWidth = Math.Max(1, widgetWidth - size - 8);
+            var left = 4 + (int)(note.Sequence * 29 % availableWidth);
+            var top = 18 - (int)MathF.Round(progress * 20.0f);
+
+            return (Node)new BoxNode(size, size)
+            {
+                IgnoreLayout = true,
+                Left = left,
+                Top = top,
+                Opacity = opacity,
+                Children =
+                [
+                    new ImageNode(Icons.MusicNotes[note.Sequence % Icons.MusicNotes.Length], size, size, color),
+                ],
+            };
+        }).ToArray();
     }
 
     private BoxNode BuildPopup(AudioSnapshot audio) => new(380)
@@ -54,16 +296,17 @@ internal sealed class AudioModule(
             ? [new TextNode("PipeWire audio unavailable", 14.0f, theme.Muted)]
             :
             [
-                ..BuildDeviceSection(Icons.Speaker, "Output devices", audio.Outputs),
+                ..BuildDeviceSection(Icons.Speaker, "Output devices", audio.Outputs, false),
                 ModulesCommon.BuildDivider(theme.Border),
-                ..BuildDeviceSection(Icons.Microphone, "Input devices", audio.Inputs),
+                ..BuildDeviceSection(Icons.Microphone, "Input devices", audio.Inputs, true),
             ],
     };
 
     private IEnumerable<Node> BuildDeviceSection(
         SvgAsset icon,
         string title,
-        IReadOnlyList<AudioDeviceSnapshot> devices)
+        IReadOnlyList<AudioDeviceSnapshot> devices,
+        bool input)
     {
         yield return ModulesCommon.BuildTextWithIcon(theme, icon, title);
 
@@ -75,49 +318,74 @@ internal sealed class AudioModule(
 
         foreach (var device in devices.Take(6))
         {
-            yield return BuildDeviceRow(device);
+            yield return BuildDeviceRow(device, input);
         }
     }
 
-    private Node BuildDeviceRow(AudioDeviceSnapshot device)
+    private Node BuildDeviceRow(AudioDeviceSnapshot device, bool input)
     {
-        var state = _rowStates.GetState(device.Id, device.Active ? theme.Active : theme.Panel);
-        var baseColor = device.Active ? theme.Active : theme.Panel;
-        var target = state.Hovered ? Color.Lighten(baseColor, 0.12f) : baseColor;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
         var volume = EffectiveVolume(device);
+        var muted = EffectiveMuted(device);
+        var bluetoothDevice = FindBluetoothDevice(device.Name);
 
         return new BoxNode
         {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
                 BorderRadius = 8,
-                BorderWidth = device.Active ? theme.BorderWidth : 0,
+                BorderWidth = 0,
+                Spacing = 0,
             },
             Children =
             [
-                new BoxNode(new Style { Spacing = 8 }, verticalAlignment: ItemsAlignment.Center)
+                new BoxNode(new Style { Spacing = 8 },
+                    horizontalAlignment: ItemsAlignment.Stretch,
+                    verticalAlignment: ItemsAlignment.Center)
                 {
-                    new BoxNode(262, 28)
+                    new BoxNode(24)
+                    {
+                        HorizontalAlignment = ItemsAlignment.Center,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        OnClick = device.Active ? null : () => _ = service.SetDefaultAsync(device.Id),
+                        Children =
+                        [
+                            new RadioButtonNode(device.Active)
+                            {
+                                SelectedColor = Color.Orange,
+                                UnselectedColor = theme.Muted,
+                                BackgroundColor = theme.Panel,
+                            }
+                        ],
+                    },
+                    new ImageNode(DeviceIcon(device.Name, input, bluetoothDevice), 18, 18,
+                        muted ? theme.Muted : theme.Text),
+                    new BoxNode
                     {
                         Direction = Direction.Horizontal,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Children = [new TextNode(Trim(device.Name, 32), 13.0f, theme.Text)],
+                        Children = [new TextNode(Trim(device.Name, 30), 13.0f, theme.Text)],
                     },
-                    BuildActionButton(
-                        device.Active ? "●" : "○",
-                        theme.Panel,
-                        device.Active ? null : () => _ = AudioModuleService.SetDefaultAsync(device.Id)),
-                    BuildActionButton(
-                        EffectiveMuted(device) ? Icons.VolumeMuted : VolumeIcon(volume),
-                        EffectiveMuted(device) ? theme.Warning : theme.Panel,
-                        () => SetMuted(device, !EffectiveMuted(device))),
+                    new BoxNode(44)
+                    {
+                        OnClick = () => SetMuted(device, !EffectiveMuted(device)),
+                        Children =
+                        [
+                            new SwitchNode(muted, GetMuteSwitchAnimation(device.Id, muted))
+                            {
+                                OffTrackColor = theme.Muted,
+                                OnTrackColor = theme.Warning,
+                                KnobColor = theme.Text,
+                            }
+                        ],
+                    },
+                    new ImageNode(input ? Icons.MicrophoneOff : Icons.VolumeMuted, 18, 18,
+                        muted ? theme.Warning : theme.Muted),
                 },
-                new BoxNode()
+                ..BuildBluetoothBattery(bluetoothDevice),
+                new BoxNode
                 {
                     Direction = Direction.Horizontal,
                     HorizontalAlignment = ItemsAlignment.Spread,
@@ -127,7 +395,7 @@ internal sealed class AudioModule(
                     [
                         new SliderNode(
                             292,
-                            12,
+                            14,
                             volume / 100.0f,
                             theme.Muted,
                             Color.Orange,
@@ -141,35 +409,29 @@ internal sealed class AudioModule(
         };
     }
 
-    private static Node BuildActionButton(string icon, Color fill, Action? onClick) =>
-        new BoxNode(30, 28)
+    private IEnumerable<Node> BuildBluetoothBattery(BluetoothDeviceSnapshot? device)
+    {
+        if (device?.BatteryPercentage is not { } battery)
         {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = onClick,
-            Style = new Style
-            {
-                BackgroundColor = fill,
-                BorderRadius = 6,
-            },
-            Children = [new TextNode(icon, 13.0f, Color.FromRgb(255, 255, 255))],
-        };
+            yield break;
+        }
 
-    private static Node BuildActionButton(SvgAsset icon, Color fill, Action? onClick) =>
-        new BoxNode(30, 28)
+        yield return new BoxNode
         {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            OnClick = onClick,
-            Style = new Style
-            {
-                BackgroundColor = fill,
-                BorderRadius = 6,
-            },
-            Children = [new ImageNode(icon, 16, 16, Color.White)],
+            Style = new Style { Padding = new Insets(8, 0, 0, 0) },
+            Children =
+            [
+                new TextNode("Battery", theme.TextSize, theme.Text),
+                ModulesCommon.BuildTextWithIcon(
+                    theme,
+                    BatteryModule.BatteryLevelIcon(battery),
+                    $"{battery}%",
+                    battery <= 20 ? Color.Lerp(Color.White, Color.Orange, 0.5f) : theme.Text),
+            ],
         };
+    }
 
     private static SvgAsset VolumeIcon(int volume) =>
         Icons.VolumeLevels[volume switch
@@ -220,7 +482,14 @@ internal sealed class AudioModule(
     private void SetMuted(AudioDeviceSnapshot device, bool muted)
     {
         _muteOverrides[device.Id] = muted;
-        _ = AudioModuleService.SetMutedAsync(device.Id, muted);
+        _ = service.SetMutedAsync(device.Id, muted);
+    }
+
+    private void AdjustVolume(AudioDeviceSnapshot device, float scrollDelta)
+    {
+        const int scrollStep = 5;
+        var direction = scrollDelta < 0.0f ? 1 : -1;
+        SetVolume(device, EffectiveVolume(device) + direction * scrollStep);
     }
 
     private void SetVolume(AudioDeviceSnapshot device, int volume)
@@ -234,7 +503,7 @@ internal sealed class AudioModule(
         _volumeOverrides[device.Id] = volume;
         if (!_volumeQueues.TryGetValue(device.Id, out var queue))
         {
-            queue = new VolumeUpdateQueue(device.Id);
+            queue = new VolumeUpdateQueue(service, device.Id);
             _volumeQueues[device.Id] = queue;
         }
 
@@ -253,10 +522,89 @@ internal sealed class AudioModule(
         return dragging;
     }
 
+    private RefFloat GetMuteSwitchAnimation(string deviceId, bool muted)
+    {
+        if (_muteSwitchAnimations.TryGetValue(deviceId, out var animation))
+        {
+            return animation;
+        }
+
+        animation = new RefFloat(muted ? 1.0f : 0.0f);
+        _muteSwitchAnimations[deviceId] = animation;
+        return animation;
+    }
+
+    private BluetoothDeviceSnapshot? FindBluetoothDevice(string audioDeviceName)
+    {
+        var normalizedAudioName = NormalizeDeviceName(audioDeviceName);
+        return bluetoothService.Snapshot.Devices.FirstOrDefault(device =>
+        {
+            var normalizedBluetoothName = NormalizeDeviceName(device.Name);
+            return normalizedAudioName == normalizedBluetoothName ||
+                   Math.Min(normalizedAudioName.Length, normalizedBluetoothName.Length) >= 6 &&
+                   (normalizedAudioName.Contains(normalizedBluetoothName, StringComparison.Ordinal) ||
+                    normalizedBluetoothName.Contains(normalizedAudioName, StringComparison.Ordinal));
+        });
+    }
+
+    private static string NormalizeDeviceName(string name) =>
+        new(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+    private static SvgAsset DeviceIcon(
+        string name,
+        bool input,
+        BluetoothDeviceSnapshot? bluetoothDevice)
+    {
+        if (input)
+        {
+            return name.Contains("headset", StringComparison.OrdinalIgnoreCase) ||
+                   bluetoothDevice?.Icon?.Equals("audio-headset", StringComparison.OrdinalIgnoreCase) == true
+                ? Icons.Headset
+                : Icons.Microphone;
+        }
+
+        if (name.Contains("headset", StringComparison.OrdinalIgnoreCase))
+        {
+            return Icons.Headset;
+        }
+
+        if (name.Contains("headphone", StringComparison.OrdinalIgnoreCase))
+        {
+            return Icons.Headphones;
+        }
+
+        if (bluetoothDevice?.Icon is { } bluetoothIcon)
+        {
+            return bluetoothIcon.ToLowerInvariant() switch
+            {
+                "audio-headset" => Icons.Headset,
+                "audio-speakers" => Icons.Speaker,
+                "audio-headphones" or "audio-card" => Icons.Headphones,
+                _ => Icons.Headphones,
+            };
+        }
+
+        if (bluetoothDevice is not null)
+        {
+            return Icons.Headphones;
+        }
+
+        if (name.Contains("hdmi", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("display", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("monitor", StringComparison.OrdinalIgnoreCase))
+        {
+            return Icons.Monitor;
+        }
+
+        return Icons.Speaker;
+    }
+
     private static string Trim(string text, int maxLength) =>
         text.Length <= maxLength ? text : text[..Math.Max(0, maxLength - 3)] + "...";
 
-    private sealed class VolumeUpdateQueue(string deviceId)
+    private readonly record struct NoteParticle(long SpawnedAtMs, long Sequence);
+
+    private sealed class VolumeUpdateQueue(AudioModuleService service, string deviceId)
     {
         private readonly Lock _sync = new();
         private int _latest;
@@ -296,7 +644,7 @@ internal sealed class AudioModule(
                     _sent = volume;
                 }
 
-                await AudioModuleService.SetVolumeAsync(deviceId, volume);
+                await service.SetVolumeAsync(deviceId, volume);
                 await Task.Delay(50);
             }
         }

@@ -9,7 +9,6 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class DisplayControlsModule(
-    Func<DisplayControlsSnapshot> snapshot,
     DisplayControlsModuleService service,
     Theme theme) : IDrawableModule
 {
@@ -27,7 +26,7 @@ internal sealed class DisplayControlsModule(
 
     public Node Draw()
     {
-        var controls = snapshot();
+        var controls = service.Snapshot;
         return controls.Available
             ? _node.Draw([BuildStateModule(controls)], () => BuildPopup(controls))
             : new SpacerNode();
@@ -101,7 +100,7 @@ internal sealed class DisplayControlsModule(
             normalized => SetValue(
                 key,
                 QuantizePercentage(backlight, normalized),
-                percentage => DisplayControlsModuleService.SetBacklightAsync(backlight, percentage)));
+                percentage => service.SetBacklightAsync(backlight, percentage)));
     }
 
     private Node BuildTemperatureSchedule(DisplayControlsSnapshot controls)

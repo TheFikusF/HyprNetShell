@@ -9,7 +9,7 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BluetoothModule(
-    Func<BluetoothSnapshot> snapshot,
+    BluetoothModuleService service,
     Theme theme) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
@@ -24,7 +24,7 @@ internal sealed class BluetoothModule(
 
     public Node Draw()
     {
-        var bluetooth = snapshot();
+        var bluetooth = service.Snapshot;
         return _node.Draw([BuildStateModule(bluetooth)], () => BuildPopup(bluetooth));
     }
 
@@ -205,14 +205,14 @@ internal sealed class BluetoothModule(
         }
 
         _poweredOverride = powered;
-        _ = BluetoothModuleService.SetPoweredAsync(powered);
+        _ = service.SetPoweredAsync(powered);
     }
 
     private void ToggleConnection(BluetoothDeviceSnapshot device)
     {
         var connect = !EffectiveConnected(device);
         _connectionOverrides[device.Address] = connect;
-        _ = BluetoothModuleService.SetConnectedAsync(device.Address, connect);
+        _ = service.SetConnectedAsync(device.Address, connect);
     }
 
     private static string Trim(string text, int maxLength) =>

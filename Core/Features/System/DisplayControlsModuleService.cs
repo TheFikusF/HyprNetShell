@@ -25,6 +25,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private bool? _hyprsunsetInstalled;
     private int _temperature = DEFAULT_TEMPERATURE;
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
+    public DisplayControlsSnapshot Snapshot { get; private set; } = DisplayControlsSnapshot.Empty;
 
     public DisplayControlsModuleService(IHyprctl hyprctl)
     {
@@ -48,7 +49,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
-    public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         var temperature = await _hyprctl.GetColorTemperatureAsync(cancellationToken);
         var running = temperature.HasValue;
@@ -93,7 +94,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             snapshotCurve = [.._temperatureCurve];
         }
 
-        state.DisplayControls = new DisplayControlsSnapshot(
+        Snapshot = new DisplayControlsSnapshot(
             ReadBacklight("/sys/class/backlight"),
             ReadBacklight("/sys/class/leds", IsKeyboardBacklight),
             _hyprsunsetInstalled == true,
@@ -147,7 +148,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
-    internal static async Task SetBacklightAsync(BacklightSnapshot backlight, int percentage)
+    internal async Task SetBacklightAsync(BacklightSnapshot backlight, int percentage)
     {
         var value = (int)Math.Round(
             backlight.Maximum * Math.Clamp(percentage, 0, 100) / 100.0,

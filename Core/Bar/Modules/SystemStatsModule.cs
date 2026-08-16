@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -6,7 +7,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Theme theme) : IDrawableModule
+internal sealed class SystemStatsModule(SystemStatsModuleService service, Theme theme) : IDrawableModule
 {
     private const int WIDTH = 75;
 
@@ -42,7 +43,7 @@ internal sealed class SystemStatsModule(Func<SystemStatsSnapshot> snapshot, Them
 
     public Node Draw()
     {
-        var stats = snapshot();
+        var stats = service.Snapshot;
 
         Lerp(ref _currentCpuColor, _cpuGradient, (float)(stats.CpuPercent ?? 0) / 100);
         Lerp(ref _currentRamColor, _ramGradient, (float)(stats.RamPercent ?? 0) / 100);

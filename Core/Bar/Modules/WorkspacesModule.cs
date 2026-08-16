@@ -25,6 +25,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         var blockPopup1 = blockPopup;
         _node = new("workspaces_module", ignorePopupQueue: true)
         {
+            TopOffset = 36,
             GetShouldShowPopup = hovered => (superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
                                             blockPopup1() == false,
         };
@@ -42,8 +43,10 @@ internal sealed class WorkspacesModule : IDrawableModule
         var className = string.IsNullOrWhiteSpace(snapshot.FocusedClassName) ? "APP" : snapshot.FocusedClassName;
 
         return _node.Draw([
-            new BoxNode
+            new BoxNode(height: 52 - (int)(_theme.BorderWidth * 2))
             {
+                VerticalAlignment = ItemsAlignment.Center,
+                OnScroll = delta => ScrollWorkspace(snapshot, delta),
                 Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with { BorderRadius = 8 },
                 Children = [new TextNode(snapshot.FocusedWorkspaceId.ToString(), 24, _theme.Text)]
             },
@@ -51,6 +54,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             {
                 Direction = Direction.Horizontal,
                 VerticalAlignment = ItemsAlignment.Center,
+                OnScroll = delta => ScrollWorkspace(snapshot, delta),
                 Style = new Style
                 {
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
@@ -66,6 +70,31 @@ internal sealed class WorkspacesModule : IDrawableModule
                 },
             }
         ], () => BuildWorkspacePopup(snapshot, _theme));
+    }
+
+    private void ScrollWorkspace(HyprlandSnapshot snapshot, float scrollDelta)
+    {
+        var workspaces = (snapshot.MonitorWorkspaces.FirstOrDefault(monitor => monitor.Current)
+                          ?? snapshot.MonitorWorkspaces.FirstOrDefault())
+            ?.Workspaces
+            .Select(workspace => workspace.Id)
+            .Distinct()
+            .Order()
+            .ToArray() ?? [];
+        if (workspaces.Length < 2)
+        {
+            return;
+        }
+
+        var currentIndex = Array.IndexOf(workspaces, snapshot.FocusedWorkspaceId);
+        if (currentIndex < 0)
+        {
+            currentIndex = 0;
+        }
+
+        var direction = scrollDelta > 0.0f ? 1 : -1;
+        var targetIndex = (currentIndex + direction + workspaces.Length) % workspaces.Length;
+        _ = _hyprctl.FocusWorkspaceAsync(workspaces[targetIndex]);
     }
 
     private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme) => new(400)

@@ -1,5 +1,6 @@
 using System.Globalization;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
@@ -9,7 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class MusicModule(
-    Func<MusicSnapshot> snapshot,
+    MusicModuleService service,
     Theme theme) : IDrawableModule
 {
     private enum PlayerAction
@@ -37,7 +38,7 @@ internal sealed class MusicModule(
 
     public Node Draw()
     {
-        var music = snapshot();
+        var music = service.Snapshot;
         if (!music.Available)
         {
             return new SpacerNode();

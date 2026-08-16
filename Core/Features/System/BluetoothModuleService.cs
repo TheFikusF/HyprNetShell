@@ -7,7 +7,9 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed partial class BluetoothModuleService : IBarDataService
 {
-    public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public BluetoothSnapshot Snapshot { get; private set; } = BluetoothSnapshot.Empty;
+
+    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         var controllerOutput = await CommandRunner.TryReadAsync(
             "bluetoothctl",
@@ -17,14 +19,14 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
         if (controllerOutput is null)
         {
-            state.Bluetooth = BluetoothSnapshot.Empty;
+            Snapshot = BluetoothSnapshot.Empty;
             return;
         }
 
         var powered = PoweredLine().IsMatch(controllerOutput);
         if (!powered)
         {
-            state.Bluetooth = new BluetoothSnapshot(true, false, []);
+            Snapshot = new BluetoothSnapshot(true, false, []);
             return;
         }
 
@@ -36,7 +38,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService
 
         if (devicesOutput is null)
         {
-            state.Bluetooth = new BluetoothSnapshot(true, true, []);
+            Snapshot = new BluetoothSnapshot(true, true, []);
             return;
         }
 
@@ -50,20 +52,20 @@ internal sealed partial class BluetoothModuleService : IBarDataService
             return ParseDeviceInfo(device.Address, device.Name, info);
         }));
 
-        state.Bluetooth = new BluetoothSnapshot(
+        Snapshot = new BluetoothSnapshot(
             true,
             true,
             devices.OrderByDescending(device => device.Connected).ThenBy(device => device.Name).ToArray());
     }
 
-    internal static Task SetPoweredAsync(bool powered) =>
+    internal Task SetPoweredAsync(bool powered) =>
         CommandRunner.TryRunAsync(
             "bluetoothctl",
             ["power", powered ? "on" : "off"],
             TimeSpan.FromSeconds(3),
             CancellationToken.None);
 
-    internal static Task SetConnectedAsync(string address, bool connected) =>
+    internal Task SetConnectedAsync(string address, bool connected) =>
         CommandRunner.TryRunAsync(
             "bluetoothctl",
             [connected ? "connect" : "disconnect", address],

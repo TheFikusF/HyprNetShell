@@ -7,7 +7,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class LanguageModule : IDrawableModule
 {
-    private const int WIDTH = 90;
+    private const int WIDTH = 100;
 
     private static readonly TimeSpan ChangePopupDuration = TimeSpan.FromSeconds(2);
 
@@ -46,8 +46,11 @@ internal sealed class LanguageModule : IDrawableModule
     public Node Draw()
     {
         var snapshot = _hyprland.Snapshot;
-        var layoutName = string.IsNullOrWhiteSpace(snapshot.LayoutName) ? "Unknown" : snapshot.LayoutName.Trim();
-        var alias = _aliases.TryGetValue(layoutName, out var a) ? a : layoutName;
+        var keyboardName = snapshot.KeyboardName ?? string.Empty;
+        var layoutName = NormalizeLayoutName(snapshot.LayoutName);
+        var alias = _aliases
+            .FirstOrDefault(entry => string.Equals(entry.Key, layoutName, StringComparison.OrdinalIgnoreCase))
+            .Value ?? layoutName;
 
         if (string.Equals(_lastLayoutName, layoutName, StringComparison.Ordinal) == false)
         {
@@ -61,11 +64,31 @@ internal sealed class LanguageModule : IDrawableModule
                 Direction = Direction.Vertical,
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
-                OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(snapshot.KeyboardName),
+                OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName),
+                OnScroll = delta => ScrollLanguage(keyboardName, layoutName, delta),
                 Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
                 Children = [new TextNode(alias, _theme.TextSize, _theme.Text)]
             }
-        ], () => BuildPopup(snapshot.KeyboardName));
+        ], () => BuildPopup(keyboardName));
+    }
+
+    private static string NormalizeLayoutName(string? layoutName) =>
+        string.IsNullOrWhiteSpace(layoutName) ? "Unknown" : layoutName.Trim();
+
+    private void ScrollLanguage(string keyboardName, string currentLayout, float scrollDelta)
+    {
+        var layouts = _aliases.Keys.ToArray();
+        var currentIndex = Array.FindIndex(
+            layouts,
+            layout => string.Equals(layout, currentLayout, StringComparison.OrdinalIgnoreCase));
+        if (currentIndex < 0)
+        {
+            currentIndex = scrollDelta > 0.0f ? -1 : 0;
+        }
+
+        var direction = scrollDelta > 0.0f ? 1 : -1;
+        var targetIndex = (currentIndex + direction + layouts.Length) % layouts.Length;
+        _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, targetIndex);
     }
 
     private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 30)
@@ -94,6 +117,7 @@ internal sealed class LanguageModule : IDrawableModule
             {
                 BorderRadius = 8,
                 BorderWidth = text == _lastLayoutName ? _theme.BorderWidth : 0,
+                Padding = new Insets(0, text == _lastLayoutName ? 12 : 8)
             },
             Children = [new TextNode(alias, fontSize, _theme.Text)]
         };

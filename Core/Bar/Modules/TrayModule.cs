@@ -7,7 +7,6 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class TrayModule(
-    Func<IReadOnlyList<TrayItemSnapshot>> snapshot,
     SniTrayService service,
     Theme theme) : IDrawableModule
 {
@@ -16,7 +15,7 @@ internal sealed class TrayModule(
 
     public Node Draw()
     {
-        var items = snapshot();
+        var items = service.Snapshot;
 
         return items.Count != 0
             ? new BoxNode

@@ -17,7 +17,6 @@ internal sealed class CenterModule : IDrawableModule
     private static readonly EncodedImageData ClockImage = LoadClockImage(CLOCK_IMAGE_RESOURCE_NAME);
     private static readonly EncodedImageData SunMoonImage = LoadClockImage(SUN_MOON_IMAGE_RESOURCE_NAME);
 
-    private readonly Func<NotificationsSnapshot> _notifications;
     private readonly NotificationService _notificationService;
     private readonly Theme _theme;
     private readonly CalendarWidget _calendar;
@@ -33,11 +32,9 @@ internal sealed class CenterModule : IDrawableModule
     };
 
     public CenterModule(
-        Func<NotificationsSnapshot> notifications,
         NotificationService notificationService,
         Theme theme)
     {
-        _notifications = notifications;
         _notificationService = notificationService;
         _theme = theme;
         _calendar = new CalendarWidget(theme);
@@ -49,7 +46,7 @@ internal sealed class CenterModule : IDrawableModule
     public Node Draw()
     {
         var now = DateTime.Now;
-        var snapshot = _notifications();
+        var snapshot = _notificationService.Snapshot;
 
         return _node.Draw([
                 new BoxNode(400 - 27 - 27)

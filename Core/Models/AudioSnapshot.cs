@@ -10,9 +10,10 @@ public sealed record AudioDeviceSnapshot(
 public sealed record AudioSnapshot(
     bool Available,
     IReadOnlyList<AudioDeviceSnapshot> Outputs,
-    IReadOnlyList<AudioDeviceSnapshot> Inputs)
+    IReadOnlyList<AudioDeviceSnapshot> Inputs,
+    bool IsRecording)
 {
-    public static AudioSnapshot Empty { get; } = new(false, [], []);
+    public static AudioSnapshot Empty { get; } = new(false, [], [], false);
 
     public AudioDeviceSnapshot? ActiveOutput => Outputs.FirstOrDefault(device => device.Active);
     public AudioDeviceSnapshot? ActiveInput => Inputs.FirstOrDefault(device => device.Active);

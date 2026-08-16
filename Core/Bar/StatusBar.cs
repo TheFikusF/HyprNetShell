@@ -3,7 +3,6 @@ using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
-using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Services;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -41,19 +40,7 @@ public sealed class StatusBar : IDisposable
 
     private readonly NotificationService _notificationService;
     private readonly MusicModuleService _musicService = new();
-    private readonly DisplayControlsModuleService _displayControlsService;
-    private readonly WorkspacesModule _workspacesModule;
-    private readonly LanguageModule _languageModule;
-    private readonly SystemStatsModule _systemStatsModule;
-    private readonly NetworkModule _networkModule;
-    private readonly AudioModule _audioModule;
-    private readonly DisplayControlsModule _displayControlsModule;
-    private readonly BluetoothModule _bluetoothModule;
-    private readonly BatteryModule _batteryModule;
     private readonly CenterModule _centerModule;
-    private readonly MusicModule _musicModule;
-    private readonly TrayModule _trayModule;
-    private readonly PowerModule _powerModule;
     private readonly ClipboardHistoryService _clipboardHistory = new();
     private readonly WallpaperModuleService _wallpaperService;
     private readonly MainDialog _mainDialog;
@@ -61,9 +48,8 @@ public sealed class StatusBar : IDisposable
 
     private readonly List<IBarDataService> _dataServices;
 
-    private readonly Insets _layoutInsets = new Insets(6, 6, 0, 6);
+    private readonly Insets _layoutInsets = new (6, 6, 0, 6);
 
-    private BarSnapshot _snapshot = BarSnapshot.Empty;
     private DateTime _lastRefresh = DateTime.MinValue;
     private Task? _refreshTask;
 
@@ -76,40 +62,42 @@ public sealed class StatusBar : IDisposable
         _barHeight = barHeight;
         _notificationService = new NotificationService(_hyprland, _hyprctl);
         _superKey = new SuperKeyStateService(_hyprctl);
-        _displayControlsService = new DisplayControlsModuleService(_hyprctl);
+        var displayControlsService = new DisplayControlsModuleService(_hyprctl);
         _wallpaperService = new WallpaperModuleService(_hyprctl);
         _mainDialog = new MainDialog(_clipboardHistory, _hyprctl, _wallpaperService, Theme.Default);
+        var networkService = new NetworkModuleService();
+        var audioService = new AudioModuleService();
+        var bluetoothService = new BluetoothModuleService();
+        var batteryService = new BatteryModuleService();
+        var systemStatsService = new SystemStatsModuleService();
         _dataServices =
         [
-            _notificationService,
-            new NetworkModuleService(),
-            new AudioModuleService(),
-            _displayControlsService,
-            new BluetoothModuleService(),
-            new BatteryModuleService(),
-            new SystemStatsModuleService(),
+            networkService,
+            audioService,
+            displayControlsService,
+            bluetoothService,
+            batteryService,
+            systemStatsService,
             _trayService,
         ];
-        _languageModule = new LanguageModule(_hyprland, _hyprctl, Theme.Default);
-        _systemStatsModule = new SystemStatsModule(() => _snapshot.SystemStats, Theme.Default);
-        _networkModule = new NetworkModule(() => _snapshot.Network, Theme.Default);
-        _audioModule = new AudioModule(() => _snapshot.Audio, Theme.Default);
-        _displayControlsModule =
-            new DisplayControlsModule(() => _snapshot.DisplayControls, _displayControlsService, Theme.Default);
-        _bluetoothModule = new BluetoothModule(() => _snapshot.Bluetooth, Theme.Default);
-        _batteryModule = new BatteryModule(() => _snapshot.Battery, Theme.Default);
-        _centerModule = new CenterModule(() => _notificationService.Snapshot, _notificationService, Theme.Default);
-        _musicModule = new MusicModule(() => _musicService.Snapshot, Theme.Default);
-        _trayModule = new TrayModule(() => _snapshot.TrayItems, _trayService, Theme.Default);
-        _powerModule = new PowerModule(Theme.Default);
-        _workspacesModule =
-            new WorkspacesModule(_hyprland, _hyprctl, _superKey, Theme.Default, () => _languageModule.IsShown);
+        var languageModule = new LanguageModule(_hyprland, _hyprctl, Theme.Default);
+        var systemStatsModule = new SystemStatsModule(systemStatsService, Theme.Default);
+        var networkModule = new NetworkModule(networkService, Theme.Default);
+        var audioModule = new AudioModule(audioService, bluetoothService, Theme.Default);
+        var displayControlsModule = new DisplayControlsModule(displayControlsService, Theme.Default);
+        var bluetoothModule = new BluetoothModule(bluetoothService, Theme.Default);
+        var batteryModule = new BatteryModule(batteryService, Theme.Default);
+        _centerModule = new CenterModule(_notificationService, Theme.Default);
+        var musicModule = new MusicModule(_musicService, Theme.Default);
+        var trayModule = new TrayModule(_trayService, Theme.Default);
+        var powerModule = new PowerModule(Theme.Default);
+        var workspacesModule = new WorkspacesModule(_hyprland, _hyprctl, _superKey, Theme.Default, () => languageModule.IsShown);
 
-        _leftModules = [_workspacesModule, _musicModule];
+        _leftModules = [workspacesModule, musicModule];
         _rightModules =
         [
-            new CompositeModule(_audioModule, _displayControlsModule, _bluetoothModule, _networkModule),
-            _systemStatsModule, _languageModule, _batteryModule, _trayModule, _powerModule
+            new CompositeModule(audioModule, displayControlsModule, bluetoothModule, networkModule),
+            systemStatsModule, languageModule, batteryModule, trayModule, powerModule
         ];
     }
 
@@ -195,25 +183,19 @@ public sealed class StatusBar : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         try
         {
-            var builder = new BarStateBuilder();
-            foreach (var service in _dataServices)
-            {
-                await service.UpdateAsync(builder, cts.Token);
-            }
-
-            _snapshot = builder.Build();
+            await Task.WhenAll(_dataServices.Select(service => service.RefreshAsync(cts.Token).AsTask()));
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            // The refresh has a fixed time budget. Keep the previous snapshot when
-            // a slower service uses it up, without logging an expected cancellation
+            // The refresh has a fixed time budget. Services retain their previous
+            // state when a slower refresh uses it up, without logging an expected cancellation
             // as an exception.
-            AppLogger.Warning("StatusBar", "Bar state refresh timed out; keeping the previous snapshot");
+            AppLogger.Warning("StatusBar", "Bar service refresh timed out; keeping existing service state");
         }
         catch (Exception exception)
         {
-            // Keep drawing the previous snapshot if a transient command fails.
-            AppLogger.Warning("StatusBar", "Could not refresh bar state; keeping the previous snapshot", exception);
+            // Keep drawing the service-owned state if a transient command fails.
+            AppLogger.Warning("StatusBar", "Could not refresh bar services; keeping their previous state", exception);
         }
     }
 

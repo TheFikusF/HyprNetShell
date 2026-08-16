@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
@@ -8,32 +9,40 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed partial class AudioModuleService : IBarDataService
 {
-    public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public AudioSnapshot Snapshot { get; private set; } = AudioSnapshot.Empty;
+
+    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
-        var output = await CommandRunner.TryReadAsync(
+        var statusTask = CommandRunner.TryReadAsync(
             "wpctl",
             "status",
             TimeSpan.FromMilliseconds(900),
             cancellationToken);
+        var graphTask = CommandRunner.TryReadAsync(
+            "pw-dump",
+            "-N",
+            TimeSpan.FromMilliseconds(900),
+            cancellationToken);
 
-        state.Audio = ParseStatus(output);
+        await Task.WhenAll(statusTask, graphTask);
+        Snapshot = ParseStatus(await statusTask) with { IsRecording = ParseRecordingState(await graphTask) };
     }
 
-    internal static Task SetDefaultAsync(string deviceId) =>
+    internal Task SetDefaultAsync(string deviceId) =>
         CommandRunner.TryRunAsync(
             "wpctl",
             ["set-default", deviceId],
             TimeSpan.FromSeconds(1),
             CancellationToken.None);
 
-    internal static Task SetVolumeAsync(string deviceId, int volume) =>
+    internal Task SetVolumeAsync(string deviceId, int volume) =>
         CommandRunner.TryRunAsync(
             "wpctl",
             ["set-volume", deviceId, $"{Math.Clamp(volume, 0, 100)}%"],
             TimeSpan.FromSeconds(1),
             CancellationToken.None);
 
-    internal static Task SetMutedAsync(string deviceId, bool muted) =>
+    internal Task SetMutedAsync(string deviceId, bool muted) =>
         CommandRunner.TryRunAsync(
             "wpctl",
             ["set-mute", deviceId, muted ? "1" : "0"],
@@ -50,9 +59,30 @@ internal sealed partial class AudioModuleService : IBarDataService
         var outputs = new List<AudioDeviceSnapshot>();
         var inputs = new List<AudioDeviceSnapshot>();
         List<AudioDeviceSnapshot>? currentSection = null;
+        var inAudioSection = false;
 
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
+            var sectionName = line.Trim();
+            if (sectionName.Equals("Audio", StringComparison.Ordinal))
+            {
+                currentSection = null;
+                inAudioSection = true;
+                continue;
+            }
+
+            if (sectionName.Equals("Video", StringComparison.Ordinal))
+            {
+                currentSection = null;
+                inAudioSection = false;
+                continue;
+            }
+
+            if (!inAudioSection)
+            {
+                continue;
+            }
+
             if (line.Contains("Sinks:", StringComparison.Ordinal))
             {
                 currentSection = outputs;
@@ -65,9 +95,8 @@ internal sealed partial class AudioModuleService : IBarDataService
                 continue;
             }
 
-            if (line.Contains("Filters:", StringComparison.Ordinal) ||
-                line.Contains("Streams:", StringComparison.Ordinal) ||
-                line.Contains("Video", StringComparison.Ordinal))
+            if (line.Contains("Streams:", StringComparison.Ordinal) ||
+                line.Contains("Filters:", StringComparison.Ordinal))
             {
                 currentSection = null;
                 continue;
@@ -94,8 +123,69 @@ internal sealed partial class AudioModuleService : IBarDataService
                 match.Groups["default"].Success));
         }
 
-        return new AudioSnapshot(true, outputs, inputs);
+        return new AudioSnapshot(true, outputs, inputs, false);
     }
+
+    internal static bool ParseRecordingState(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            foreach (var pipeWireObject in document.RootElement.EnumerateArray())
+            {
+                if (!pipeWireObject.TryGetProperty("type", out var type) ||
+                    !type.ValueEquals("PipeWire:Interface:Node") ||
+                    !pipeWireObject.TryGetProperty("info", out var info) ||
+                    !info.TryGetProperty("state", out var state) ||
+                    !state.ValueEquals("running") ||
+                    !info.TryGetProperty("props", out var properties) ||
+                    !properties.TryGetProperty("media.class", out var mediaClass) ||
+                    !mediaClass.ValueEquals("Stream/Input/Audio"))
+                {
+                    continue;
+                }
+
+                if (properties.TryGetProperty("application.name", out _) ||
+                    properties.TryGetProperty("application.process.binary", out _))
+                {
+                    if (!IsHiddenOrMonitorStream(properties))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Treat partial or unavailable graph snapshots as no active recording.
+        }
+
+        return false;
+    }
+
+    private static bool IsHiddenOrMonitorStream(JsonElement properties) =>
+        PropertyEquals(properties, "media.role", "Abstract") ||
+        PropertyContains(properties, "application.id", "pavucontrol") ||
+        PropertyContains(properties, "application.process.binary", "pavucontrol") ||
+        PropertyContains(properties, "node.name", "peak detect") ||
+        PropertyContains(properties, "media.name", "peak detect") ||
+        PropertyContains(properties, "target.object", ".monitor") ||
+        PropertyContains(properties, "node.target", ".monitor");
+
+    private static bool PropertyEquals(JsonElement properties, string name, string value) =>
+        properties.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.String &&
+        property.GetString()?.Equals(value, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool PropertyContains(JsonElement properties, string name, string value) =>
+        properties.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.String &&
+        property.GetString()?.Contains(value, StringComparison.OrdinalIgnoreCase) == true;
 
     [GeneratedRegex(@"(?<default>\*)?\s*(?<id>\d+)\.\s+(?<name>.+?)\s+\[vol:\s*(?<volume>\d+(?:\.\d+)?)(?<muted>\s+MUTED)?\s*\]", RegexOptions.CultureInvariant)]
     private static partial Regex DeviceLine();

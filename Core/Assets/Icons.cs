@@ -50,6 +50,11 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/mic-off.svg")]
     public static partial SvgAsset MicrophoneOff { get; }
 
+    [SvgAsset(
+        "assets/icons/lucide/music.svg",
+        "assets/icons/lucide/music-2.svg")]
+    public static partial SvgAsset[] MusicNotes { get; }
+
     [SvgAsset("assets/icons/lucide/headphones.svg")]
     public static partial SvgAsset Headphones { get; }
 
@@ -188,4 +193,13 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/info.svg")]
     public static partial SvgAsset Info { get; }
+    
+    [SvgAsset("assets/icons/lucide/leaf.svg")]
+    public static partial SvgAsset Leaf { get; }
+    
+    [SvgAsset("assets/icons/lucide/scale.svg")]
+    public static partial SvgAsset Scale { get; }
+    
+    [SvgAsset("assets/icons/lucide/flame.svg")]
+    public static partial SvgAsset Flame { get; }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
@@ -8,7 +9,9 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class NetworkModuleService : IBarDataService
 {
-    public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public NetworkSnapshot Snapshot { get; private set; } = NetworkSnapshot.Empty;
+
+    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         var radioTask = CommandRunner.TryReadAsync(
             "nmcli",
@@ -67,15 +70,105 @@ internal sealed class NetworkModuleService : IBarDataService
             }
         }
 
-        state.Network = snapshot;
+        Snapshot = snapshot;
     }
 
-    internal static Task SetWifiEnabledAsync(bool enabled) =>
+    internal Task SetWifiEnabledAsync(bool enabled) =>
         CommandRunner.TryRunAsync(
             "nmcli",
             ["radio", "wifi", enabled ? "on" : "off"],
             TimeSpan.FromSeconds(3),
             CancellationToken.None);
+
+    internal async Task<IReadOnlyList<WifiNetworkSnapshot>> ScanWifiNetworksAsync()
+    {
+        var output = await CommandRunner.TryReadAsync(
+            "nmcli",
+            "-t -f ACTIVE,SSID,SIGNAL,SECURITY d wifi list",
+            TimeSpan.FromSeconds(3),
+            CancellationToken.None);
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return [];
+        }
+
+        var networks = new List<WifiNetworkSnapshot>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = SplitNmcliFields(line);
+            if (parts.Length < 4 || !seen.Add(parts[1]))
+            {
+                continue;
+            }
+
+            networks.Add(new WifiNetworkSnapshot(
+                parts[1],
+                int.TryParse(parts[2], out var signal) ? signal : null,
+                parts[3],
+                parts[0].Equals("yes", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        return networks
+            .OrderByDescending(x => x.Active)
+            .ThenByDescending(x => x.Signal.GetValueOrDefault())
+            .ToArray();
+    }
+
+    internal void ConnectWifi(string ssid)
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "nmcli",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    ArgumentList = { "d", "wifi", "connect", ssid },
+                });
+            }
+            catch
+            {
+                // Ignore transient command failures; the next state refresh will show the result.
+            }
+        });
+    }
+
+    private static string[] SplitNmcliFields(string line)
+    {
+        var fields = new List<string>();
+        var current = new global::System.Text.StringBuilder();
+        var escaped = false;
+
+        foreach (var c in line)
+        {
+            if (escaped)
+            {
+                current.Append(c);
+                escaped = false;
+            }
+            else if (c == '\\')
+            {
+                escaped = true;
+            }
+            else if (c == ':')
+            {
+                fields.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+
+        fields.Add(current.ToString());
+        return fields.ToArray();
+    }
 
     private static async Task<int?> ReadWifiSignalAsync(string device, CancellationToken cancellationToken)
     {

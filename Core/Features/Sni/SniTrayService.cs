@@ -27,16 +27,13 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     private DBusConnection? _connection;
     private StatusNotifierWatcher? _embeddedWatcher;
     private bool _initialized;
+    public IReadOnlyList<TrayItemSnapshot> Snapshot { get; private set; } = [];
 
-    public async ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         await EnsureInitializedAsync(cancellationToken);
         if (_connection is null) return;
-
-        foreach (var item in await ReadItemsAsync(cancellationToken))
-        {
-            state.AddTrayItem(item);
-        }
+        Snapshot = await ReadItemsAsync(cancellationToken);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

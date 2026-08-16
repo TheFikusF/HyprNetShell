@@ -6,10 +6,11 @@ namespace HyprNetShell.Core.Features.System;
 internal sealed class SystemStatsModuleService : IBarDataService
 {
     private CpuSample? _previousCpuSample;
+    public SystemStatsSnapshot Snapshot { get; private set; } = SystemStatsSnapshot.Empty;
 
-    public ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
+    public ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
-        state.SystemStats = ReadSnapshot();
+        Snapshot = ReadSnapshot();
         return ValueTask.CompletedTask;
     }
 

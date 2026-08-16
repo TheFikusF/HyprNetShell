@@ -45,6 +45,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     public RefBool? IsHoveredThrough { get; init; }
     public Action? OnClick { get; init; }
     public Action? OnClickThrough { get; init; }
+    public Action<float>? OnScroll { get; init; }
 
     public bool AcceptsWidthBound => !_explicitWidth.HasValue;
     public bool AcceptsHeightBound => !_explicitHeight.HasValue;
@@ -363,6 +364,11 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         if (clickedThrough)
         {
             OnClickThrough?.Invoke();
+        }
+
+        if (hovered && Layout.Input.ScrollDelta != 0.0f)
+        {
+            OnScroll?.Invoke(Layout.Input.ScrollDelta);
         }
 
         SetInteractionState(hovered, hoveredThrough, clicked, clickedThrough);

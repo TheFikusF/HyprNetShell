@@ -6,14 +6,13 @@ using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
-using HyprNetShell.Core.Services;
 using HyprNetShell.Rendering;
 using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Features.System;
 
 /// <summary>Owns the freedesktop notification bus name and keeps notification history in-process.</summary>
-internal sealed partial class NotificationService : IBarDataService, IPathMethodHandler, IDisposable
+internal sealed partial class NotificationService : IPathMethodHandler, IDisposable
 {
     private const string BUS_NAME = "org.freedesktop.Notifications";
     private const string OBJECT_PATH = "/org/freedesktop/Notifications";
@@ -68,12 +67,6 @@ internal sealed partial class NotificationService : IBarDataService, IPathMethod
                 }
             }
         }
-    }
-
-    public ValueTask UpdateAsync(BarStateBuilder state, CancellationToken cancellationToken)
-    {
-        state.Notifications = Snapshot;
-        return ValueTask.CompletedTask;
     }
 
     public async ValueTask HandleMethodAsync(MethodContext context)
