@@ -121,8 +121,13 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
         => DrawRoundedBorder(rect, radius, thickness, color);
 
-    public void FillRoundedRectHorizontalGradient(Rect rect, BorderRadius radius, Color left, Color right, float offset)
-        => DrawRoundedGradient(rect, radius, left, right, offset);
+    public void FillRoundedRectGradient(
+        Rect rect,
+        BorderRadius radius,
+        Gradient gradient,
+        GradientDirection direction,
+        float offset = 0.0f)
+        => DrawRoundedGradient(rect, radius, gradient, direction, offset);
 
     public void StrokeRect(Rect rect, float thickness, Color color)
         => DrawBorder(rect.X, rect.Y, rect.Width, rect.Height, thickness, color);
@@ -259,7 +264,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
-    private void DrawRoundedGradient(Rect rect, BorderRadius radius, Color left, Color right, float offset)
+    private void DrawRoundedGradient(
+        Rect rect,
+        BorderRadius radius,
+        Gradient gradient,
+        GradientDirection direction,
+        float offset)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
         {
@@ -267,14 +277,26 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         radius = ClampCornerRadius(radius, rect.Width, rect.Height);
-        var strips = Math.Max(16, Math.Min(150, (int)MathF.Ceiling(rect.Width / 1.0f)));
-        var stripWidth = rect.Width / strips;
         offset -= MathF.Floor(offset);
+
+        if (direction == GradientDirection.Vertical)
+        {
+            DrawVerticalGradient(rect, radius, gradient, offset);
+            return;
+        }
+
+        DrawHorizontalGradient(rect, radius, gradient, offset);
+    }
+
+    private void DrawHorizontalGradient(Rect rect, BorderRadius radius, Gradient gradient, float offset)
+    {
+        var strips = Math.Max(16, Math.Min(150, (int)MathF.Ceiling(rect.Width)));
+        var stripWidth = rect.Width / strips;
 
         for (var i = 0; i < strips; i++)
         {
             var x0 = rect.X + i * stripWidth;
-            var x1 = i == strips - 1 ? rect.X + rect.Width : x0 + stripWidth + 0.75f;
+            var x1 = i == strips - 1 ? rect.X + rect.Width : x0 + stripWidth;
             var centerX = x0 + (x1 - x0) * 0.5f - rect.X;
             var top = rect.Y + RoundedTopInset(centerX, rect.Width, radius);
             var bottom = rect.Y + rect.Height - RoundedBottomInset(centerX, rect.Width, radius);
@@ -284,10 +306,44 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
                 continue;
             }
 
-            var t = ((float)i / Math.Max(1, strips - 1) + offset) % 1.0f;
-            t = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
-            DrawRect(x0, top, x1 - x0, height, Color.Lerp(left, right, t));
+            var position = GradientPosition(i, strips, offset);
+            DrawRect(x0, top, x1 - x0, height, gradient.Evaluate(position));
         }
+    }
+
+    private void DrawVerticalGradient(Rect rect, BorderRadius radius, Gradient gradient, float offset)
+    {
+        var strips = Math.Max(16, Math.Min(150, (int)MathF.Ceiling(rect.Height)));
+        var stripHeight = rect.Height / strips;
+
+        for (var i = 0; i < strips; i++)
+        {
+            var y0 = rect.Y + i * stripHeight;
+            var y1 = i == strips - 1 ? rect.Y + rect.Height : y0 + stripHeight;
+            var centerY = y0 + (y1 - y0) * 0.5f - rect.Y;
+            var left = rect.X + RoundedLeftInset(centerY, rect.Height, radius);
+            var right = rect.X + rect.Width - RoundedRightInset(centerY, rect.Height, radius);
+            var width = right - left;
+            if (width <= 0)
+            {
+                continue;
+            }
+
+            var position = GradientPosition(i, strips, offset);
+            DrawRect(left, y0, width, y1 - y0, gradient.Evaluate(position));
+        }
+    }
+
+    private static float GradientPosition(int strip, int stripCount, float offset)
+    {
+        var position = (float)strip / Math.Max(1, stripCount - 1);
+        if (offset == 0.0f)
+        {
+            return position;
+        }
+
+        position += offset;
+        return position - MathF.Floor(position);
     }
 
     private static float RoundedTopInset(float x, float width, BorderRadius radius)
@@ -315,6 +371,36 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         if (x > width - radius.BottomRight && radius.BottomRight > 0.0f)
         {
             return CircleInset(radius.BottomRight, x - (width - radius.BottomRight));
+        }
+
+        return 0.0f;
+    }
+
+    private static float RoundedLeftInset(float y, float height, BorderRadius radius)
+    {
+        if (y < radius.TopLeft && radius.TopLeft > 0.0f)
+        {
+            return CircleInset(radius.TopLeft, radius.TopLeft - y);
+        }
+
+        if (y > height - radius.BottomLeft && radius.BottomLeft > 0.0f)
+        {
+            return CircleInset(radius.BottomLeft, y - (height - radius.BottomLeft));
+        }
+
+        return 0.0f;
+    }
+
+    private static float RoundedRightInset(float y, float height, BorderRadius radius)
+    {
+        if (y < radius.TopRight && radius.TopRight > 0.0f)
+        {
+            return CircleInset(radius.TopRight, radius.TopRight - y);
+        }
+
+        if (y > height - radius.BottomRight && radius.BottomRight > 0.0f)
+        {
+            return CircleInset(radius.BottomRight, y - (height - radius.BottomRight));
         }
 
         return 0.0f;

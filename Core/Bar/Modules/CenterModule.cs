@@ -25,6 +25,7 @@ internal sealed class CenterModule : IDrawableModule
     private readonly NotificationsWidget _notificationsWidget;
 
     private float _clockRotation;
+    private Rect? _clockBounds;
 
     private readonly ModulesCommon.NodeWithPopup _node = new("center_module")
     {
@@ -84,9 +85,8 @@ internal sealed class CenterModule : IDrawableModule
         const int SUN_ORBIT_RADIUS = 67;
         const int OVERLAY_CENTER_X = 80;
         const int OVERLAY_CENTER_Y = -38;
-        var targetRotation = _node.IsHovered ? DayRotation(now) + (float)Math.PI : DayRotation(now);
+        var targetRotation = ClockTargetRotation(now);
         _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, ModulesCommon.DELTA_TIME);
-        // _clockRotation += 0.05f;
         return new BoxNode(CLOCK_SIZE + 6)
         {
             Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) /2,
@@ -115,7 +115,7 @@ internal sealed class CenterModule : IDrawableModule
                         }
                     ]
                 },
-                new BoxNode(CLOCK_SIZE + 6, CLOCK_SIZE + 6)
+                new BoundsReportingBoxNode(CLOCK_SIZE + 6, CLOCK_SIZE + 6, bounds => _clockBounds = bounds)
                 {
                     IgnoreLayout = true,
                     Top = OVERLAY_CENTER_Y - CLOCK_SIZE / 2,
@@ -208,8 +208,47 @@ internal sealed class CenterModule : IDrawableModule
 
     private static double GradientOffset() => (Environment.TickCount64 % 4600 / 4600.0) * Math.PI * 2;
 
+    private float ClockTargetRotation(DateTime now)
+    {
+        var target = DayRotation(now);
+        if (!_node.IsHovered || _clockBounds is not { } bounds || !Layout.Input.HasPointer)
+        {
+            return ClosestEquivalentAngle(target, _clockRotation);
+        }
+
+        var centerX = bounds.X + bounds.Width * 0.5f;
+        var centerY = bounds.Y + bounds.Height * 0.5f;
+        var pointerX = Layout.Input.PointerX - centerX;
+        var pointerY = Layout.Input.PointerY - centerY;
+        var distanceSquared = pointerX * pointerX + pointerY * pointerY;
+
+        if (distanceSquared <= 0.01f)
+        {
+            return ClosestEquivalentAngle(target, _clockRotation);
+        }
+
+        var pointerAngle = MathF.Atan2(pointerY, pointerX);
+        var isDaytime = now.Hour is >= 6 and < 18;
+        target = isDaytime ? pointerAngle : pointerAngle - MathF.PI;
+
+        return ClosestEquivalentAngle(target, _clockRotation);
+    }
+
+    private static float ClosestEquivalentAngle(float angle, float reference) =>
+        reference + MathF.IEEERemainder(angle - reference, MathF.Tau);
+
     private static float DayRotation(DateTime now) =>
         (float)((now.TimeOfDay.TotalDays * Math.Tau) - 0.5 * Math.PI);
+
+    private sealed class BoundsReportingBoxNode(int width, int height, Action<Rect> reportBounds)
+        : BoxNode(width, height)
+    {
+        public override void Draw(IRenderApi renderer, int x, int y)
+        {
+            reportBounds(new Rect(x, y, Width, Height));
+            base.Draw(renderer, x, y);
+        }
+    }
 
     private static EncodedImageData LoadClockImage(string path)
     {

@@ -11,7 +11,7 @@
     <PropertyGroup Condition="'$(PublishAot)' == 'true'">
         <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">linux-x64</RuntimeIdentifier>
         <SelfContained>true</SelfContained>
-        <StripSymbols>false</StripSymbols>
+        <StripSymbols>true</StripSymbols>
         <NativeDebugSymbols>false</NativeDebugSymbols>
         <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
     </PropertyGroup>

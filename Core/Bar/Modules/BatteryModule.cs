@@ -16,6 +16,21 @@ internal sealed class BatteryModule(
     private readonly ModulesCommon.BoxState _chargeLimitDecreaseState = new();
     private readonly ModulesCommon.BoxState _chargeLimitIncreaseState = new();
 
+    private readonly Gradient _batteryGradient = new([
+        new Gradient.Stop(0, Color.Red),
+        new Gradient.Stop(0.15f, Color.Red),
+        new Gradient.Stop(0.3f, Color.Yellow),
+        new Gradient.Stop(0.5f, Color.FromRgb(46, 204, 113)),
+        new Gradient.Stop(1f, Color.FromRgb(46, 204, 113))
+    ]);
+
+    private readonly Gradient _batteryOverlayGradient = new(
+        new Gradient.Stop(0.0f, Color.FromRgb(255, 255, 255, 0.35f)),
+        new Gradient.Stop(0.33f, Color.FromRgb(255, 255, 255, 0.08f)),
+        new Gradient.Stop(0.5f, Color.FromRgb(255, 255, 255, 0.0f)),
+        new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
+        new Gradient.Stop(1.0f, Color.FromRgb(0, 0, 0, 0.45f)));
+
     private readonly ModulesCommon.NodeWithPopup _node = new("battery_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
@@ -29,28 +44,94 @@ internal sealed class BatteryModule(
             : new SpacerNode();
     }
 
-    private Node BuildStateModule(BatterySnapshot battery)
+    private BoxNode BuildStateModule(BatterySnapshot battery)
     {
-        var (left, right) = BatteryGradient(battery.Percentage);
-        var icon = battery.IsCharging
-            ? Icons.BatteryCharging
-            : battery.IsCritical
-                ? Icons.BatteryWarning
-                : BatteryLevelIcon(battery.Percentage);
+        var percentage = battery.Percentage;
+        // var percentage = (float)(Environment.TickCount64 % 2600 / 2600.0) * 100;
 
-        return new GradientBoxNode(left, right, static () => 0.0f, 80)
+        return new BoxNode(new Style(), verticalAlignment: ItemsAlignment.Center)
         {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { Spacing = 8 },
-            Children =
-            [
-                new ImageNode(icon, 18, 18, theme.Text),
-                new TextNode($"{battery.Percentage}%", theme.TextSize, theme.Text),
-            ],
+            new BoxNode(80, 14 + 8 + 8)
+            {
+                Direction = Direction.Horizontal,
+                VerticalAlignment = ItemsAlignment.Center,
+                HorizontalAlignment = ItemsAlignment.Start,
+                Children =
+                [
+                    new BoxNode(74, 14 + 5 + 5)
+                    {
+                        IgnoreLayout = true,
+                        Left = (int)theme.BorderWidth,
+                        Style = new Style
+                        {
+                            BackgroundColor = Color.FromRgb(0, 0, 0, 0.5f),
+                        }
+                    },
+                    BuildBatteryFill(battery.IsCharging, percentage),
+                    // BuildBatteryFill(true, percentage),
+                    new GradientBoxNode(_batteryOverlayGradient, 80, 14 + 5 + 5)
+                    {
+                        IgnoreLayout = true,
+                        Direction = Direction.Horizontal,
+                        GradientDirection = GradientDirection.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Center,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        Style = new Style { BorderRadius = 3, Spacing = 4 },
+                        Children = battery.IsCharging
+                            ?
+                            [
+                                new ImageNode(Icons.Lightning, 16, 16, theme.Text),
+                                new TextNode($"{percentage:0}%", theme.TextSize, theme.Text)
+                            ]
+                            : [new TextNode($"{percentage:0}%", theme.TextSize, theme.Text)]
+                    },
+                    new BoxNode(80, 14 + 8 + 8)
+                    {
+                        IgnoreLayout = true,
+                        Style = new Style
+                        {
+                            BorderRadius = 8, BorderWidth = theme.BorderWidth,
+                            BorderColor = theme.Border,
+                        }
+                    },
+                ],
+            },
+            new BoxNode(4, 16)
+            {
+                Style = new Style
+                {
+                    BackgroundColor = theme.Border,
+                    BorderRadius = new BorderRadius(0, 4, 4, 0)
+                }
+            }
         };
     }
+
+    private BoxNode BuildBatteryFill(bool isCharging, float percentage)
+    {
+        var width = (int)(74 * (percentage / 100));
+        var color = _batteryGradient.Evaluate(percentage / 100);
+        if (isCharging)
+        {
+            return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5)
+            {
+                IgnoreLayout = true,
+                Left = (int)theme.BorderWidth,
+                Direction = Direction.Horizontal,
+                GradientDirection = GradientDirection.Horizontal,
+            };
+        }
+
+        return new BoxNode(width, 14 + 5 + 5)
+        {
+            IgnoreLayout = true,
+            Left = (int)theme.BorderWidth,
+            Style = new Style { BackgroundColor = color }
+        };
+    }
+
+    private static float ChargingGradientOffset() =>
+        -(float)(Environment.TickCount64 % 6000 / 6000.0);
 
     private BoxNode BuildPopup(BatterySnapshot battery) => new()
     {
@@ -60,8 +141,13 @@ internal sealed class BatteryModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Info, "Battery"),
             BuildRow("Device", battery.Device),
-            BuildRow("Capacity", $"{battery.Percentage}%"),
+            new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
+            {
+                new TextNode("Capacity", theme.TextSize, theme.Text),
+                ModulesCommon.BuildTextWithIcon(theme, BatteryLevelIcon(battery.Percentage), $"{battery.Percentage}%"),
+            },
             BuildRow("Status", battery.Status),
             ..BuildChargeLimitControl(battery.ChargeLimit),
             ..BuildPowerProfileSection(battery.PowerProfiles),
@@ -145,7 +231,11 @@ internal sealed class BatteryModule(
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
-            Children = [..powerProfiles.Profiles.Select((profile, i) => BuildPowerProfileButton(profile, powerProfiles.Active, i))],
+            Children =
+            [
+                ..powerProfiles.Profiles.Select((profile, i) =>
+                    BuildPowerProfileButton(profile, powerProfiles.Active, i))
+            ],
         };
     }
 
@@ -184,16 +274,6 @@ internal sealed class BatteryModule(
             new TextNode(label, theme.TextSize, theme.Text),
             new TextNode(value, theme.TextSize, theme.Text),
         };
-
-    private static (Color Left, Color Right) BatteryGradient(int percentage)
-    {
-        var red = Color.FromRgb(231, 76, 60, 0.92f);
-        var green = Color.FromRgb(46, 204, 113, 0.92f);
-        var charge = Math.Clamp(percentage, 0, 100);
-        return charge < 50
-            ? (Color.Lerp(red, green, charge / 50.0f), red)
-            : (green, Color.Lerp(red, green, (charge - 50) / 50.0f));
-    }
 
     public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[percentage switch
     {

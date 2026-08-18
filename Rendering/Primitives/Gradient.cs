@@ -1,5 +1,11 @@
 namespace HyprNetShell.Rendering.Primitives;
 
+public enum GradientDirection
+{
+    Horizontal,
+    Vertical,
+}
+
 public sealed class Gradient
 {
     public readonly record struct Stop(float Percent, Color Color);

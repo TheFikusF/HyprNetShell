@@ -137,11 +137,14 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/battery-charging.svg")]
     public static partial SvgAsset BatteryCharging { get; }
 
+    [SvgAsset("assets/icons/lucide/zap.svg")]
+    public static partial SvgAsset Lightning { get; }
+
     [SvgAsset("assets/icons/lucide/cpu.svg")]
-    public static partial SvgAsset Cpu { get; }
+    public static partial SvgAsset CPU { get; }
 
     [SvgAsset("assets/icons/lucide/memory-stick.svg")]
-    public static partial SvgAsset Memory { get; }
+    public static partial SvgAsset RAM { get; }
 
     [SvgAsset("assets/icons/lucide/thermometer.svg")]
     public static partial SvgAsset Temperature { get; }
@@ -202,4 +205,19 @@ public static partial class Icons
     
     [SvgAsset("assets/icons/lucide/flame.svg")]
     public static partial SvgAsset Flame { get; }
+    
+    [SvgAsset("assets/icons/lucide/arrow-up.svg")]
+    public static partial SvgAsset ArrowUp { get; }
+    
+    [SvgAsset("assets/icons/lucide/arrow-down.svg")]
+    public static partial SvgAsset ArrowDown { get; }
+    
+    [SvgAsset("assets/icons/lucide/hard-drive.svg")]
+    public static partial SvgAsset HardDrive { get; }
+    
+    [SvgAsset("assets/icons/lucide/gpu.svg")]
+    public static partial SvgAsset GPU { get; }
+    
+    [SvgAsset("assets/icons/lucide/square-activity.svg")]
+    public static partial SvgAsset SquareActivity { get; }
 }

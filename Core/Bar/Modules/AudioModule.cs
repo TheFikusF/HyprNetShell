@@ -13,18 +13,18 @@ internal sealed class AudioModule(
     BluetoothModuleService bluetoothService,
     Theme theme) : IDrawableModule
 {
-    private const int NoteCapacity = 20;
-    private const long NoteSpawnIntervalMs = 500;
-    private const long NoteLifetimeMs = 2400;
-    private const float LabelAnimationDecay = 18.0f;
-    private const int LabelSpacing = 7;
+    private const int NOTE_CAPACITY = 20;
+    private const long NOTE_SPAWN_INTERVAL_MS = 500;
+    private const long NOTE_LIFETIME_MS = 2400;
+    private const float LABEL_ANIMATION_DECAY = 18.0f;
+    private const int LABEL_SPACING = 7;
 
     private readonly Dictionary<string, RefBool> _sliderDragging = [];
     private readonly Dictionary<string, RefFloat> _muteSwitchAnimations = [];
     private readonly Dictionary<string, int> _volumeOverrides = [];
     private readonly Dictionary<string, bool> _muteOverrides = [];
     private readonly Dictionary<string, VolumeUpdateQueue> _volumeQueues = [];
-    private readonly Queue<NoteParticle> _notes = new(NoteCapacity);
+    private readonly Queue<NoteParticle> _notes = new(NOTE_CAPACITY);
     private readonly RefBool _widgetHovered = new();
     private readonly RefBool _microphoneHovered = new();
     private readonly RefBool _volumeHovered = new();
@@ -127,23 +127,23 @@ internal sealed class AudioModule(
     {
         var label = new TextNode(text, theme.TextSize, theme.Text);
         var targetWidth = hovered.Value ? label.Width : 0.0f;
-        var targetSpacing = hovered.Value ? LabelSpacing : 0.0f;
+        var targetSpacing = hovered.Value ? LABEL_SPACING : 0.0f;
         var hiddenColor = theme.Text with { A = 0.0f };
         var targetColor = hovered.Value ? theme.Text : hiddenColor;
 
         animatedWidth = PrimitivesMath.LerpSmooth(
             animatedWidth,
             targetWidth,
-            LabelAnimationDecay,
+            LABEL_ANIMATION_DECAY,
             ModulesCommon.DELTA_TIME);
         animatedSpacing = PrimitivesMath.LerpSmooth(
             animatedSpacing,
             targetSpacing,
-            LabelAnimationDecay,
+            LABEL_ANIMATION_DECAY,
             ModulesCommon.DELTA_TIME);
         animatedColor = (animatedColor ?? hiddenColor).LerpSmooth(
             targetColor,
-            LabelAnimationDecay,
+            LABEL_ANIMATION_DECAY,
             ModulesCommon.DELTA_TIME);
 
         if (MathF.Abs(animatedWidth - targetWidth) < 0.05f)
@@ -176,7 +176,7 @@ internal sealed class AudioModule(
             IsHovered = hovered,
             OnClick = onClick,
             OnScroll = onScroll,
-            Style = new Style { Spacing = (int)MathF.Round(animatedSpacing), Padding = new Insets(4, 6)},
+            Style = new Style { Spacing = (int)MathF.Round(animatedSpacing), Padding = new Insets(4, 6) },
             Children = children,
         };
     }
@@ -207,8 +207,8 @@ internal sealed class AudioModule(
 
     private static float RecordingIndicatorOpacity()
     {
-        const double periodMs = 1800.0;
-        var phase = Environment.TickCount64 % periodMs / periodMs * Math.PI * 2.0;
+        const double PERIOD_MS = 1800.0;
+        var phase = Environment.TickCount64 % PERIOD_MS / PERIOD_MS * Math.PI * 2.0;
         return 0.58f + 0.42f * (float)((Math.Sin(phase) + 1.0) * 0.5);
     }
 
@@ -217,7 +217,7 @@ internal sealed class AudioModule(
         var now = Environment.TickCount64;
         var hovered = _widgetHovered.Value;
 
-        while (_notes.TryPeek(out var note) && now - note.SpawnedAtMs >= NoteLifetimeMs)
+        while (_notes.TryPeek(out var note) && now - note.SpawnedAtMs >= NOTE_LIFETIME_MS)
         {
             _notes.Dequeue();
         }
@@ -230,21 +230,21 @@ internal sealed class AudioModule(
         if (hovered)
         {
             var spawned = 0;
-            while (now >= _nextNoteSpawnMs && spawned < NoteCapacity)
+            while (now >= _nextNoteSpawnMs && spawned < NOTE_CAPACITY)
             {
-                if (_notes.Count == NoteCapacity)
+                if (_notes.Count == NOTE_CAPACITY)
                 {
                     _notes.Dequeue();
                 }
 
                 _notes.Enqueue(new NoteParticle(_nextNoteSpawnMs, _noteSequence++));
-                _nextNoteSpawnMs += NoteSpawnIntervalMs;
+                _nextNoteSpawnMs += NOTE_SPAWN_INTERVAL_MS;
                 spawned++;
             }
 
-            if (now - _nextNoteSpawnMs > NoteSpawnIntervalMs * NoteCapacity)
+            if (now - _nextNoteSpawnMs > NOTE_SPAWN_INTERVAL_MS * NOTE_CAPACITY)
             {
-                _nextNoteSpawnMs = now + NoteSpawnIntervalMs;
+                _nextNoteSpawnMs = now + NOTE_SPAWN_INTERVAL_MS;
             }
         }
 
@@ -263,7 +263,7 @@ internal sealed class AudioModule(
         var color = Color.Lerp(theme.Text, Color.Orange, 0.55f);
         return _notes.Select(note =>
         {
-            var progress = Math.Clamp((now - note.SpawnedAtMs) / (float)NoteLifetimeMs, 0.0f, 1.0f);
+            var progress = Math.Clamp((now - note.SpawnedAtMs) / (float)NOTE_LIFETIME_MS, 0.0f, 1.0f);
             var fadeIn = Math.Min(1.0f, progress / 0.12f);
             var fadeOut = Math.Min(1.0f, (1.0f - progress) / 0.25f);
             var opacity = _noteFieldOpacity * Math.Min(fadeIn, fadeOut) * 0.62f;
@@ -322,7 +322,7 @@ internal sealed class AudioModule(
         }
     }
 
-    private Node BuildDeviceRow(AudioDeviceSnapshot device, bool input)
+    private BoxNode BuildDeviceRow(AudioDeviceSnapshot device, bool input)
     {
         var volume = EffectiveVolume(device);
         var muted = EffectiveMuted(device);
@@ -433,15 +433,14 @@ internal sealed class AudioModule(
         };
     }
 
-    private static SvgAsset VolumeIcon(int volume) =>
-        Icons.VolumeLevels[volume switch
-        {
-            <= 0 => 0,
-            <= 50 => 1,
-            _ => 2,
-        }];
+    private static SvgAsset VolumeIcon(int volume) => Icons.VolumeLevels[volume switch
+    {
+        <= 0 => 0,
+        <= 50 => 1,
+        _ => 2,
+    }];
 
-    private BoxNode BuildPlainRow(string text) => new BoxNode
+    private BoxNode BuildPlainRow(string text) => new ()
     {
         Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
         Children = [new TextNode(text, theme.TextSize, theme.Muted)],
@@ -487,9 +486,9 @@ internal sealed class AudioModule(
 
     private void AdjustVolume(AudioDeviceSnapshot device, float scrollDelta)
     {
-        const int scrollStep = 5;
+        const int SCROLL_STEP = 5;
         var direction = scrollDelta < 0.0f ? 1 : -1;
-        SetVolume(device, EffectiveVolume(device) + direction * scrollStep);
+        SetVolume(device, EffectiveVolume(device) + direction * SCROLL_STEP);
     }
 
     private void SetVolume(AudioDeviceSnapshot device, int volume)

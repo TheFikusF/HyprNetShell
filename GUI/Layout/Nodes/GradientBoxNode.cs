@@ -1,19 +1,40 @@
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
+using PrimitiveGradientDirection = HyprNetShell.Rendering.Primitives.GradientDirection;
 
 namespace HyprNetShell.GUI.Layout.Nodes;
 
 public class GradientBoxNode : BoxNode
 {
     private readonly Func<float> _offset;
-    private readonly Color _left;
-    private readonly Color _right;
+    private readonly Gradient _gradient;
+
+    public PrimitiveGradientDirection GradientDirection { get; init; } = PrimitiveGradientDirection.Horizontal;
 
     public GradientBoxNode(Color left, Color right, Func<float> offset, int? width = null, int? height = null)
+        : this(
+            new Gradient(
+                new Gradient.Stop(0.0f, left),
+                new Gradient.Stop(0.5f, right),
+                new Gradient.Stop(1.0f, left)),
+            offset,
+            width,
+            height)
+    {
+    }
+
+    public GradientBoxNode(Gradient gradient, int? width = null, int? height = null)
+        : this(gradient, static () => 0.0f, width, height)
+    {
+    }
+
+    public GradientBoxNode(Gradient gradient, Func<float> offset, int? width = null, int? height = null)
         : base(width, height)
     {
-        _left = left;
-        _right = right;
+        ArgumentNullException.ThrowIfNull(gradient);
+        ArgumentNullException.ThrowIfNull(offset);
+
+        _gradient = gradient;
         _offset = offset;
     }
 
@@ -33,11 +54,11 @@ public class GradientBoxNode : BoxNode
             renderer.FillRoundedBorder(rect, style.BorderRadius, style.BorderWidth, style.BorderColor.Value);
         }
 
-        renderer.FillRoundedRectHorizontalGradient(
+        renderer.FillRoundedRectGradient(
             gradientRect,
             gradientRadius,
-            _left,
-            _right,
+            _gradient,
+            GradientDirection,
             _offset());
 
         Layout.AddInputRegion(rect);
