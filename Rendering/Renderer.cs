@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using HyprNetShell.Rendering.Primitives;
 using Silk.NET.OpenGL;
 
@@ -11,6 +12,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     private readonly uint _vao;
     private readonly uint _vbo;
+    private readonly List<float> _coloredVertices = new(6 * 6);
 
     private readonly int _viewportLocation;
 
@@ -87,6 +89,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void BeginFrame(int width, int height)
     {
+        _coloredVertices.Clear();
         _textureRepository.RemoveUnusedPathResources();
 
         Width = Math.Max(width, 1);
@@ -98,13 +101,14 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.UseProgram(_program);
         _gl.Uniform2(_viewportLocation, (float)Width, (float)Height);
         _font.SetViewport(Width, Height);
-        
+
         OnFrameStart?.Invoke();
     }
 
     public void EndFrame()
     {
         OnFrameEnd?.Invoke();
+        FlushColoredGeometry();
         _gl.Flush();
     }
 
@@ -422,6 +426,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void DrawText(string text, float x, float y, float fontSize, Color color, float charDistance)
     {
+        FlushColoredGeometry();
         _font.DrawText(text, x, y, fontSize, charDistance, color);
     }
 
@@ -492,6 +497,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         int colorLocation,
         float rotationRadians = 0)
     {
+        FlushColoredGeometry();
+
         var x = rect.X;
         var y = rect.Y;
         var width = rect.Width;
@@ -582,15 +589,56 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
     {
+        const int FLOATS_PER_VERTEX = 6;
+        var vertexCount = vertices.Length / FLOATS_PER_VERTEX;
+
+        switch (primitiveType)
+        {
+            case PrimitiveType.Triangles:
+                AppendColoredVertices(vertices);
+                break;
+            case PrimitiveType.TriangleFan:
+                _coloredVertices.EnsureCapacity(_coloredVertices.Count + Math.Max(0, vertexCount - 2) * 3 * FLOATS_PER_VERTEX);
+                for (var vertex = 1; vertex < vertexCount - 1; vertex++)
+                {
+                    AppendColoredVertices(vertices[..FLOATS_PER_VERTEX]);
+                    AppendColoredVertices(vertices.Slice(vertex * FLOATS_PER_VERTEX, FLOATS_PER_VERTEX));
+                    AppendColoredVertices(vertices.Slice((vertex + 1) * FLOATS_PER_VERTEX, FLOATS_PER_VERTEX));
+                }
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(primitiveType), primitiveType, "Unsupported colored primitive type.");
+        }
+    }
+
+    private void AppendColoredVertices(ReadOnlySpan<float> vertices)
+    {
+        _coloredVertices.EnsureCapacity(_coloredVertices.Count + vertices.Length);
+        foreach (var value in vertices)
+        {
+            _coloredVertices.Add(value);
+        }
+    }
+
+    private void FlushColoredGeometry()
+    {
+        if (_coloredVertices.Count == 0)
+        {
+            return;
+        }
+
         _gl.UseProgram(_program);
         _gl.Uniform2(_viewportLocation, (float)Width, (float)Height);
         _gl.BindVertexArray(_vao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+
+        var vertices = CollectionsMarshal.AsSpan(_coloredVertices);
         fixed (float* data = vertices)
         {
             _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data, BufferUsageARB.DynamicDraw);
         }
-        _gl.DrawArrays(primitiveType, 0, (uint)(vertices.Length / 6));
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)(vertices.Length / 6));
+        _coloredVertices.Clear();
     }
 
     private static BorderRadius ClampCornerRadius(BorderRadius radius, float width, float height)
@@ -664,6 +712,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
+        FlushColoredGeometry();
         _gl.DeleteBuffer(_vbo);
         _gl.DeleteVertexArray(_vao);
         _gl.DeleteBuffer(_textureVbo);

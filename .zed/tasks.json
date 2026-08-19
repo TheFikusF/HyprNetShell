@@ -1,0 +1,57 @@
+[
+  {
+    "label": "Build: Native",
+    "command": "meson setup Native/build Native && meson compile -C Native/build",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "on_success",
+    "shell": "system",
+    "tags": ["build", "native"]
+  },
+  {
+    "label": "Build: Managed",
+    "command": "dotnet build HyprNetShell.slnx",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "on_success",
+    "shell": "system",
+    "tags": ["build", "csharp"]
+  },
+  {
+    "label": "Build: HyprNetShell",
+    "command": "meson setup Native/build Native && meson compile -C Native/build && dotnet build HyprNetShell.slnx",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "on_success",
+    "shell": "system",
+    "tags": ["build"]
+  },
+  {
+    "label": "Run: HyprNetShell",
+    "command": "meson setup Native/build Native && meson compile -C Native/build && dotnet run --project HyprNetShell.csproj",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "tags": ["run"]
+  },
+  {
+    "label": "Publish: NativeAOT",
+    "command": "dotnet publish HyprNetShell.csproj -p:PublishProfile=Properties/PublishProfiles/NativeAotOneFile.pubxml",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "on_success",
+    "shell": "system",
+    "tags": ["build", "publish"]
+  }
+]

@@ -15,7 +15,9 @@ public class TextNode : Node, IWidthBoundNode
 {
     private int? _measuredWidth;
     private int? _measuredHeight;
-    
+    private IReadOnlyList<string>? _cachedLines;
+    private int? _cachedLinesAvailableWidth;
+
     private int? _parentMaxWidth;
 
     public override int Width
@@ -102,7 +104,16 @@ public class TextNode : Node, IWidthBoundNode
     public void SetMaxWidth(int maxWidth, bool stretch)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxWidth);
+        var previousMaxWidth = EffectiveMaxWidth;
         _parentMaxWidth = maxWidth;
+        if (EffectiveMaxWidth == previousMaxWidth)
+        {
+            return;
+        }
+
+        _cachedLines = null;
+        _measuredWidth = null;
+        _measuredHeight = null;
     }
 
     public override void Draw(IRenderApi renderer, int x, int y)
@@ -137,6 +148,10 @@ public class TextNode : Node, IWidthBoundNode
         var availableWidth = maxWidth.HasValue
             ? Math.Max(0, maxWidth.Value - (int)MathF.Ceiling(Style.Padding.Left + Style.Padding.Right))
             : (int?)null;
+        if (_cachedLines is not null && _cachedLinesAvailableWidth == availableWidth)
+        {
+            return _cachedLines;
+        }
 
         var lines = Wrapping switch
         {
@@ -149,16 +164,18 @@ public class TextNode : Node, IWidthBoundNode
             _ => NormalizeLines(Text),
         };
 
-        if (MaxLines is not { } maximumLines || lines.Count <= maximumLines)
+        if (MaxLines is { } maximumLines && lines.Count > maximumLines)
         {
-            return lines;
+            var visible = lines.Take(maximumLines).ToArray();
+            visible[^1] = availableWidth.HasValue
+                ? Ellipsize(renderer, visible[^1], availableWidth.Value, true)
+                : visible[^1] + "…";
+            lines = visible;
         }
 
-        var visible = lines.Take(maximumLines).ToArray();
-        visible[^1] = availableWidth.HasValue
-            ? Ellipsize(renderer, visible[^1], availableWidth.Value, true)
-            : visible[^1] + "…";
-        return visible;
+        _cachedLinesAvailableWidth = availableWidth;
+        _cachedLines = lines;
+        return lines;
     }
 
     private IReadOnlyList<string> WrapText(IRenderApi renderer, int availableWidth)

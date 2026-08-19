@@ -66,16 +66,17 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
             if (_measuredWidth.HasValue == false)
             {
-                _measuredWidth = SolidChildren.Any()
+                _measuredWidth = (SolidChildren.Any()
                     ? Direction == Direction.Horizontal
                         ? SolidChildren.Sum(child => child.Width) +
                           Style.Spacing * Math.Max(0, SolidChildren.Count() - 1)
                         : SolidChildren.Max(child => child.Width)
-                    : 0;
+                    : 0) + HorizontalInset;
             }
 
-            var measuredWidth = _measuredWidth.Value + HorizontalInset;
-            return _maxWidth.HasValue ? Math.Min(measuredWidth, _maxWidth.Value) : measuredWidth;
+            return _maxWidth.HasValue
+                ? Math.Min(_measuredWidth.Value, _maxWidth.Value)
+                : _measuredWidth.Value;
         }
     }
 
@@ -93,20 +94,22 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
                 return _stretchedHeight.Value;
             }
 
-            PrepareChildWidthBounds();
 
             if (_measuredHeight.HasValue == false)
             {
-                _measuredHeight = SolidChildren.Any()
+                PrepareChildWidthBounds();
+
+                _measuredHeight = (SolidChildren.Any()
                     ? Direction == Direction.Vertical
                         ? SolidChildren.Sum(child => child.Height) +
                           Style.Spacing * Math.Max(0, SolidChildren.Count() - 1)
                         : SolidChildren.Max(child => child.Height)
-                    : 0;
+                    : 0) + VerticalInset;
             }
 
-            var measuredHeight = _measuredHeight.Value + VerticalInset;
-            return _maxHeight.HasValue ? Math.Min(measuredHeight, _maxHeight.Value) : measuredHeight;
+            return _maxHeight.HasValue
+                ? Math.Min(_measuredHeight.Value, _maxHeight.Value)
+                : _measuredHeight.Value;
         }
     }
 
@@ -119,7 +122,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
     private BorderRadius BorderRadius => Style.BorderRadius;
 
-    public ICollection<Node> Children { get; init; } = new List<Node>();
+    public ICollection<Node> Children { get; init; } = [];
     private IEnumerable<Node> SolidChildren => Children.Where(x => x is not BoxNode box || box.IgnoreLayout == false);
     private IEnumerable<Node> EphemeralChildren => Children.Where(x => x is BoxNode { IgnoreLayout: true });
 
@@ -239,7 +242,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         foreach (var child in children)
         {
             child.Opacity *= Opacity;
-            
+
             var childY = contentY + GetCrossAxisOffset(VerticalAlignment, contentHeight, child.Height);
             child.Draw(renderer, cursorX, childY);
             childHovered |= child.LastHoveredInTree;
@@ -270,7 +273,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         foreach (var child in children)
         {
             child.Opacity *= Opacity;
-            
+
             var childX = contentX + GetCrossAxisOffset(HorizontalAlignment, contentWidth, child.Width);
             child.Draw(renderer, childX, cursorY);
             childHovered |= child.LastHoveredInTree;

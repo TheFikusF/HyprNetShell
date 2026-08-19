@@ -8,6 +8,8 @@ namespace HyprNetShell.Core.Features.System;
 internal sealed class SystemStatsModuleService : IBarDataService
 {
     private const int HISTORY_CAPACITY = 56;
+    private static readonly TimeSpan DISK_CACHE_INTERVAL = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DISK_RETRY_INTERVAL = TimeSpan.FromSeconds(5);
 
     private CpuSample? _previousCpuSample;
     private NetworkSample? _previousNetworkSample;
@@ -19,6 +21,9 @@ internal sealed class SystemStatsModuleService : IBarDataService
     private readonly Queue<float> _swapHistory = new(HISTORY_CAPACITY);
     private readonly Queue<float> _downloadHistory = new(HISTORY_CAPACITY);
     private readonly Queue<float> _uploadHistory = new(HISTORY_CAPACITY);
+    private IReadOnlyList<DiskUsageSnapshot> _diskSnapshots = [];
+    private long? _lastDiskRefreshTimestamp;
+    private bool _lastDiskRefreshFailed;
 
     public SystemStatsSnapshot Snapshot { get; private set; } = SystemStatsSnapshot.Empty;
 
@@ -317,7 +322,28 @@ internal sealed class SystemStatsModuleService : IBarDataService
         return null;
     }
 
-    private static IReadOnlyList<DiskUsageSnapshot> ReadDisks()
+    private IReadOnlyList<DiskUsageSnapshot> ReadDisks()
+    {
+        var now = Stopwatch.GetTimestamp();
+        var refreshInterval = _lastDiskRefreshFailed ? DISK_RETRY_INTERVAL : DISK_CACHE_INTERVAL;
+        if (_lastDiskRefreshTimestamp.HasValue &&
+            Stopwatch.GetElapsedTime(_lastDiskRefreshTimestamp.Value, now) < refreshInterval)
+        {
+            return _diskSnapshots;
+        }
+
+        _lastDiskRefreshTimestamp = now;
+        var disks = TryReadDisks();
+        _lastDiskRefreshFailed = disks is null;
+        if (disks is not null)
+        {
+            _diskSnapshots = disks;
+        }
+
+        return _diskSnapshots;
+    }
+
+    private static IReadOnlyList<DiskUsageSnapshot>? TryReadDisks()
     {
         try
         {
@@ -337,7 +363,7 @@ internal sealed class SystemStatsModuleService : IBarDataService
         }
         catch
         {
-            return [];
+            return null;
         }
     }
 
