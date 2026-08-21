@@ -15,15 +15,23 @@ internal sealed class WorkspacesModule : IDrawableModule
     private readonly ModulesCommon.NodeWithPopup _node;
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
+    private readonly Func<string> _getOutputName;
 
-    public WorkspacesModule(HyprlandService hyprland, IHyprctl hyprctl, SuperKeyStateService superKey, Theme theme,
-        Func<bool> blockPopup)
+    public WorkspacesModule(
+        HyprlandService hyprland,
+        IHyprctl hyprctl,
+        SuperKeyStateService superKey,
+        Theme theme,
+        Func<string> getOutputName,
+        Func<bool> blockPopup,
+        ModulesCommon.PopupCoordinator popupCoordinator)
     {
         _theme = theme;
         _hyprland = hyprland;
         _hyprctl = hyprctl;
+        _getOutputName = getOutputName;
         var blockPopup1 = blockPopup;
-        _node = new("workspaces_module", ignorePopupQueue: true)
+        _node = new(popupCoordinator, "workspaces_module", ignorePopupQueue: true)
         {
             TopOffset = 36,
             GetShouldShowPopup = hovered => (superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
@@ -34,27 +42,36 @@ internal sealed class WorkspacesModule : IDrawableModule
     public Node Draw()
     {
         var snapshot = _hyprland.Snapshot;
+        var monitor = ResolveMonitor(snapshot);
         if (_node.ShouldShowPopup == false)
         {
             ResetPopupHoverState();
         }
 
-        var title = string.IsNullOrWhiteSpace(snapshot.FocusedTitle) ? "Desktop" : snapshot.FocusedTitle;
-        var className = string.IsNullOrWhiteSpace(snapshot.FocusedClassName) ? "APP" : snapshot.FocusedClassName;
+        var activeWorkspaceId = monitor?.ActiveWorkspaceId > 0
+            ? monitor.ActiveWorkspaceId
+            : 0;
+        var activeWorkspace = monitor?.Workspaces.FirstOrDefault(workspace => workspace.Id == activeWorkspaceId);
+        var representativeWindow = activeWorkspace?.Windows.FirstOrDefault();
+        var useFocusedWindow = monitor?.Current == true;
+        var title = useFocusedWindow ? snapshot.FocusedTitle : representativeWindow?.Title;
+        var className = useFocusedWindow ? snapshot.FocusedClassName : representativeWindow?.ClassName;
+        title = string.IsNullOrWhiteSpace(title) ? "Desktop" : title;
+        className = string.IsNullOrWhiteSpace(className) ? "APP" : className;
 
         return _node.Draw([
             new BoxNode(height: 52 - (int)(_theme.BorderWidth * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,
-                OnScroll = delta => ScrollWorkspace(snapshot, delta),
+                OnScroll = delta => ScrollWorkspace(monitor, activeWorkspaceId, delta),
                 Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with { BorderRadius = 8 },
-                Children = [new TextNode(snapshot.FocusedWorkspaceId.ToString(), 24, _theme.Text)]
+                Children = [new TextNode(activeWorkspaceId > 0 ? activeWorkspaceId.ToString() : "?", 24, _theme.Text)]
             },
             new BoxNode
             {
                 Direction = Direction.Horizontal,
                 VerticalAlignment = ItemsAlignment.Center,
-                OnScroll = delta => ScrollWorkspace(snapshot, delta),
+                OnScroll = delta => ScrollWorkspace(monitor, activeWorkspaceId, delta),
                 Style = new Style
                 {
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
@@ -72,10 +89,16 @@ internal sealed class WorkspacesModule : IDrawableModule
         ], () => BuildWorkspacePopup(snapshot, _theme));
     }
 
-    private void ScrollWorkspace(HyprlandSnapshot snapshot, float scrollDelta)
+    private MonitorWorkspaceSnapshot? ResolveMonitor(HyprlandSnapshot snapshot) =>
+        snapshot.MonitorWorkspaces.FirstOrDefault(monitor =>
+            string.Equals(monitor.Name, _getOutputName(), StringComparison.Ordinal));
+
+    private void ScrollWorkspace(
+        MonitorWorkspaceSnapshot? monitor,
+        int activeWorkspaceId,
+        float scrollDelta)
     {
-        var workspaces = (snapshot.MonitorWorkspaces.FirstOrDefault(monitor => monitor.Current)
-                          ?? snapshot.MonitorWorkspaces.FirstOrDefault())
+        var workspaces = monitor
             ?.Workspaces
             .Select(workspace => workspace.Id)
             .Distinct()
@@ -86,7 +109,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             return;
         }
 
-        var currentIndex = Array.IndexOf(workspaces, snapshot.FocusedWorkspaceId);
+        var currentIndex = Array.IndexOf(workspaces, activeWorkspaceId);
         if (currentIndex < 0)
         {
             currentIndex = 0;
@@ -97,17 +120,40 @@ internal sealed class WorkspacesModule : IDrawableModule
         _ = _hyprctl.FocusWorkspaceAsync(workspaces[targetIndex]);
     }
 
-    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme) => new(400)
+    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme)
+    {
+        var outputName = _getOutputName();
+        var monitors = snapshot.MonitorWorkspaces
+            .OrderBy(monitor => string.Equals(monitor.Name, outputName, StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(monitor => monitor.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        return new BoxNode
+        {
+            Direction = Direction.Horizontal,
+            VerticalAlignment = ItemsAlignment.Start,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = ModulesCommon.PopupStyle(theme) with { Spacing = 8 },
+            Children = monitors.Length == 0
+                ? [BuildMonitorColumn(outputName, [], theme)]
+                : [..monitors.Select(monitor => BuildMonitorColumn(monitor.Name, monitor.Workspaces, theme))],
+        };
+    }
+
+    private BoxNode BuildMonitorColumn(
+        string monitorName,
+        IReadOnlyList<WorkspaceSnapshot> workspaces,
+        Theme theme) => new(400)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = new Style { Spacing = 8 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Monitor, $"Monitor {snapshot.MonitorWorkspaces[0].Name}"),
-            ..snapshot.Workspaces.Select(x => WorkspaceModule(x, theme))
-        ]
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Monitor, $"Monitor {monitorName}"),
+            ..workspaces.Select(workspace => WorkspaceModule(workspace, theme)),
+        ],
     };
 
     private BoxNode WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)

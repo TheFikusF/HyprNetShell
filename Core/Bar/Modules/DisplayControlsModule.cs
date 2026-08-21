@@ -8,11 +8,10 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class DisplayControlsModule(
-    DisplayControlsModuleService service,
-    Theme theme) : IDrawableModule
+internal sealed class DisplayControlsModule(DisplayControlsModuleService service, Theme theme,
+    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly ModulesCommon.NodeWithPopup _node = new("display_controls_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "display_controls_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };
@@ -21,8 +20,8 @@ internal sealed class DisplayControlsModule(
     private readonly Dictionary<string, int> _overrides = [];
     private readonly Dictionary<string, ValueUpdateQueue> _updateQueues = [];
     private readonly TemperatureCurveDragState _curveDragState = new();
-    private readonly RefFloat _automaticTemperatureSwitchAnimation =
-        new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
+    private readonly RefFloat _automaticTemperatureSwitchAnimation = new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
+    private float _iconRotation = 0;
 
     public Node Draw()
     {
@@ -32,35 +31,33 @@ internal sealed class DisplayControlsModule(
             : new SpacerNode();
     }
 
-    private Node BuildStateModule(DisplayControlsSnapshot controls)
+    private BoxNode BuildStateModule(DisplayControlsSnapshot controls)
     {
         var brightness = controls.Display is { } display
             ? EffectiveValue("display", display.Percentage)
             : (int?)null;
 
+        var color = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Orange, Color.White, 0.25f));
+        _iconRotation = PrimitivesMath.LerpSmooth(_iconRotation, _node.IsHovered ? MathF.PI * 4 : 0, 18.0f, ModulesCommon.DELTA_TIME);
         return new BoxNode(40)
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(
-                    theme,
-                    ModulesCommon.ToBackground(theme, Color.Lerp(Color.Orange, Color.White, 0.25f)),
-                    left: false,
-                    right: false) with
-                {
-                    Spacing = 6,
-                    BorderWidth = new Insets(theme.BorderWidth, 0, theme.BorderWidth, 1)
-                },
-            Children =
-            [
-                new ImageNode(Icons.Brightness[brightness switch
-                {
-                    > 66 => 0,
-                    > 33 => 1,
-                    _ => 2
-                }], 18, 18, theme.Text),
-            ],
+            Style = ModulesCommon.ModuleStyle(theme, color, false, false) with
+            {
+                Spacing = 8,
+                BorderWidth = new Insets(theme.BorderWidth, 0, theme.BorderWidth, 1)
+            },
+            Children = [new ImageNode(Icons.Brightness[brightness switch
+            {
+                > 66 => 0,
+                > 33 => 1,
+                _ => 2
+            }], 18, 18, theme.Text)
+            {
+                RotationRadians = _iconRotation
+            }]
         };
     }
 
@@ -79,11 +76,7 @@ internal sealed class DisplayControlsModule(
         ],
     };
 
-    private Node BuildBacklightControl(
-        string key,
-        string label,
-        SvgAsset icon,
-        BacklightSnapshot? backlight)
+    private BoxNode BuildBacklightControl(string key, string label, SvgAsset icon, BacklightSnapshot? backlight)
     {
         if (backlight is null)
         {
@@ -91,19 +84,12 @@ internal sealed class DisplayControlsModule(
         }
 
         var value = EffectiveValue(key, backlight.Percentage);
-        return BuildSliderRow(
-            label,
-            icon,
-            value / 100.0f,
-            $"{value}%",
-            key,
-            normalized => SetValue(
-                key,
-                QuantizePercentage(backlight, normalized),
+        return BuildSliderRow(label, icon, value / 100.0f, $"{value}%", key,
+            normalized => SetValue(key, QuantizePercentage(backlight, normalized),
                 percentage => service.SetBacklightAsync(backlight, percentage)));
     }
 
-    private Node BuildTemperatureSchedule(DisplayControlsSnapshot controls)
+    private BoxNode BuildTemperatureSchedule(DisplayControlsSnapshot controls)
     {
         if (!controls.HyprsunsetInstalled)
         {
@@ -128,82 +114,55 @@ internal sealed class DisplayControlsModule(
                     Direction = Direction.Horizontal,
                     HorizontalAlignment = ItemsAlignment.Spread,
                     VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 8 },
+                    Style = Style.Spacer,
                     Children =
                     [
                         ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, "Screen temperature"),
-                        new BoxNode
+                        new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                         {
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Style = new Style { Spacing = 8 },
-                            Children =
-                            [
-                                new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K",
-                                    theme.TextSize,
-                                    theme.Text),
-                                BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
-                            ]
+                            new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K", theme.TextSize, theme.Text),
+                            BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
                         }
                     ],
                 },
                 automaticTemperatureEnabled
-                    ? new TemperatureCurveNode(
-                        service.GetTemperatureCurve(),
-                        theme.Muted,
-                        Color.Orange,
-                        theme.Text,
-                        service.SetCurvePoint,
-                        _curveDragState)
+                    ? new TemperatureCurveNode(service.GetTemperatureCurve(), theme.Muted, Color.Orange, theme.Text, service.SetCurvePoint, _curveDragState)
                     : BuildManualTemperatureSlider(controls),
             ],
         };
     }
 
-    private Node BuildAutomaticTemperatureToggle(bool enabled) =>
-        new BoxNode(44, 28)
-        {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = () => service.SetAutomaticTemperatureEnabled(!enabled),
-            Children =
-            [
-                new SwitchNode(enabled, _automaticTemperatureSwitchAnimation)
-                {
-                    OffTrackColor = theme.Muted,
-                    OnTrackColor = theme.Active,
-                    KnobColor = theme.Text,
-                },
-            ],
-        };
+    private BoxNode BuildAutomaticTemperatureToggle(bool enabled) => new(44, 28)
+    {
+        HorizontalAlignment = ItemsAlignment.Center,
+        VerticalAlignment = ItemsAlignment.Center,
+        OnClick = () => service.SetAutomaticTemperatureEnabled(!enabled),
+        Children =
+        [
+            new SwitchNode(enabled, _automaticTemperatureSwitchAnimation)
+            {
+                OffTrackColor = theme.Muted,
+                OnTrackColor = theme.Active,
+                KnobColor = theme.Text,
+            },
+        ],
+    };
 
-    private Node BuildManualTemperatureSlider(DisplayControlsSnapshot controls)
+    private SliderNode BuildManualTemperatureSlider(DisplayControlsSnapshot controls)
     {
         var value = EffectiveValue("temperature", controls.TemperatureKelvin);
-        return new SliderNode(
-            340,
-            14,
+        return new SliderNode(340, 14,
             (value - TemperatureCurveMath.MINIMUM_TEMPERATURE) /
             (float)(TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE),
-            theme.Muted,
-            Color.Orange,
-            theme.Text,
-            normalized => SetValue(
-                "temperature",
-                TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
-                                                                            (TemperatureCurveMath.MAXIMUM_TEMPERATURE -
-                                                                             TemperatureCurveMath.MINIMUM_TEMPERATURE)),
+            theme.Muted, Color.Orange, theme.Text,
+            normalized => SetValue("temperature", TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
+                (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE)),
                 service.SetTemperatureAsync),
             GetSliderDragging("temperature"));
     }
 
-    private Node BuildSliderRow(
-        string label,
-        SvgAsset icon,
-        float normalizedValue,
-        string valueText,
-        string key,
-        Action<float> onValueChanged) =>
-        new BoxNode
+    private BoxNode BuildSliderRow(string label, SvgAsset icon, float normalizedValue,
+        string valueText, string key, Action<float> onValueChanged) => new()
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -226,43 +185,33 @@ internal sealed class DisplayControlsModule(
                         new TextNode(valueText, theme.TextSize, theme.Text),
                     ],
                 },
-                new SliderNode(
-                    340,
-                    14,
-                    normalizedValue,
-                    theme.Muted,
-                    Color.Orange,
-                    theme.Text,
-                    onValueChanged,
-                    GetSliderDragging(key)),
+                new SliderNode(340, 14, normalizedValue, theme.Muted, Color.Orange,
+                    theme.Text, onValueChanged, GetSliderDragging(key)),
             ],
         };
 
-    private Node BuildUnavailableRow(string text) =>
-        new BoxNode
-        {
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
-            {
-                BorderRadius = 8,
-                BorderWidth = 0,
-            },
-            Children = [new TextNode(text, theme.TextSize, theme.Muted)],
-        };
+    private BoxNode BuildUnavailableRow(string text) => new(ModulesCommon.ModuleStyle(theme, theme.Panel) with
+    {
+        BorderRadius = 8,
+        BorderWidth = 0,
+    })
+    {
+        new TextNode(text, theme.TextSize, theme.Muted)
+    };
 
     private int EffectiveValue(string key, int snapshotValue)
     {
-        if (_overrides.TryGetValue(key, out var value))
+        if (_overrides.TryGetValue(key, out var value) == false)
         {
-            if (value == snapshotValue)
-            {
-                _overrides.Remove(key);
-            }
-            else
-            {
-                return value;
-            }
+            return snapshotValue;
         }
 
+        if (value != snapshotValue)
+        {
+            return value;
+        }
+
+        _overrides.Remove(key);
         return snapshotValue;
     }
 
@@ -274,7 +223,7 @@ internal sealed class DisplayControlsModule(
         }
 
         _overrides[key] = value;
-        if (!_updateQueues.TryGetValue(key, out var queue))
+        if (_updateQueues.TryGetValue(key, out var queue) == false)
         {
             queue = new ValueUpdateQueue(update);
             _updateQueues[key] = queue;
@@ -304,6 +253,7 @@ internal sealed class DisplayControlsModule(
     private sealed class ValueUpdateQueue(Func<int, Task> update)
     {
         private readonly object _sync = new();
+
         private int _latest;
         private int _sent = int.MinValue;
         private bool _running;

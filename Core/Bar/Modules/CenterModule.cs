@@ -27,20 +27,23 @@ internal sealed class CenterModule : IDrawableModule
     private float _clockRotation;
     private Rect? _clockBounds;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("center_module")
-    {
-        HorizontalAlignment = ItemsAlignment.Center,
-    };
+    private readonly ModulesCommon.NodeWithPopup _node;
 
     public CenterModule(
         NotificationService notificationService,
-        Theme theme)
+        WeatherWidget weather,
+        Theme theme,
+        ModulesCommon.PopupCoordinator popupCoordinator)
     {
         _notificationService = notificationService;
         _theme = theme;
+        _node = new(popupCoordinator, "center_module")
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+        };
         _calendar = new CalendarWidget(theme);
         _worldClocks = new WorldClocksWidget(theme);
-        _weather = new WeatherWidget(theme);
+        _weather = weather;
         _notificationsWidget = new NotificationsWidget(notificationService, theme);
     }
 

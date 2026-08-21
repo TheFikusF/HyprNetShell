@@ -4,6 +4,7 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <errno.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,47 +18,81 @@
 
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
-struct hypr_layer_window {
-    struct wl_display* display;
-    struct wl_registry* registry;
-    struct wl_compositor* compositor;
-    struct wl_seat* seat;
-    struct wl_pointer* pointer;
-    struct wl_keyboard* keyboard;
-    struct xkb_context* xkb_context;
-    struct xkb_keymap* xkb_keymap;
-    struct xkb_state* xkb_state;
-    struct zwlr_layer_shell_v1* layer_shell;
+struct hypr_bar {
+    struct hypr_layer* layer;
+    struct hypr_bar* next;
+    uint32_t registry_name;
+    uint32_t output_version;
+    uint64_t id;
+    struct wl_output* output;
+    char* output_name;
+    char* output_description;
+    char fallback_output_name[32];
+    int mode_width;
+    int mode_height;
+
     struct wl_surface* surface;
     struct zwlr_layer_surface_v1* layer_surface;
     struct wl_egl_window* egl_window;
-
-    EGLDisplay egl_display;
-    EGLConfig egl_config;
-    EGLContext egl_context;
     EGLSurface egl_surface;
-
     int width;
     int height;
-    int reserved_height;
-    uint32_t layer_shell_version;
     int configured;
-    int should_close;
-    int has_error;
+    int active;
+    int closed;
+    int keyboard_interactive;
+
     double pointer_x;
     double pointer_y;
     int pointer_inside;
     int pointer_button_down;
+    double pending_scroll;
     int pending_key;
     char pending_text[128];
     int pending_text_length;
-    double pending_scroll;
-    uint32_t repeat_key;
+};
+
+struct hypr_layer {
+    struct wl_display* display;
+    struct wl_registry* registry;
+    struct wl_compositor* compositor;
+    struct wl_seat* seat;
+    uint32_t seat_registry_name;
+    uint32_t seat_version;
+    struct wl_pointer* pointer;
+    struct wl_keyboard* keyboard;
+    struct zwlr_layer_shell_v1* layer_shell;
+    uint32_t layer_shell_version;
+
+    struct xkb_context* xkb_context;
+    struct xkb_keymap* xkb_keymap;
+    struct xkb_state* xkb_state;
+
+    EGLDisplay egl_display;
+    EGLConfig egl_config;
+    EGLContext egl_context;
+    EGLSurface fallback_surface;
+
+    struct hypr_bar* bars;
+    struct hypr_bar* pointer_focus;
+    struct hypr_bar* keyboard_focus;
+    struct hypr_bar* repeat_bar;
+    uint64_t keyboard_interactive_id;
+    uint64_t next_bar_id;
+    uint64_t topology_serial;
+    int reserved_height;
     int repeat_active;
+    uint32_t repeat_key;
     int repeat_rate;
     int repeat_delay;
     int64_t repeat_next_ms;
+    int should_close;
+    int has_error;
 };
+
+static void create_bar_surface(struct hypr_bar* bar);
+static void destroy_bar_surface(struct hypr_bar* bar);
+static const struct wl_seat_listener seat_listener;
 
 static int64_t monotonic_milliseconds(void) {
     struct timespec value;
@@ -69,88 +104,166 @@ static void fail(const char* message) {
     fprintf(stderr, "hypr_layer: %s\n", message);
 }
 
-static void fail_egl(struct hypr_layer_window* window, const char* message) {
+static void fail_fatal(struct hypr_layer* layer, const char* message) {
+    fail(message);
+    if (layer != NULL) {
+        layer->has_error = 1;
+        layer->should_close = 1;
+    }
+}
+
+static void fail_egl_fatal(struct hypr_layer* layer, const char* message) {
     EGLint error = eglGetError();
     fprintf(stderr, "hypr_layer: %s (EGL error 0x%04x)\n", message, error);
-    if (window != NULL) {
-        window->has_error = 1;
-        window->should_close = 1;
+    if (layer != NULL) {
+        layer->has_error = 1;
+        layer->should_close = 1;
     }
 }
 
-static void destroy_egl_surface(struct hypr_layer_window* window) {
-    if (window == NULL || window->egl_display == EGL_NO_DISPLAY || window->egl_display == NULL) {
+static void fail_bar_egl(const struct hypr_bar* bar, const char* message) {
+    EGLint error = eglGetError();
+    fprintf(
+        stderr,
+        "hypr_layer: output %llu: %s (EGL error 0x%04x)\n",
+        (unsigned long long)(bar != NULL ? bar->id : 0),
+        message,
+        error);
+}
+
+static struct hypr_bar* find_bar(const struct hypr_layer* layer, uint64_t id) {
+    if (layer == NULL || id == 0) {
+        return NULL;
+    }
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (bar->id == id && bar->active && !bar->closed) {
+            return bar;
+        }
+    }
+    return NULL;
+}
+
+static struct hypr_bar* find_bar_by_surface(
+    const struct hypr_layer* layer,
+    const struct wl_surface* surface) {
+    if (layer == NULL || surface == NULL) {
+        return NULL;
+    }
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (bar->surface == surface && !bar->closed) {
+            return bar;
+        }
+    }
+    return NULL;
+}
+
+static void clear_bar_focus(struct hypr_bar* bar) {
+    struct hypr_layer* layer = bar->layer;
+    if (layer->pointer_focus == bar) {
+        layer->pointer_focus = NULL;
+    }
+    if (layer->keyboard_focus == bar) {
+        layer->keyboard_focus = NULL;
+    }
+    if (layer->repeat_bar == bar) {
+        layer->repeat_bar = NULL;
+        layer->repeat_active = 0;
+    }
+    if (layer->keyboard_interactive_id == bar->id) {
+        layer->keyboard_interactive_id = 0;
+    }
+    bar->pointer_inside = 0;
+    bar->pointer_button_down = 0;
+}
+
+static void mark_bar_closed(struct hypr_bar* bar) {
+    if (bar == NULL || bar->closed) {
         return;
     }
-    if (window->egl_surface != EGL_NO_SURFACE && window->egl_surface != NULL) {
-        eglMakeCurrent(window->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        eglDestroySurface(window->egl_display, window->egl_surface);
-        window->egl_surface = EGL_NO_SURFACE;
-    }
-    if (window->egl_window != NULL) {
-        wl_egl_window_destroy(window->egl_window);
-        window->egl_window = NULL;
+    bar->closed = 1;
+    clear_bar_focus(bar);
+    if (bar->active) {
+        bar->active = 0;
+        bar->layer->topology_serial++;
     }
 }
 
-static int create_egl_surface(struct hypr_layer_window* window) {
-    if (window == NULL || window->surface == NULL) {
+static int make_fallback_current(struct hypr_layer* layer) {
+    if (layer == NULL || layer->egl_display == EGL_NO_DISPLAY ||
+        layer->egl_context == EGL_NO_CONTEXT || layer->fallback_surface == EGL_NO_SURFACE) {
+        return 0;
+    }
+    if (!eglMakeCurrent(
+            layer->egl_display,
+            layer->fallback_surface,
+            layer->fallback_surface,
+            layer->egl_context)) {
+        fail_egl_fatal(layer, "eglMakeCurrent failed for the fallback surface");
+        return 0;
+    }
+    return 1;
+}
+
+static void destroy_bar_egl_surface(struct hypr_bar* bar) {
+    if (bar == NULL) {
+        return;
+    }
+    struct hypr_layer* layer = bar->layer;
+    if (bar->egl_surface != EGL_NO_SURFACE && layer->egl_display != EGL_NO_DISPLAY) {
+        if (!make_fallback_current(layer)) {
+            eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            if (!layer->has_error) {
+                fail_fatal(layer, "fallback EGL surface is unavailable during bar teardown");
+            }
+        }
+        eglDestroySurface(layer->egl_display, bar->egl_surface);
+        bar->egl_surface = EGL_NO_SURFACE;
+    }
+    if (bar->egl_window != NULL) {
+        wl_egl_window_destroy(bar->egl_window);
+        bar->egl_window = NULL;
+    }
+}
+
+static int create_bar_egl_surface(struct hypr_bar* bar) {
+    struct hypr_layer* layer = bar->layer;
+    if (bar->surface == NULL || bar->width <= 0 || bar->height <= 0) {
         return 0;
     }
 
-    if (window->width <= 0) {
-        window->width = 1920;
-    }
-    if (window->height <= 0) {
-        window->height = 1080;
-    }
-
-    window->egl_window = wl_egl_window_create(window->surface, window->width, window->height);
-    if (window->egl_window == NULL) {
-        fail("wl_egl_window_create failed");
+    bar->egl_window = wl_egl_window_create(bar->surface, bar->width, bar->height);
+    if (bar->egl_window == NULL) {
+        fprintf(stderr, "hypr_layer: output %llu: wl_egl_window_create failed\n", (unsigned long long)bar->id);
         return 0;
     }
 
-    window->egl_surface =
-        eglCreateWindowSurface(
-            window->egl_display,
-            window->egl_config,
-            (EGLNativeWindowType)window->egl_window,
-            NULL);
-    if (window->egl_surface == EGL_NO_SURFACE) {
-        fail_egl(window, "eglCreateWindowSurface failed");
+    bar->egl_surface = eglCreateWindowSurface(
+        layer->egl_display,
+        layer->egl_config,
+        (EGLNativeWindowType)bar->egl_window,
+        NULL);
+    if (bar->egl_surface == EGL_NO_SURFACE) {
+        fail_bar_egl(bar, "eglCreateWindowSurface failed");
+        wl_egl_window_destroy(bar->egl_window);
+        bar->egl_window = NULL;
         return 0;
     }
-
-    EGLint surface_width = 0;
-    EGLint surface_height = 0;
-    if (!eglQuerySurface(window->egl_display, window->egl_surface, EGL_WIDTH, &surface_width) ||
-        !eglQuerySurface(window->egl_display, window->egl_surface, EGL_HEIGHT, &surface_height)) {
-        fail_egl(window, "eglQuerySurface failed after surface creation");
-        return 0;
-    }
-
-    fprintf(stderr, "hypr_layer: EGL surface created %dx%d (configured %dx%d)\n",
-        surface_width,
-        surface_height,
-        window->width,
-        window->height);
-
-    eglSwapInterval(window->egl_display, 1);
 
     return 1;
 }
 
-static void apply_input_regions(struct hypr_layer_window* window, const int* rectangles, int rectangle_count) {
-    if (window == NULL || window->compositor == NULL || window->surface == NULL) {
+static void apply_input_regions(
+    struct hypr_bar* bar,
+    const int* rectangles,
+    int rectangle_count) {
+    if (bar == NULL || bar->surface == NULL || bar->layer->compositor == NULL) {
         return;
     }
 
-    struct wl_region* region = wl_compositor_create_region(window->compositor);
+    struct wl_region* region = wl_compositor_create_region(bar->layer->compositor);
     if (region == NULL) {
-        fail("wl_compositor_create_region failed");
-        window->has_error = 1;
-        window->should_close = 1;
+        fprintf(stderr, "hypr_layer: output %llu: wl_compositor_create_region failed\n", (unsigned long long)bar->id);
+        mark_bar_closed(bar);
         return;
     }
 
@@ -160,9 +273,294 @@ static void apply_input_regions(struct hypr_layer_window* window, const int* rec
             wl_region_add(region, rect[0], rect[1], rect[2], rect[3]);
         }
     }
-
-    wl_surface_set_input_region(window->surface, region);
+    wl_surface_set_input_region(bar->surface, region);
     wl_region_destroy(region);
+}
+
+static void output_geometry(
+    void* data,
+    struct wl_output* output,
+    int32_t x,
+    int32_t y,
+    int32_t physical_width,
+    int32_t physical_height,
+    int32_t subpixel,
+    const char* make,
+    const char* model,
+    int32_t transform) {
+    (void)data;
+    (void)output;
+    (void)x;
+    (void)y;
+    (void)physical_width;
+    (void)physical_height;
+    (void)subpixel;
+    (void)make;
+    (void)model;
+    (void)transform;
+}
+
+static void output_mode(
+    void* data,
+    struct wl_output* output,
+    uint32_t flags,
+    int32_t width,
+    int32_t height,
+    int32_t refresh) {
+    (void)output;
+    (void)refresh;
+    struct hypr_bar* bar = data;
+    if ((flags & WL_OUTPUT_MODE_CURRENT) != 0) {
+        bar->mode_width = width;
+        bar->mode_height = height;
+    }
+}
+
+static void output_done(void* data, struct wl_output* output) {
+    (void)data;
+    (void)output;
+}
+
+static void output_scale(void* data, struct wl_output* output, int32_t factor) {
+    (void)data;
+    (void)output;
+    (void)factor;
+}
+
+static int replace_string(char** destination, const char* value) {
+    if ((*destination == NULL && value == NULL) ||
+        (*destination != NULL && value != NULL && strcmp(*destination, value) == 0)) {
+        return 0;
+    }
+    char* replacement = value != NULL ? strdup(value) : NULL;
+    if (value != NULL && replacement == NULL) {
+        return 0;
+    }
+    free(*destination);
+    *destination = replacement;
+    return 1;
+}
+
+static void output_name(void* data, struct wl_output* output, const char* name) {
+    (void)output;
+    struct hypr_bar* bar = data;
+    if (replace_string(&bar->output_name, name) && bar->active) {
+        bar->layer->topology_serial++;
+    }
+}
+
+static void output_description(void* data, struct wl_output* output, const char* description) {
+    (void)output;
+    struct hypr_bar* bar = data;
+    replace_string(&bar->output_description, description);
+}
+
+static const struct wl_output_listener output_listener = {
+    .geometry = output_geometry,
+    .mode = output_mode,
+    .done = output_done,
+    .scale = output_scale,
+    .name = output_name,
+    .description = output_description,
+};
+
+static void layer_surface_configure(
+    void* data,
+    struct zwlr_layer_surface_v1* layer_surface,
+    uint32_t serial,
+    uint32_t width,
+    uint32_t height) {
+    struct hypr_bar* bar = data;
+    zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
+    if (bar->closed) {
+        return;
+    }
+
+    int previous_width = bar->width;
+    int previous_height = bar->height;
+    if (width > 0) {
+        bar->width = (int)width;
+    } else if (bar->mode_width > 0) {
+        bar->width = bar->mode_width;
+    } else if (bar->width <= 0) {
+        bar->width = 1920;
+    }
+    if (height > 0) {
+        bar->height = (int)height;
+    } else if (bar->mode_height > 0) {
+        bar->height = bar->mode_height;
+    } else if (bar->height <= 0) {
+        bar->height = 1080;
+    }
+    if (bar->width <= 0 || bar->height <= 0) {
+        fprintf(stderr, "hypr_layer: output %llu: compositor configured an invalid size\n", (unsigned long long)bar->id);
+        mark_bar_closed(bar);
+        return;
+    }
+
+    if (bar->egl_window != NULL) {
+        wl_egl_window_resize(bar->egl_window, bar->width, bar->height, 0, 0);
+    } else if (!create_bar_egl_surface(bar)) {
+        mark_bar_closed(bar);
+        return;
+    }
+
+    bar->configured = 1;
+    if (!bar->active) {
+        bar->active = 1;
+        bar->layer->topology_serial++;
+    } else if (bar->width != previous_width || bar->height != previous_height) {
+        bar->layer->topology_serial++;
+    }
+}
+
+static void layer_surface_closed(void* data, struct zwlr_layer_surface_v1* layer_surface) {
+    (void)layer_surface;
+    mark_bar_closed(data);
+}
+
+static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
+    .configure = layer_surface_configure,
+    .closed = layer_surface_closed,
+};
+
+static void destroy_bar_surface(struct hypr_bar* bar) {
+    if (bar == NULL) {
+        return;
+    }
+    clear_bar_focus(bar);
+    destroy_bar_egl_surface(bar);
+    if (bar->layer_surface != NULL) {
+        zwlr_layer_surface_v1_destroy(bar->layer_surface);
+        bar->layer_surface = NULL;
+    }
+    if (bar->surface != NULL) {
+        wl_surface_destroy(bar->surface);
+        bar->surface = NULL;
+    }
+    bar->configured = 0;
+    bar->active = 0;
+}
+
+static void create_bar_surface(struct hypr_bar* bar) {
+    struct hypr_layer* layer = bar->layer;
+    if (bar->surface != NULL || bar->closed || layer->compositor == NULL ||
+        layer->layer_shell == NULL || layer->egl_context == EGL_NO_CONTEXT) {
+        return;
+    }
+
+    bar->surface = wl_compositor_create_surface(layer->compositor);
+    if (bar->surface == NULL) {
+        fprintf(stderr, "hypr_layer: output %llu: wl_compositor_create_surface failed\n", (unsigned long long)bar->id);
+        mark_bar_closed(bar);
+        return;
+    }
+
+    bar->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
+        layer->layer_shell,
+        bar->surface,
+        bar->output,
+        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+        "hyprnetshell");
+    if (bar->layer_surface == NULL) {
+        fprintf(stderr, "hypr_layer: output %llu: get_layer_surface failed\n", (unsigned long long)bar->id);
+        wl_surface_destroy(bar->surface);
+        bar->surface = NULL;
+        mark_bar_closed(bar);
+        return;
+    }
+
+    if (zwlr_layer_surface_v1_add_listener(bar->layer_surface, &layer_surface_listener, bar) < 0) {
+        fprintf(stderr, "hypr_layer: output %llu: layer surface listener registration failed\n", (unsigned long long)bar->id);
+        mark_bar_closed(bar);
+        destroy_bar_surface(bar);
+        return;
+    }
+
+    zwlr_layer_surface_v1_set_anchor(
+        bar->layer_surface,
+        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    zwlr_layer_surface_v1_set_size(bar->layer_surface, 0, 0);
+    zwlr_layer_surface_v1_set_exclusive_zone(bar->layer_surface, layer->reserved_height);
+    if (layer->layer_shell_version >= ZWLR_LAYER_SURFACE_V1_SET_EXCLUSIVE_EDGE_SINCE_VERSION) {
+        zwlr_layer_surface_v1_set_exclusive_edge(
+            bar->layer_surface,
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP);
+    }
+    zwlr_layer_surface_v1_set_keyboard_interactivity(bar->layer_surface, 0);
+    apply_input_regions(bar, NULL, 0);
+    if (!bar->closed) {
+        wl_surface_commit(bar->surface);
+    }
+}
+
+static void destroy_output(struct hypr_bar* bar) {
+    if (bar == NULL) {
+        return;
+    }
+    mark_bar_closed(bar);
+    destroy_bar_surface(bar);
+    if (bar->output != NULL) {
+        if (bar->output_version >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
+            wl_output_release(bar->output);
+        } else {
+            wl_output_destroy(bar->output);
+        }
+    }
+    free(bar->output_name);
+    free(bar->output_description);
+    free(bar);
+}
+
+static void release_pointer(struct hypr_layer* layer) {
+    if (layer->pointer == NULL) {
+        return;
+    }
+    if (layer->seat_version >= WL_POINTER_RELEASE_SINCE_VERSION) {
+        wl_pointer_release(layer->pointer);
+    } else {
+        wl_pointer_destroy(layer->pointer);
+    }
+    layer->pointer = NULL;
+    if (layer->pointer_focus != NULL) {
+        layer->pointer_focus->pointer_inside = 0;
+        layer->pointer_focus->pointer_button_down = 0;
+        layer->pointer_focus = NULL;
+    }
+}
+
+static void release_keyboard(struct hypr_layer* layer) {
+    if (layer->keyboard == NULL) {
+        return;
+    }
+    if (layer->seat_version >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
+        wl_keyboard_release(layer->keyboard);
+    } else {
+        wl_keyboard_destroy(layer->keyboard);
+    }
+    layer->keyboard = NULL;
+    layer->keyboard_focus = NULL;
+    layer->repeat_bar = NULL;
+    layer->repeat_active = 0;
+}
+
+static void release_seat(struct hypr_layer* layer) {
+    if (layer->seat == NULL) {
+        return;
+    }
+    release_pointer(layer);
+    release_keyboard(layer);
+    if (layer->seat_version >= WL_SEAT_RELEASE_SINCE_VERSION) {
+        wl_seat_release(layer->seat);
+    } else {
+        wl_seat_destroy(layer->seat);
+    }
+    layer->seat = NULL;
+    layer->seat_registry_name = 0;
+    layer->seat_version = 0;
 }
 
 static void registry_global(
@@ -171,30 +569,77 @@ static void registry_global(
     uint32_t name,
     const char* interface,
     uint32_t version) {
-    struct hypr_layer_window* window = data;
-
-    /*
-     * Wayland exposes globals through wl_registry. We bind only the two globals
-     * this minimal bar needs: wl_compositor for wl_surface creation and
-     * zwlr_layer_shell_v1 for the top-panel role.
-     */
-    if (strcmp(interface, wl_compositor_interface.name) == 0) {
+    struct hypr_layer* layer = data;
+    if (strcmp(interface, wl_compositor_interface.name) == 0 && layer->compositor == NULL) {
         uint32_t bind_version = version < 4 ? version : 4;
-        window->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, bind_version);
-    } else if (strcmp(interface, wl_seat_interface.name) == 0) {
+        layer->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, bind_version);
+    } else if (strcmp(interface, wl_seat_interface.name) == 0 && layer->seat == NULL) {
         uint32_t bind_version = version < 5 ? version : 5;
-        window->seat = wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
-    } else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+        layer->seat = wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
+        if (layer->seat == NULL) {
+            fail_fatal(layer, "failed to bind a Wayland seat");
+            return;
+        }
+        layer->seat_registry_name = name;
+        layer->seat_version = bind_version;
+        if (wl_seat_add_listener(layer->seat, &seat_listener, layer) < 0) {
+            fail_fatal(layer, "failed to initialize the Wayland seat");
+            release_seat(layer);
+        }
+    } else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0 && layer->layer_shell == NULL) {
         uint32_t bind_version = version < 5 ? version : 5;
-        window->layer_shell_version = bind_version;
-        window->layer_shell = wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, bind_version);
+        layer->layer_shell_version = bind_version;
+        layer->layer_shell = wl_registry_bind(
+            registry,
+            name,
+            &zwlr_layer_shell_v1_interface,
+            bind_version);
+    } else if (strcmp(interface, wl_output_interface.name) == 0) {
+        struct hypr_bar* bar = calloc(1, sizeof(struct hypr_bar));
+        if (bar == NULL) {
+            fail_fatal(layer, "out of memory while tracking an output");
+            return;
+        }
+        uint32_t bind_version = version < 4 ? version : 4;
+        bar->layer = layer;
+        bar->registry_name = name;
+        bar->output_version = bind_version;
+        bar->id = layer->next_bar_id++;
+        bar->pending_key = -1;
+        bar->egl_surface = EGL_NO_SURFACE;
+        snprintf(bar->fallback_output_name, sizeof(bar->fallback_output_name), "wl-output-%u", name);
+        bar->output = wl_registry_bind(registry, name, &wl_output_interface, bind_version);
+        if (bar->output == NULL || wl_output_add_listener(bar->output, &output_listener, bar) < 0) {
+            fail_fatal(layer, "failed to bind a wl_output");
+            if (bar->output != NULL) {
+                wl_output_destroy(bar->output);
+            }
+            free(bar);
+            return;
+        }
+        bar->next = layer->bars;
+        layer->bars = bar;
+        create_bar_surface(bar);
     }
 }
 
 static void registry_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
-    (void)data;
     (void)registry;
-    (void)name;
+    struct hypr_layer* layer = data;
+    if (layer->seat != NULL && layer->seat_registry_name == name) {
+        release_seat(layer);
+        return;
+    }
+    struct hypr_bar** link = &layer->bars;
+    while (*link != NULL) {
+        struct hypr_bar* bar = *link;
+        if (bar->registry_name == name) {
+            *link = bar->next;
+            destroy_output(bar);
+            return;
+        }
+        link = &bar->next;
+    }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -211,11 +656,18 @@ static void pointer_enter(
     wl_fixed_t surface_y) {
     (void)pointer;
     (void)serial;
-    (void)surface;
-    struct hypr_layer_window* window = data;
-    window->pointer_inside = 1;
-    window->pointer_x = wl_fixed_to_double(surface_x);
-    window->pointer_y = wl_fixed_to_double(surface_y);
+    struct hypr_layer* layer = data;
+    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
+    if (layer->pointer_focus != NULL && layer->pointer_focus != bar) {
+        layer->pointer_focus->pointer_inside = 0;
+        layer->pointer_focus->pointer_button_down = 0;
+    }
+    layer->pointer_focus = bar;
+    if (bar != NULL) {
+        bar->pointer_inside = 1;
+        bar->pointer_x = wl_fixed_to_double(surface_x);
+        bar->pointer_y = wl_fixed_to_double(surface_y);
+    }
 }
 
 static void pointer_leave(
@@ -225,10 +677,15 @@ static void pointer_leave(
     struct wl_surface* surface) {
     (void)pointer;
     (void)serial;
-    (void)surface;
-    struct hypr_layer_window* window = data;
-    window->pointer_inside = 0;
-    window->pointer_button_down = 0;
+    struct hypr_layer* layer = data;
+    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
+    if (bar != NULL) {
+        bar->pointer_inside = 0;
+        bar->pointer_button_down = 0;
+    }
+    if (layer->pointer_focus == bar) {
+        layer->pointer_focus = NULL;
+    }
 }
 
 static void pointer_motion(
@@ -239,9 +696,11 @@ static void pointer_motion(
     wl_fixed_t surface_y) {
     (void)pointer;
     (void)time;
-    struct hypr_layer_window* window = data;
-    window->pointer_x = wl_fixed_to_double(surface_x);
-    window->pointer_y = wl_fixed_to_double(surface_y);
+    struct hypr_layer* layer = data;
+    if (layer->pointer_focus != NULL) {
+        layer->pointer_focus->pointer_x = wl_fixed_to_double(surface_x);
+        layer->pointer_focus->pointer_y = wl_fixed_to_double(surface_y);
+    }
 }
 
 static void pointer_button(
@@ -254,9 +713,10 @@ static void pointer_button(
     (void)pointer;
     (void)serial;
     (void)time;
-    (void)button;
-    struct hypr_layer_window* window = data;
-    window->pointer_button_down = state == WL_POINTER_BUTTON_STATE_PRESSED;
+    struct hypr_layer* layer = data;
+    if (button == 0x110 && layer->pointer_focus != NULL) {
+        layer->pointer_focus->pointer_button_down = state == WL_POINTER_BUTTON_STATE_PRESSED;
+    }
 }
 
 static void pointer_axis(
@@ -267,9 +727,9 @@ static void pointer_axis(
     wl_fixed_t value) {
     (void)pointer;
     (void)time;
-    struct hypr_layer_window* window = data;
-    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        window->pending_scroll += wl_fixed_to_double(value);
+    struct hypr_layer* layer = data;
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL && layer->pointer_focus != NULL) {
+        layer->pointer_focus->pending_scroll += wl_fixed_to_double(value);
     }
 }
 
@@ -337,8 +797,8 @@ static void keyboard_keymap(
     int32_t fd,
     uint32_t size) {
     (void)keyboard;
-    struct hypr_layer_window* window = data;
-    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 || window->xkb_context == NULL) {
+    struct hypr_layer* layer = data;
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 || layer->xkb_context == NULL) {
         close(fd);
         return;
     }
@@ -346,33 +806,33 @@ static void keyboard_keymap(
     char* keymap_text = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
     if (keymap_text == MAP_FAILED) {
+        fail("mmap failed for the keyboard keymap");
         return;
     }
-
     struct xkb_keymap* keymap = xkb_keymap_new_from_string(
-        window->xkb_context,
+        layer->xkb_context,
         keymap_text,
         XKB_KEYMAP_FORMAT_TEXT_V1,
         XKB_KEYMAP_COMPILE_NO_FLAGS);
     munmap(keymap_text, size);
     if (keymap == NULL) {
+        fail("xkb keymap compilation failed");
         return;
     }
-
     struct xkb_state* state = xkb_state_new(keymap);
     if (state == NULL) {
         xkb_keymap_unref(keymap);
+        fail("xkb state creation failed");
         return;
     }
-
-    if (window->xkb_state != NULL) {
-        xkb_state_unref(window->xkb_state);
+    if (layer->xkb_state != NULL) {
+        xkb_state_unref(layer->xkb_state);
     }
-    if (window->xkb_keymap != NULL) {
-        xkb_keymap_unref(window->xkb_keymap);
+    if (layer->xkb_keymap != NULL) {
+        xkb_keymap_unref(layer->xkb_keymap);
     }
-    window->xkb_keymap = keymap;
-    window->xkb_state = state;
+    layer->xkb_keymap = keymap;
+    layer->xkb_state = state;
 }
 
 static void keyboard_enter(
@@ -381,11 +841,11 @@ static void keyboard_enter(
     uint32_t serial,
     struct wl_surface* surface,
     struct wl_array* keys) {
-    (void)data;
     (void)keyboard;
     (void)serial;
-    (void)surface;
     (void)keys;
+    struct hypr_layer* layer = data;
+    layer->keyboard_focus = find_bar_by_surface(layer, surface);
 }
 
 static void keyboard_leave(
@@ -395,24 +855,31 @@ static void keyboard_leave(
     struct wl_surface* surface) {
     (void)keyboard;
     (void)serial;
-    (void)surface;
-    struct hypr_layer_window* window = data;
-    window->repeat_active = 0;
+    struct hypr_layer* layer = data;
+    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
+    if (layer->keyboard_focus == bar) {
+        layer->keyboard_focus = NULL;
+    }
+    layer->repeat_bar = NULL;
+    layer->repeat_active = 0;
 }
 
-static void queue_keyboard_input(struct hypr_layer_window* window, uint32_t key) {
-    window->pending_key = (int)key;
-    if (window->xkb_state == NULL) {
+static void queue_keyboard_input(struct hypr_layer* layer, struct hypr_bar* bar, uint32_t key) {
+    if (bar == NULL || bar->closed) {
+        return;
+    }
+    bar->pending_key = (int)key;
+    if (layer->xkb_state == NULL) {
         return;
     }
 
     char text[64];
-    int length = xkb_state_key_get_utf8(window->xkb_state, key + 8, text, sizeof(text));
-    int remaining = (int)sizeof(window->pending_text) - window->pending_text_length - 1;
+    int length = xkb_state_key_get_utf8(layer->xkb_state, key + 8, text, sizeof(text));
+    int remaining = (int)sizeof(bar->pending_text) - bar->pending_text_length - 1;
     if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 && text[0] != 0x7f) {
-        memcpy(window->pending_text + window->pending_text_length, text, (size_t)length);
-        window->pending_text_length += length;
-        window->pending_text[window->pending_text_length] = '\0';
+        memcpy(bar->pending_text + bar->pending_text_length, text, (size_t)length);
+        bar->pending_text_length += length;
+        bar->pending_text[bar->pending_text_length] = '\0';
     }
 }
 
@@ -426,18 +893,20 @@ static void keyboard_key(
     (void)keyboard;
     (void)serial;
     (void)time;
-    struct hypr_layer_window* window = data;
+    struct hypr_layer* layer = data;
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        queue_keyboard_input(window, key);
-        if (window->repeat_rate > 0 &&
-            window->xkb_keymap != NULL &&
-            xkb_keymap_key_repeats(window->xkb_keymap, key + 8)) {
-            window->repeat_key = key;
-            window->repeat_active = 1;
-            window->repeat_next_ms = monotonic_milliseconds() + window->repeat_delay;
+        struct hypr_bar* bar = layer->keyboard_focus;
+        queue_keyboard_input(layer, bar, key);
+        if (bar != NULL && layer->repeat_rate > 0 && layer->xkb_keymap != NULL &&
+            xkb_keymap_key_repeats(layer->xkb_keymap, key + 8)) {
+            layer->repeat_bar = bar;
+            layer->repeat_key = key;
+            layer->repeat_active = 1;
+            layer->repeat_next_ms = monotonic_milliseconds() + layer->repeat_delay;
         }
-    } else if (window->repeat_active && window->repeat_key == key) {
-        window->repeat_active = 0;
+    } else if (layer->repeat_active && layer->repeat_key == key) {
+        layer->repeat_bar = NULL;
+        layer->repeat_active = 0;
     }
 }
 
@@ -451,10 +920,10 @@ static void keyboard_modifiers(
     uint32_t group) {
     (void)keyboard;
     (void)serial;
-    struct hypr_layer_window* window = data;
-    if (window->xkb_state != NULL) {
+    struct hypr_layer* layer = data;
+    if (layer->xkb_state != NULL) {
         xkb_state_update_mask(
-            window->xkb_state,
+            layer->xkb_state,
             mods_depressed,
             mods_latched,
             mods_locked,
@@ -466,11 +935,12 @@ static void keyboard_modifiers(
 
 static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
     (void)keyboard;
-    struct hypr_layer_window* window = data;
-    window->repeat_rate = rate;
-    window->repeat_delay = delay;
+    struct hypr_layer* layer = data;
+    layer->repeat_rate = rate;
+    layer->repeat_delay = delay;
     if (rate <= 0) {
-        window->repeat_active = 0;
+        layer->repeat_bar = NULL;
+        layer->repeat_active = 0;
     }
 }
 
@@ -484,27 +954,26 @@ static const struct wl_keyboard_listener keyboard_listener = {
 };
 
 static void seat_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
-    struct hypr_layer_window* window = data;
+    struct hypr_layer* layer = data;
     int has_pointer = (capabilities & WL_SEAT_CAPABILITY_POINTER) != 0;
     int has_keyboard = (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0;
 
-    if (has_pointer && window->pointer == NULL) {
-        window->pointer = wl_seat_get_pointer(seat);
-        wl_pointer_add_listener(window->pointer, &pointer_listener, window);
-    } else if (!has_pointer && window->pointer != NULL) {
-        wl_pointer_release(window->pointer);
-        window->pointer = NULL;
-        window->pointer_inside = 0;
-        window->pointer_button_down = 0;
+    if (has_pointer && layer->pointer == NULL) {
+        layer->pointer = wl_seat_get_pointer(seat);
+        if (layer->pointer == NULL || wl_pointer_add_listener(layer->pointer, &pointer_listener, layer) < 0) {
+            fail_fatal(layer, "failed to initialize the Wayland pointer");
+        }
+    } else if (!has_pointer && layer->pointer != NULL) {
+        release_pointer(layer);
     }
 
-    if (has_keyboard && window->keyboard == NULL) {
-        window->keyboard = wl_seat_get_keyboard(seat);
-        wl_keyboard_add_listener(window->keyboard, &keyboard_listener, window);
-    } else if (!has_keyboard && window->keyboard != NULL) {
-        wl_keyboard_release(window->keyboard);
-        window->keyboard = NULL;
-        window->repeat_active = 0;
+    if (has_keyboard && layer->keyboard == NULL) {
+        layer->keyboard = wl_seat_get_keyboard(seat);
+        if (layer->keyboard == NULL || wl_keyboard_add_listener(layer->keyboard, &keyboard_listener, layer) < 0) {
+            fail_fatal(layer, "failed to initialize the Wayland keyboard");
+        }
+    } else if (!has_keyboard && layer->keyboard != NULL) {
+        release_keyboard(layer);
     }
 }
 
@@ -519,459 +988,494 @@ static const struct wl_seat_listener seat_listener = {
     .name = seat_name,
 };
 
-static void layer_surface_configure(
-    void* data,
-    struct zwlr_layer_surface_v1* surface,
-    uint32_t serial,
-    uint32_t width,
-    uint32_t height) {
-    struct hypr_layer_window* window = data;
-
-    zwlr_layer_surface_v1_ack_configure(surface, serial);
-
-    /*
-     * Layer-shell surfaces must wait for configure before attaching a buffer.
-     * With all edges anchored and size 0x0, the compositor chooses the real
-     * output dimensions and reports them here.
-     */
-    window->width = width > 0 ? (int)width : window->width;
-    if (window->width <= 0) {
-        window->width = 1920;
-    }
-    window->height = height > 0 ? (int)height : window->height;
-
-    if (window->egl_window != NULL) {
-        wl_egl_window_resize(window->egl_window, window->width, window->height, 0, 0);
-    }
-    window->configured = 1;
-}
-
-static void layer_surface_closed(void* data, struct zwlr_layer_surface_v1* surface) {
-    (void)surface;
-    ((struct hypr_layer_window*)data)->should_close = 1;
-}
-
-static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
-    .configure = layer_surface_configure,
-    .closed = layer_surface_closed,
-};
-
-static int init_egl(struct hypr_layer_window* window) {
-    /*
-     * EGL owns the OpenGL context, but the native window still comes from
-     * Wayland. wl_egl_window wraps the wl_surface so eglCreateWindowSurface can
-     * render directly into the layer-shell surface.
-     */
+static int init_egl(struct hypr_layer* layer) {
     PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display =
         (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
-
     if (get_platform_display != NULL) {
-        window->egl_display = get_platform_display(EGL_PLATFORM_WAYLAND_EXT, window->display, NULL);
+        layer->egl_display = get_platform_display(EGL_PLATFORM_WAYLAND_EXT, layer->display, NULL);
     } else {
-        window->egl_display = eglGetDisplay((EGLNativeDisplayType)window->display);
+        layer->egl_display = eglGetDisplay((EGLNativeDisplayType)layer->display);
     }
-
-    if (window->egl_display == EGL_NO_DISPLAY) {
-        fail("eglGetDisplay failed for the Wayland display");
+    if (layer->egl_display == EGL_NO_DISPLAY) {
+        fail_egl_fatal(layer, "failed to get an EGL display for Wayland");
         return 0;
     }
-
-    if (!eglInitialize(window->egl_display, NULL, NULL)) {
-        fail("eglInitialize failed");
+    if (!eglInitialize(layer->egl_display, NULL, NULL)) {
+        fail_egl_fatal(layer, "eglInitialize failed");
         return 0;
     }
-
     if (!eglBindAPI(EGL_OPENGL_API)) {
-        fail("eglBindAPI(EGL_OPENGL_API) failed");
+        fail_egl_fatal(layer, "eglBindAPI(EGL_OPENGL_API) failed");
         return 0;
     }
 
     const EGLint config_attribs[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
-        EGL_NONE
+        EGL_NONE,
     };
-
     EGLint config_count = 0;
-    if (!eglChooseConfig(window->egl_display, config_attribs, &window->egl_config, 1, &config_count) ||
+    if (!eglChooseConfig(layer->egl_display, config_attribs, &layer->egl_config, 1, &config_count) ||
         config_count == 0) {
-        fail("eglChooseConfig failed: no RGBA OpenGL window config available");
+        fail_egl_fatal(layer, "no RGBA OpenGL window/pbuffer EGL config is available");
         return 0;
     }
 
     const EGLint context_attribs[] = {
         EGL_CONTEXT_MAJOR_VERSION, 3,
         EGL_CONTEXT_MINOR_VERSION, 3,
-        EGL_NONE
+        EGL_NONE,
     };
-
-    window->egl_context =
-        eglCreateContext(window->egl_display, window->egl_config, EGL_NO_CONTEXT, context_attribs);
-    if (window->egl_context == EGL_NO_CONTEXT) {
-        fail("eglCreateContext failed");
+    layer->egl_context = eglCreateContext(
+        layer->egl_display,
+        layer->egl_config,
+        EGL_NO_CONTEXT,
+        context_attribs);
+    if (layer->egl_context == EGL_NO_CONTEXT) {
+        fail_egl_fatal(layer, "eglCreateContext failed");
         return 0;
     }
 
-    return create_egl_surface(window);
+    const EGLint pbuffer_attribs[] = {
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
+        EGL_NONE,
+    };
+    layer->fallback_surface = eglCreatePbufferSurface(
+        layer->egl_display,
+        layer->egl_config,
+        pbuffer_attribs);
+    if (layer->fallback_surface == EGL_NO_SURFACE) {
+        fail_egl_fatal(layer, "eglCreatePbufferSurface failed");
+        return 0;
+    }
+    return make_fallback_current(layer);
 }
 
-hypr_layer_window* hypr_layer_create_top_bar(int reserved_height) {
+hypr_layer* hypr_layer_create(int reserved_height) {
     if (reserved_height <= 0) {
         fail("reserved height must be positive");
         return NULL;
     }
 
-    struct hypr_layer_window* window = calloc(1, sizeof(struct hypr_layer_window));
-    if (window == NULL) {
+    struct hypr_layer* layer = calloc(1, sizeof(struct hypr_layer));
+    if (layer == NULL) {
         fail("out of memory");
         return NULL;
     }
+    layer->reserved_height = reserved_height;
+    layer->next_bar_id = 1;
+    layer->topology_serial = 1;
+    layer->egl_display = EGL_NO_DISPLAY;
+    layer->egl_context = EGL_NO_CONTEXT;
+    layer->fallback_surface = EGL_NO_SURFACE;
+    layer->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (layer->xkb_context == NULL) {
+        fail("xkb_context_new failed");
+        hypr_layer_destroy(layer);
+        return NULL;
+    }
 
-    window->height = 1080;
-    window->width = 1920;
-    window->reserved_height = reserved_height;
-    window->pending_key = -1;
-    window->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-
-    window->display = wl_display_connect(NULL);
-    if (window->display == NULL) {
+    layer->display = wl_display_connect(NULL);
+    if (layer->display == NULL) {
         fail("wl_display_connect failed. Are WAYLAND_DISPLAY and a compositor available?");
-        hypr_layer_destroy(window);
+        hypr_layer_destroy(layer);
         return NULL;
     }
-
-    window->registry = wl_display_get_registry(window->display);
-    wl_registry_add_listener(window->registry, &registry_listener, window);
-    wl_display_roundtrip(window->display);
-    if (window->seat != NULL) {
-        wl_seat_add_listener(window->seat, &seat_listener, window);
-        wl_display_roundtrip(window->display);
+    layer->registry = wl_display_get_registry(layer->display);
+    if (layer->registry == NULL || wl_registry_add_listener(layer->registry, &registry_listener, layer) < 0) {
+        fail("failed to initialize the Wayland registry");
+        hypr_layer_destroy(layer);
+        return NULL;
     }
-
-    if (window->compositor == NULL) {
+    if (wl_display_roundtrip(layer->display) < 0) {
+        fail("Wayland registry roundtrip failed");
+        hypr_layer_destroy(layer);
+        return NULL;
+    }
+    if (layer->compositor == NULL) {
         fail("wl_compositor is not available");
-        hypr_layer_destroy(window);
+        hypr_layer_destroy(layer);
+        return NULL;
+    }
+    if (layer->layer_shell == NULL) {
+        fail("zwlr_layer_shell_v1 is not available; run under a layer-shell compositor");
+        hypr_layer_destroy(layer);
+        return NULL;
+    }
+    if (!init_egl(layer)) {
+        hypr_layer_destroy(layer);
         return NULL;
     }
 
-    if (window->layer_shell == NULL) {
-        fail("zwlr_layer_shell_v1 is not available. This must run under a compositor with wlr-layer-shell, such as Hyprland.");
-        hypr_layer_destroy(window);
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        create_bar_surface(bar);
+    }
+    if (wl_display_roundtrip(layer->display) < 0) {
+        fail("Wayland roundtrip failed while configuring output bars");
+        hypr_layer_destroy(layer);
         return NULL;
     }
+    return layer;
+}
 
-    window->surface = wl_compositor_create_surface(window->compositor);
-    if (window->surface == NULL) {
-        fail("wl_compositor_create_surface failed");
-        hypr_layer_destroy(window);
-        return NULL;
+void hypr_layer_destroy(hypr_layer* layer) {
+    if (layer == NULL) {
+        return;
     }
 
-    window->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
-        window->layer_shell,
-        window->surface,
-        NULL,
-        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
-        "hyprnetshell");
-    if (window->layer_surface == NULL) {
-        fail("zwlr_layer_shell_v1_get_layer_surface failed");
-        hypr_layer_destroy(window);
-        return NULL;
+    if (layer->egl_display != EGL_NO_DISPLAY) {
+        make_fallback_current(layer);
+    }
+    while (layer->bars != NULL) {
+        struct hypr_bar* bar = layer->bars;
+        layer->bars = bar->next;
+        destroy_output(bar);
     }
 
-    zwlr_layer_surface_v1_add_listener(window->layer_surface, &layer_surface_listener, window);
-
-    /*
-     * Anchor all edges and request compositor-chosen dimensions so the EGL
-     * surface can draw across the whole output. Keep the exclusive zone at the
-     * bar height so tiled windows reserve only the top strip.
-     */
-    zwlr_layer_surface_v1_set_anchor(
-        window->layer_surface,
-        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-    zwlr_layer_surface_v1_set_size(window->layer_surface, 0, 0);
-    zwlr_layer_surface_v1_set_exclusive_zone(window->layer_surface, reserved_height);
-    if (window->layer_shell_version >= ZWLR_LAYER_SURFACE_V1_SET_EXCLUSIVE_EDGE_SINCE_VERSION) {
-        zwlr_layer_surface_v1_set_exclusive_edge(
-            window->layer_surface,
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP);
+    if (layer->egl_display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (layer->fallback_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(layer->egl_display, layer->fallback_surface);
+        }
+        if (layer->egl_context != EGL_NO_CONTEXT) {
+            eglDestroyContext(layer->egl_display, layer->egl_context);
+        }
+        eglTerminate(layer->egl_display);
     }
-    zwlr_layer_surface_v1_set_keyboard_interactivity(window->layer_surface, 0);
-    apply_input_regions(window, NULL, 0);
+    release_seat(layer);
+    if (layer->layer_shell != NULL) {
+        zwlr_layer_shell_v1_destroy(layer->layer_shell);
+    }
+    if (layer->xkb_state != NULL) {
+        xkb_state_unref(layer->xkb_state);
+    }
+    if (layer->xkb_keymap != NULL) {
+        xkb_keymap_unref(layer->xkb_keymap);
+    }
+    if (layer->xkb_context != NULL) {
+        xkb_context_unref(layer->xkb_context);
+    }
+    if (layer->compositor != NULL) {
+        wl_compositor_destroy(layer->compositor);
+    }
+    if (layer->registry != NULL) {
+        wl_registry_destroy(layer->registry);
+    }
+    if (layer->display != NULL) {
+        wl_display_disconnect(layer->display);
+    }
+    free(layer);
+}
 
-    wl_surface_commit(window->surface);
-
-    while (!window->configured && !window->should_close) {
-        if (wl_display_dispatch(window->display) == -1) {
-            fail("wl_display_dispatch failed while waiting for the initial configure");
-            hypr_layer_destroy(window);
-            return NULL;
+int hypr_layer_poll_events(hypr_layer* layer) {
+    if (layer == NULL || layer->display == NULL || layer->should_close) {
+        return 0;
+    }
+    if (wl_display_dispatch_pending(layer->display) < 0) {
+        fail_fatal(layer, "wl_display_dispatch_pending failed");
+        return 0;
+    }
+    while (wl_display_prepare_read(layer->display) != 0) {
+        if (wl_display_dispatch_pending(layer->display) < 0) {
+            fail_fatal(layer, "wl_display_dispatch_pending failed while preparing a read");
+            return 0;
         }
     }
 
-    if (!init_egl(window)) {
-        hypr_layer_destroy(window);
-        return NULL;
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        wl_display_cancel_read(layer->display);
+        fail_fatal(layer, "wl_display_flush failed");
+        return 0;
     }
-
-    return window;
-}
-
-void hypr_layer_destroy(hypr_layer_window* window) {
-    if (window == NULL) {
-        return;
-    }
-
-    if (window->egl_display != EGL_NO_DISPLAY && window->egl_display != NULL) {
-        eglMakeCurrent(window->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        destroy_egl_surface(window);
-        if (window->egl_context != EGL_NO_CONTEXT && window->egl_context != NULL) {
-            eglDestroyContext(window->egl_display, window->egl_context);
-        }
-        eglTerminate(window->egl_display);
-    }
-
-    if (window->layer_surface != NULL) {
-        zwlr_layer_surface_v1_destroy(window->layer_surface);
-    }
-    if (window->surface != NULL) {
-        wl_surface_destroy(window->surface);
-    }
-    if (window->layer_shell != NULL) {
-        zwlr_layer_shell_v1_destroy(window->layer_shell);
-    }
-    if (window->pointer != NULL) {
-        wl_pointer_release(window->pointer);
-    }
-    if (window->keyboard != NULL) {
-        wl_keyboard_release(window->keyboard);
-    }
-    if (window->seat != NULL) {
-        wl_seat_release(window->seat);
-    }
-    if (window->xkb_state != NULL) {
-        xkb_state_unref(window->xkb_state);
-    }
-    if (window->xkb_keymap != NULL) {
-        xkb_keymap_unref(window->xkb_keymap);
-    }
-    if (window->xkb_context != NULL) {
-        xkb_context_unref(window->xkb_context);
-    }
-    if (window->compositor != NULL) {
-        wl_compositor_destroy(window->compositor);
-    }
-    if (window->registry != NULL) {
-        wl_registry_destroy(window->registry);
-    }
-    if (window->display != NULL) {
-        wl_display_disconnect(window->display);
-    }
-
-    free(window);
-}
-
-void hypr_layer_make_current(hypr_layer_window* window) {
-    if (window == NULL) {
-        return;
-    }
-    if (window->egl_surface == EGL_NO_SURFACE || window->egl_surface == NULL) {
-        fail("eglMakeCurrent skipped: no EGL surface");
-        window->has_error = 1;
-        window->should_close = 1;
-        return;
-    }
-    if (!eglMakeCurrent(window->egl_display, window->egl_surface, window->egl_surface, window->egl_context)) {
-        fail_egl(window, "eglMakeCurrent failed");
-    }
-}
-
-void hypr_layer_swap_buffers(hypr_layer_window* window) {
-    if (window == NULL) {
-        return;
-    }
-    EGLint surface_width = 0;
-    EGLint surface_height = 0;
-    if (!eglQuerySurface(window->egl_display, window->egl_surface, EGL_WIDTH, &surface_width) ||
-        !eglQuerySurface(window->egl_display, window->egl_surface, EGL_HEIGHT, &surface_height)) {
-        fail_egl(window, "eglQuerySurface failed before swap");
-        return;
-    }
-    if (!eglSwapBuffers(window->egl_display, window->egl_surface)) {
-        EGLint error = eglGetError();
-        fprintf(stderr, "hypr_layer: swap surface was %dx%d, window is %dx%d\n",
-            surface_width,
-            surface_height,
-            window->width,
-            window->height);
-        fprintf(stderr, "hypr_layer: eglSwapBuffers failed (EGL error 0x%04x)\n", error);
-
-        if (error == EGL_BAD_SURFACE) {
-            fprintf(stderr, "hypr_layer: recreating EGL surface after EGL_BAD_SURFACE\n");
-            destroy_egl_surface(window);
-            if (create_egl_surface(window) &&
-                eglMakeCurrent(window->egl_display, window->egl_surface, window->egl_surface, window->egl_context) &&
-                eglSwapBuffers(window->egl_display, window->egl_surface)) {
-                wl_display_flush(window->display);
-                return;
-            }
-
-            fprintf(stderr, "hypr_layer: EGL surface recreation did not recover swap\n");
-        }
-
-        window->has_error = 1;
-        window->should_close = 1;
-        return;
-    }
-
-    wl_display_flush(window->display);
-}
-
-void hypr_layer_poll_events(hypr_layer_window* window) {
-    if (window == NULL || window->display == NULL) {
-        return;
-    }
-
-    wl_display_dispatch_pending(window->display);
-
-    /*
-     * Non-blocking event pump: drain pending events, prepare a read, poll the
-     * display fd with a zero timeout, then either read available events or
-     * cancel the prepared read. This keeps the C# render loop in control.
-     */
-    while (wl_display_prepare_read(window->display) != 0) {
-        wl_display_dispatch_pending(window->display);
-    }
-
-    wl_display_flush(window->display);
-
     struct pollfd pfd = {
-        .fd = wl_display_get_fd(window->display),
+        .fd = wl_display_get_fd(layer->display),
         .events = POLLIN,
         .revents = 0,
     };
-
     int ready = poll(&pfd, 1, 0);
     if (ready > 0 && (pfd.revents & POLLIN) != 0) {
-        wl_display_read_events(window->display);
-        wl_display_dispatch_pending(window->display);
+        if (wl_display_read_events(layer->display) < 0 ||
+            wl_display_dispatch_pending(layer->display) < 0) {
+            fail_fatal(layer, "failed to read Wayland events");
+            return 0;
+        }
     } else {
-        wl_display_cancel_read(window->display);
-        if (ready < 0) {
-            window->should_close = 1;
+        wl_display_cancel_read(layer->display);
+        if (ready < 0 && errno != EINTR) {
+            fail_fatal(layer, "poll failed for the Wayland display");
+            return 0;
+        }
+        if (ready > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+            fail_fatal(layer, "the Wayland display connection closed");
+            return 0;
         }
     }
 
-    if (window->repeat_active && window->repeat_rate > 0) {
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (!bar->closed && bar->surface == NULL) {
+            create_bar_surface(bar);
+        } else if (bar->closed && bar->surface != NULL) {
+            destroy_bar_surface(bar);
+        }
+    }
+    if (layer->repeat_active && layer->repeat_rate > 0 && layer->repeat_bar != NULL) {
         int64_t now = monotonic_milliseconds();
-        if (now >= window->repeat_next_ms) {
-            queue_keyboard_input(window, window->repeat_key);
-            int64_t interval = 1000 / window->repeat_rate;
-            window->repeat_next_ms = now + (interval > 0 ? interval : 1);
+        if (now >= layer->repeat_next_ms) {
+            queue_keyboard_input(layer, layer->repeat_bar, layer->repeat_key);
+            int64_t interval = 1000 / layer->repeat_rate;
+            layer->repeat_next_ms = now + (interval > 0 ? interval : 1);
         }
     }
+    return 1;
 }
 
-void hypr_layer_set_input_regions(hypr_layer_window* window, const int* rectangles, int rectangle_count) {
-    if (rectangle_count < 0) {
-        rectangle_count = 0;
+int hypr_layer_should_close(const hypr_layer* layer) {
+    return layer == NULL || layer->should_close;
+}
+
+int hypr_layer_has_error(const hypr_layer* layer) {
+    return layer != NULL && layer->has_error;
+}
+
+uint64_t hypr_layer_get_topology_serial(const hypr_layer* layer) {
+    return layer != NULL ? layer->topology_serial : 0;
+}
+
+int hypr_layer_get_bar_count(const hypr_layer* layer) {
+    int count = 0;
+    if (layer != NULL) {
+        for (const struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+            if (bar->active && !bar->closed) {
+                count++;
+            }
+        }
     }
+    return count;
+}
 
-    apply_input_regions(window, rectangles, rectangle_count);
-    if (window != NULL && window->surface != NULL) {
-        wl_surface_commit(window->surface);
-        wl_display_flush(window->display);
+uint64_t hypr_layer_get_bar_id(const hypr_layer* layer, int index) {
+    if (layer == NULL || index < 0) {
+        return 0;
     }
-}
-
-void hypr_layer_set_keyboard_interactivity(hypr_layer_window* window, int enabled) {
-    if (window == NULL || window->layer_surface == NULL) {
-        return;
+    for (const struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (bar->active && !bar->closed) {
+            if (index == 0) {
+                return bar->id;
+            }
+            index--;
+        }
     }
+    return 0;
+}
 
-    if (!enabled) {
-        window->repeat_active = 0;
+int hypr_layer_get_bar_width(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL ? bar->width : 0;
+}
+
+int hypr_layer_get_bar_height(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL ? bar->height : 0;
+}
+
+int hypr_layer_get_output_name(
+    const hypr_layer* layer,
+    uint64_t id,
+    char* buffer,
+    int buffer_size) {
+    if (buffer == NULL || buffer_size <= 0) {
+        return 0;
     }
-    zwlr_layer_surface_v1_set_keyboard_interactivity(window->layer_surface, enabled ? 1 : 0);
-    wl_surface_commit(window->surface);
-    wl_display_flush(window->display);
+    buffer[0] = '\0';
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
+        return 0;
+    }
+    const char* value = bar->output_name != NULL && bar->output_name[0] != '\0'
+        ? bar->output_name
+        : bar->fallback_output_name;
+    size_t required_length = strlen(value);
+    size_t copied_length = required_length;
+    if (copied_length >= (size_t)buffer_size) {
+        copied_length = (size_t)buffer_size - 1;
+    }
+    memcpy(buffer, value, copied_length);
+    buffer[copied_length] = '\0';
+    return required_length <= INT32_MAX ? (int)required_length : INT32_MAX;
 }
 
-int hypr_layer_get_width(hypr_layer_window* window) {
-    return window != NULL ? window->width : 0;
+int hypr_layer_make_current(hypr_layer* layer, uint64_t id) {
+    if (layer == NULL) {
+        return 0;
+    }
+    if (id == 0) {
+        return make_fallback_current(layer);
+    }
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE) {
+        return 0;
+    }
+    if (!eglMakeCurrent(
+            layer->egl_display,
+            bar->egl_surface,
+            bar->egl_surface,
+            layer->egl_context)) {
+        fail_bar_egl(bar, "eglMakeCurrent failed");
+        mark_bar_closed(bar);
+        make_fallback_current(layer);
+        return 0;
+    }
+    return 1;
 }
 
-int hypr_layer_get_height(hypr_layer_window* window) {
-    return window != NULL ? window->height : 0;
+int hypr_layer_swap_buffers(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE) {
+        return 0;
+    }
+    if (!eglSwapBuffers(layer->egl_display, bar->egl_surface)) {
+        EGLint error = eglGetError();
+        fprintf(stderr, "hypr_layer: output %llu: eglSwapBuffers failed (EGL error 0x%04x)\n", (unsigned long long)id, error);
+        if (error == EGL_BAD_SURFACE) {
+            destroy_bar_egl_surface(bar);
+            if (create_bar_egl_surface(bar) &&
+                eglMakeCurrent(layer->egl_display, bar->egl_surface, bar->egl_surface, layer->egl_context) &&
+                eglSwapBuffers(layer->egl_display, bar->egl_surface)) {
+                wl_display_flush(layer->display);
+                return 1;
+            }
+        }
+        mark_bar_closed(bar);
+        return 0;
+    }
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        fail_fatal(layer, "wl_display_flush failed after swapping buffers");
+        return 0;
+    }
+    return 1;
 }
 
-double hypr_layer_get_pointer_x(hypr_layer_window* window) {
-    return window != NULL ? window->pointer_x : 0.0;
+int hypr_layer_set_input_regions(
+    hypr_layer* layer,
+    uint64_t id,
+    const int* rectangles,
+    int rectangle_count) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
+        return 0;
+    }
+    apply_input_regions(bar, rectangles, rectangle_count > 0 ? rectangle_count : 0);
+    if (bar->closed) {
+        return 0;
+    }
+    wl_surface_commit(bar->surface);
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        fail_fatal(layer, "wl_display_flush failed after setting input regions");
+        return 0;
+    }
+    return 1;
 }
 
-double hypr_layer_get_pointer_y(hypr_layer_window* window) {
-    return window != NULL ? window->pointer_y : 0.0;
+int hypr_layer_set_keyboard_interactive_bar(hypr_layer* layer, uint64_t id) {
+    if (layer == NULL) {
+        return 0;
+    }
+    if (id != 0 && find_bar(layer, id) == NULL) {
+        return 0;
+    }
+    layer->keyboard_interactive_id = id;
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (!bar->active || bar->closed || bar->layer_surface == NULL) {
+            continue;
+        }
+        int enabled = bar->id == id;
+        if (bar->keyboard_interactive == enabled) {
+            continue;
+        }
+        bar->keyboard_interactive = enabled;
+        zwlr_layer_surface_v1_set_keyboard_interactivity(bar->layer_surface, enabled ? 1 : 0);
+        wl_surface_commit(bar->surface);
+    }
+    if (id == 0) {
+        layer->repeat_bar = NULL;
+        layer->repeat_active = 0;
+    }
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        fail_fatal(layer, "wl_display_flush failed after changing keyboard interactivity");
+        return 0;
+    }
+    return 1;
 }
 
-int hypr_layer_pointer_inside(hypr_layer_window* window) {
-    return window != NULL && window->pointer_inside;
+double hypr_layer_get_pointer_x(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL ? bar->pointer_x : 0.0;
 }
 
-int hypr_layer_pointer_button_down(hypr_layer_window* window) {
-    return window != NULL && window->pointer_button_down;
+double hypr_layer_get_pointer_y(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL ? bar->pointer_y : 0.0;
 }
 
-int hypr_layer_take_key(hypr_layer_window* window) {
-    if (window == NULL) {
+int hypr_layer_pointer_inside(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL && bar->pointer_inside;
+}
+
+int hypr_layer_pointer_button(const hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    return bar != NULL && bar->pointer_button_down;
+}
+
+double hypr_layer_take_scroll(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
+        return 0.0;
+    }
+    double value = bar->pending_scroll;
+    bar->pending_scroll = 0.0;
+    return value;
+}
+
+int hypr_layer_take_key(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
         return -1;
     }
-
-    int key = window->pending_key;
-    window->pending_key = -1;
+    int key = bar->pending_key;
+    bar->pending_key = -1;
     return key;
 }
 
-int hypr_layer_take_text(hypr_layer_window* window, char* buffer, int buffer_size) {
-    if (window == NULL || buffer == NULL || buffer_size <= 0) {
+int hypr_layer_take_text(
+    hypr_layer* layer,
+    uint64_t id,
+    char* buffer,
+    int buffer_size) {
+    if (buffer == NULL || buffer_size <= 0) {
         return 0;
     }
-
-    int length = window->pending_text_length;
+    buffer[0] = '\0';
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
+        return 0;
+    }
+    int length = bar->pending_text_length;
     if (length >= buffer_size) {
         length = buffer_size - 1;
     }
-    memcpy(buffer, window->pending_text, (size_t)length);
+    memcpy(buffer, bar->pending_text, (size_t)length);
     buffer[length] = '\0';
-    window->pending_text_length = 0;
-    window->pending_text[0] = '\0';
+    bar->pending_text_length = 0;
+    bar->pending_text[0] = '\0';
     return length;
 }
 
-double hypr_layer_take_scroll(hypr_layer_window* window) {
-    if (window == NULL) {
-        return 0.0;
-    }
-
-    double scroll = window->pending_scroll;
-    window->pending_scroll = 0.0;
-    return scroll;
-}
-
-int hypr_layer_should_close(hypr_layer_window* window) {
-    return window == NULL || window->should_close;
-}
-
-int hypr_layer_has_error(hypr_layer_window* window) {
-    return window != NULL && window->has_error;
-}
-
 void* hypr_layer_get_proc_address(const char* name) {
-    return (void*)eglGetProcAddress(name);
+    return name != NULL ? (void*)eglGetProcAddress(name) : NULL;
 }

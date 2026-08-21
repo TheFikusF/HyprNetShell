@@ -7,7 +7,7 @@ using FuzzySharp;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action closeDialog, Theme theme) : IMainDialogTab
+internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action closeDialog, Theme theme) : IMainDialogTab, IDisposable
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
@@ -291,6 +291,16 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;
+    }
+
+    public void Dispose()
+    {
+        lock (_stateLock)
+        {
+            _loadCancellation?.Cancel();
+            _loadCancellation?.Dispose();
+            _loadCancellation = null;
+        }
     }
 
     private static int PositiveModulo(int value, int divisor) => (value % divisor + divisor) % divisor;

@@ -10,14 +10,15 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BluetoothModule(
     BluetoothModuleService service,
-    Theme theme) : IDrawableModule
+    Theme theme,
+    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, bool> _connectionOverrides = [];
     private readonly RefFloat _powerSwitchAnimation = new();
     private bool? _poweredOverride;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("bluetooth_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "bluetooth_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

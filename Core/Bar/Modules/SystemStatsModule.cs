@@ -7,13 +7,16 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class SystemStatsModule(SystemStatsModuleService service, Theme theme) : IDrawableModule
+internal sealed class SystemStatsModule(
+    SystemStatsModuleService service,
+    Theme theme,
+    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int WIDTH = 75;
     private const int GRAPH_WIDTH = 400;
     private const int GRAPH_HEIGHT = 92;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("system_stats_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "system_stats_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

@@ -8,7 +8,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar;
 
-public sealed class MainDialog : IDrawableModule
+public sealed class MainDialog : IDrawableModule, IDisposable
 {
     private class Tab : IMainDialogTab
     {
@@ -58,6 +58,7 @@ public sealed class MainDialog : IDrawableModule
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex];
 
     public bool IsOpen { get; private set; }
+    public bool IsVisible => IsOpen || _opacity > 0.1f;
 
     internal MainDialog(
         ClipboardHistoryService clipboardHistory,
@@ -181,5 +182,16 @@ public sealed class MainDialog : IDrawableModule
     {
         _activeTabIndex = index;
         ActiveTab.Activate();
+    }
+
+    public void Dispose()
+    {
+        foreach (var tab in _tabs)
+        {
+            if (tab.InternalTab is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
     }
 }

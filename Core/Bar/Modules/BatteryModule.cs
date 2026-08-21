@@ -10,7 +10,8 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BatteryModule(
     BatteryModuleService service,
-    Theme theme) : IDrawableModule
+    Theme theme,
+    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _profileStates = [];
     private readonly ModulesCommon.BoxState _chargeLimitDecreaseState = new();
@@ -26,12 +27,12 @@ internal sealed class BatteryModule(
 
     private readonly Gradient _batteryOverlayGradient = new(
         new Gradient.Stop(0.0f, Color.FromRgb(255, 255, 255, 0.35f)),
-        new Gradient.Stop(0.33f, Color.FromRgb(255, 255, 255, 0.08f)),
+        // new Gradient.Stop(0.33f, Color.FromRgb(255, 255, 255, 0.08f)),
         new Gradient.Stop(0.5f, Color.FromRgb(255, 255, 255, 0.0f)),
-        new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
+        // new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
         new Gradient.Stop(1.0f, Color.FromRgb(0, 0, 0, 0.45f)));
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("battery_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "battery_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };
@@ -68,7 +69,27 @@ internal sealed class BatteryModule(
                         }
                     },
                     BuildBatteryFill(battery.IsCharging, percentage),
+                    new BoxNode(74, 14 + 5 + 5)
+                    {
+                        IgnoreLayout = true,
+                        Direction = Direction.Horizontal,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
+                        Left = (int)theme.BorderWidth,
+                        Style = new Style { Spacing = 2, Padding = new Insets(2, 2) },
+                        Children = [
+                            BuildBatteryBlock(battery.IsCharging, percentage, 0),
+                            BuildBatteryBlock(battery.IsCharging, percentage, 1),
+                            BuildBatteryBlock(battery.IsCharging, percentage, 2),
+                            BuildBatteryBlock(battery.IsCharging, percentage, 3),
+                        ]
+                    },
                     // BuildBatteryFill(true, percentage),
+                    new GradientBoxNode(new Color(), Color.FromRgb(0, 0, 0, 0.35f), () => 0.0f, 80, 14 + 5 + 5)
+                    {
+                        IgnoreLayout = true,
+                        GradientDirection = GradientDirection.Horizontal,
+                    },
                     new GradientBoxNode(_batteryOverlayGradient, 80, 14 + 5 + 5)
                     {
                         IgnoreLayout = true,
@@ -76,14 +97,14 @@ internal sealed class BatteryModule(
                         GradientDirection = GradientDirection.Vertical,
                         HorizontalAlignment = ItemsAlignment.Center,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Style = new Style { BorderRadius = 3, Spacing = 4 },
+                        Style = new Style { BorderRadius = 3, Spacing = 4, Padding = new Insets(0, 0, 2, 0) },
                         Children = battery.IsCharging
                             ?
                             [
                                 new ImageNode(Icons.Lightning, 16, 16, theme.Text),
-                                new TextNode($"{percentage:0}%", theme.TextSize, theme.Text)
+                                new TextNode($"{percentage:0}%", theme.TextSize, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }
                             ]
-                            : [new TextNode($"{percentage:0}%", theme.TextSize, theme.Text)]
+                            : [new TextNode($"{percentage:0}%", theme.TextSize, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }]
                     },
                     new BoxNode(80, 14 + 8 + 8)
                     {
@@ -111,22 +132,49 @@ internal sealed class BatteryModule(
     {
         var width = (int)(74 * (percentage / 100));
         var color = _batteryGradient.Evaluate(percentage / 100);
-        if (isCharging)
-        {
-            return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5)
-            {
-                IgnoreLayout = true,
-                Left = (int)theme.BorderWidth,
-                Direction = Direction.Horizontal,
-                GradientDirection = GradientDirection.Horizontal,
-            };
-        }
+        // if (isCharging)
+        // {
+        //     return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5)
+        //     {
+        //         IgnoreLayout = true,
+        //         Left = (int)theme.BorderWidth,
+        //         Direction = Direction.Horizontal,
+        //         GradientDirection = GradientDirection.Horizontal,
+        //     };
+        // }
 
         return new BoxNode(width, 14 + 5 + 5)
         {
             IgnoreLayout = true,
             Left = (int)theme.BorderWidth,
-            Style = new Style { BackgroundColor = color }
+            Style = new Style { BackgroundColor = Color.Darken(color, 0.5f) }
+        };
+    }
+
+    private BoxNode BuildBatteryBlock(bool isCharging, float percentage, int index)
+    {
+        const int BLOCK_WIDTH = (74 - (2 * 2) - (2 * 3)) / 4;
+        percentage /= 100;
+        var color = _batteryGradient.Evaluate(percentage);
+        percentage = MathF.Max(MathF.Min((percentage * 4) - index, 1), 0);
+        var width = (int)(BLOCK_WIDTH * percentage);
+        if (isCharging)
+        {
+            return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5 - 6)
+            {
+                IgnoreLayout = true,
+                Left = (BLOCK_WIDTH + 2) * index,
+                Direction = Direction.Horizontal,
+                GradientDirection = GradientDirection.Horizontal,
+                Style = new Style { BackgroundColor = color, BorderRadius = 4 }
+            };
+        }
+
+        return new BoxNode(width, 14 + 5 + 5 - 6)
+        {
+            IgnoreLayout = true,
+            Left = (BLOCK_WIDTH + 2) * index,
+            Style = new Style { BackgroundColor = color, BorderRadius = 4 }
         };
     }
 

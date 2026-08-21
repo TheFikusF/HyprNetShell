@@ -11,7 +11,8 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class MusicModule(
     MusicModuleService service,
-    Theme theme) : IDrawableModule
+    Theme theme,
+    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private enum PlayerAction
     {
@@ -25,7 +26,7 @@ internal sealed class MusicModule(
     private const int POPUP_WIDTH = 512 + 64;
     private const int POPUP_IMAGE_SIZE = 128 + 64;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("music_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "music_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

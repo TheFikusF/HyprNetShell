@@ -7,13 +7,13 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class PowerModule(Theme theme) : IDrawableModule
+internal sealed class PowerModule(Theme theme, ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly RefBool _lockHovered = new();
     private readonly RefBool _powerOffHovered = new();
     private readonly RefBool _rebootHovered = new();
 
-    private readonly ModulesCommon.NodeWithPopup _node = new("power_module")
+    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "power_module")
     {
         HorizontalAlignment = ItemsAlignment.End,
     };

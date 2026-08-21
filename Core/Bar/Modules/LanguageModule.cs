@@ -31,12 +31,16 @@ internal sealed class LanguageModule : IDrawableModule
 
     public bool IsShown => _showUntil > DateTime.UtcNow;
 
-    public LanguageModule(HyprlandService hyprland, IHyprctl hyprctl, Theme theme)
+    public LanguageModule(
+            HyprlandService hyprland,
+            IHyprctl hyprctl,
+            Theme theme,
+            ModulesCommon.PopupCoordinator popupCoordinator)
     {
         _hyprland = hyprland;
         _hyprctl = hyprctl;
         _theme = theme;
-        _node = new("language_module", ignorePopupQueue: true)
+        _node = new(popupCoordinator, "language_module", ignorePopupQueue: true)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             GetShouldShowPopup = hovered => hovered || DateTime.UtcNow < _showUntil,

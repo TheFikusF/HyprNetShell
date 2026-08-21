@@ -7,12 +7,50 @@ namespace HyprNetShell.Core.Bar;
 
 public static class ModulesCommon
 {
+    public sealed class PopupCoordinator
+    {
+        private readonly Dictionary<string, DateTime> _cantOpenBefore = [];
+        private string? _lastOpenedId;
+        private string? _pendingOpenedId;
+
+        public void Register(string moduleId) =>
+            _cantOpenBefore[moduleId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
+
+        public bool IsOpen(string moduleId) => _lastOpenedId == moduleId;
+
+        public bool TryRequestOpen(string moduleId)
+        {
+            if (!_cantOpenBefore.TryGetValue(moduleId, out var cantOpenBefore))
+            {
+                Register(moduleId);
+                return false;
+            }
+
+            if (cantOpenBefore >= DateTime.Now
+                || (_lastOpenedId == moduleId && !string.IsNullOrEmpty(_pendingOpenedId)))
+            {
+                return false;
+            }
+
+            _pendingOpenedId = moduleId;
+            return true;
+        }
+
+        public void EndFrame()
+        {
+            if (_pendingOpenedId != _lastOpenedId && _lastOpenedId is { } lastOpenedId)
+            {
+                _cantOpenBefore[lastOpenedId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
+            }
+
+            _lastOpenedId = _pendingOpenedId;
+            _pendingOpenedId = null;
+        }
+    }
+
     public class NodeWithPopup
     {
-        private static string? _lastOpenedId;
-        private static string? _pendingOpenedId;
-        private static readonly Dictionary<string, DateTime> CantOpenBefore = new();
-
+        private readonly PopupCoordinator _popupCoordinator;
         private readonly string _moduleId;
         private readonly bool _ignorePopupQueue;
 
@@ -27,38 +65,24 @@ public static class ModulesCommon
         public bool IsHovered => _hovered.Value;
         public bool ShouldShowPopup => GetShouldShowPopup(IsHovered);
 
-        public NodeWithPopup(string moduleId = "", bool ignorePopupQueue = false)
+        public NodeWithPopup(
+            PopupCoordinator popupCoordinator,
+            string moduleId = "",
+            bool ignorePopupQueue = false)
         {
+            _popupCoordinator = popupCoordinator;
             _moduleId = moduleId;
             _ignorePopupQueue = ignorePopupQueue;
-            CantOpenBefore[moduleId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
-        }
-
-        static NodeWithPopup()
-        {
-            Renderer.OnFrameStart += () => { };
-            Renderer.OnFrameEnd += () =>
-            {
-                if (_pendingOpenedId != _lastOpenedId)
-                {
-                    CantOpenBefore[_lastOpenedId ?? string.Empty] = DateTime.Now + TimeSpan.FromMilliseconds(200);
-                }
-
-                _lastOpenedId = _pendingOpenedId;
-                _pendingOpenedId = null;
-            };
+            _popupCoordinator.Register(moduleId);
         }
 
         public Node Draw(ICollection<Node> module, Func<Node> popup)
         {
             var shouldShowExternal = GetShouldShowPopup(IsHovered);
-            var shouldShow = shouldShowExternal && (_lastOpenedId == _moduleId || _ignorePopupQueue);
-            if (_ignorePopupQueue == false
-                && shouldShowExternal
-                && CantOpenBefore[_moduleId] < DateTime.Now
-                && (_lastOpenedId != _moduleId || string.IsNullOrEmpty(_pendingOpenedId)))
+            var shouldShow = shouldShowExternal && (_popupCoordinator.IsOpen(_moduleId) || _ignorePopupQueue);
+            if (!_ignorePopupQueue && shouldShowExternal)
             {
-                _pendingOpenedId = _moduleId;
+                _popupCoordinator.TryRequestOpen(_moduleId);
             }
 
             _popupOpacity = PrimitivesMath.LerpSmooth(_popupOpacity, shouldShow ? 1 : 0, 24.0f, DELTA_TIME);
