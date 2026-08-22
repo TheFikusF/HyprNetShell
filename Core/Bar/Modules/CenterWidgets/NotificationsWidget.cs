@@ -1,6 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;
@@ -10,7 +11,7 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class NotificationsWidget(NotificationService service, Theme theme)
 {
     public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
-    private readonly RefFloat _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
+    private readonly Ref<float> _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
 
     public Node Draw(NotificationsSnapshot snapshot) => new BoxNode(WIDTH)
     {

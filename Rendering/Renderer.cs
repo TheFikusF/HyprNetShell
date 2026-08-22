@@ -311,6 +311,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         return dx == 0.0f && dy == 0.0f ? -1.0f : MathF.Sqrt(dx * dx + dy * dy);
     }
 
+    private const int CORNER_SEGMENTS = 16;
+    private static readonly List<Point> _cornerPoints = new(CORNER_SEGMENTS);
     private void DrawRoundedRect(float x, float y, float width, float height, BorderRadius radius, Color color)
     {
         if (width <= 0 || height <= 0)
@@ -319,22 +321,26 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         radius = ClampCornerRadius(radius, width, height);
-        var points = new List<(float X, float Y)>();
-        AddCorner(points, x + width - radius.TopRight, y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, x + width, y);
-        AddCorner(points, x + width - radius.BottomRight, y + height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f, x + width, y + height);
-        AddCorner(points, x + radius.BottomLeft, y + height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f, x, y + height);
-        AddCorner(points, x + radius.TopLeft, y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, x, y);
+        _cornerPoints.Clear();
+        AddCorner(x + width - radius.TopRight, y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, x + width, y);
+        AddCorner(x + width - radius.BottomRight, y + height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f, x + width, y + height);
+        AddCorner(x + radius.BottomLeft, y + height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f, x, y + height);
+        AddCorner(x + radius.TopLeft, y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, x, y);
 
-        var vertices = new float[(points.Count + 2) * 6];
+        var vertices = new float[(_cornerPoints.Count + 2) * 6];
         WriteVertex(vertices, 0, x + width * 0.5f, y + height * 0.5f, color);
-        for (var i = 0; i < points.Count; i++)
+        for (var i = 0; i < _cornerPoints.Count; i++)
         {
-            WriteVertex(vertices, i + 1, points[i].X, points[i].Y, color);
+            WriteVertex(vertices, i + 1, _cornerPoints[i].X, _cornerPoints[i].Y, color);
         }
-        WriteVertex(vertices, points.Count + 1, points[0].X, points[0].Y, color);
+        WriteVertex(vertices, _cornerPoints.Count + 1, _cornerPoints[0].X, _cornerPoints[0].Y, color);
 
         DrawVertices(vertices, PrimitiveType.TriangleFan);
     }
+
+    private const int ROUNDED_CONTOUR_SEGMENTS = 16;
+    private static readonly Point[] _innerContourBuffer = new Point[4 * (ROUNDED_CONTOUR_SEGMENTS + 1)];
+    private static readonly Point[] _outerContourBuffer = new Point[4 * (ROUNDED_CONTOUR_SEGMENTS + 1)];
 
     private void DrawRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
     {
@@ -357,9 +363,11 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        var outer = BuildRoundedContour(rect, radius);
+        BuildRoundedContour(_outerContourBuffer, rect, radius);
         var innerRadius = ClampCornerRadius(radius.Inset(thickness), innerRect.Width, innerRect.Height);
-        var inner = BuildRoundedContour(innerRect, innerRadius);
+        BuildRoundedContour(_innerContourBuffer, innerRect, innerRadius);
+        var inner = _innerContourBuffer;
+        var outer = _outerContourBuffer;
         var vertices = new float[outer.Length * 6 * 6];
         var vertex = 0;
 
@@ -377,10 +385,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         DrawVertices(vertices, PrimitiveType.Triangles);
     }
 
-    private static (float X, float Y)[] BuildRoundedContour(Rect rect, BorderRadius radius)
+    private static void BuildRoundedContour(Point[] points, Rect rect, BorderRadius radius)
     {
-        const int SEGMENTS = 16;
-        var points = new (float X, float Y)[4 * (SEGMENTS + 1)];
         var index = 0;
 
         AddContourCorner(points, ref index, rect.X + rect.Width - radius.TopRight,
@@ -393,12 +399,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             rect.X, rect.Y + rect.Height);
         AddContourCorner(points, ref index, rect.X + radius.TopLeft,
             rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
-
-        return points;
     }
 
     private static void AddContourCorner(
-        (float X, float Y)[] points,
+        Point[] points,
         ref int index,
         float cx,
         float cy,
@@ -408,18 +412,17 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         float sharpX,
         float sharpY)
     {
-        const int SEGMENTS = 16;
-        for (var i = 0; i <= SEGMENTS; i++)
+        for (var i = 0; i <= ROUNDED_CONTOUR_SEGMENTS; i++)
         {
             if (radius <= 0.0f)
             {
-                points[index++] = (sharpX, sharpY);
+                points[index++] = new Point(sharpX, sharpY);
                 continue;
             }
 
-            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / SEGMENTS;
+            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / ROUNDED_CONTOUR_SEGMENTS;
             var radians = degrees * MathF.PI / 180.0f;
-            points[index++] = (cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
+            points[index++] = new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
         }
     }
 
@@ -825,7 +828,6 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     }
 
     private static void AddCorner(
-        List<(float X, float Y)> points,
         float cx,
         float cy,
         float radius,
@@ -836,16 +838,15 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     {
         if (radius <= 0.0f)
         {
-            points.Add((sharpX, sharpY));
+            _cornerPoints.Add(new Point(sharpX, sharpY));
             return;
         }
 
-        const int SEGMENTS = 16;
-        for (var i = 0; i <= SEGMENTS; i++)
+        for (var i = 0; i <= CORNER_SEGMENTS; i++)
         {
-            var t = fromDegrees + (toDegrees - fromDegrees) * i / SEGMENTS;
+            var t = fromDegrees + (toDegrees - fromDegrees) * i / CORNER_SEGMENTS;
             var radians = t * MathF.PI / 180.0f;
-            points.Add((cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius));
+            _cornerPoints.Add(new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius));
         }
     }
 

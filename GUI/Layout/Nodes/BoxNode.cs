@@ -2,24 +2,11 @@
 // #define DEBUG_BOX_BOUNDS
 
 using System.Collections;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.GUI.Layout.Nodes;
-
-public class RefBool
-{
-    private bool _value;
-
-    public bool Value
-    {
-        get => _value;
-        set => _value = value;
-    }
-
-    public static implicit operator bool(RefBool value) => value.Value;
-    public static implicit operator RefBool(bool value) => new() { Value = value };
-}
 
 public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNode
 {
@@ -41,8 +28,8 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     public ItemsAlignment VerticalAlignment { get; init; }
     public Direction Direction { get; init; }
 
-    public RefBool? IsHovered { get; init; }
-    public RefBool? IsHoveredThrough { get; init; }
+    public Ref<bool>? IsHovered { get; init; }
+    public Ref<bool>? IsHoveredThrough { get; init; }
     public Action? OnClick { get; init; }
     public Action? OnClickThrough { get; init; }
     public Action<float>? OnScroll { get; init; }
@@ -123,8 +110,27 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private BorderRadius BorderRadius => Style.BorderRadius;
 
     public ICollection<Node> Children { get; init; } = [];
-    private IEnumerable<Node> SolidChildren => Children.Where(x => x is not BoxNode box || box.IgnoreLayout == false);
-    private IEnumerable<Node> EphemeralChildren => Children.Where(x => x is BoxNode { IgnoreLayout: true });
+
+    private ICollection<Node> _solidChildren;
+    private ICollection<Node> _ephemeralChildren;
+
+    private ICollection<Node> SolidChildren
+    {
+        get
+        {
+            _solidChildren ??= Children.Where(x => x is not BoxNode box || box.IgnoreLayout == false).ToArray();
+            return _solidChildren;
+        }
+    }
+
+    private ICollection<Node> EphemeralChildren
+    {
+        get
+        {
+            _ephemeralChildren ??= [.. Children.Where(x => x is BoxNode { IgnoreLayout: true })];
+            return _ephemeralChildren;
+        }
+    }
 
     public BoxNode(int? width = null, int? height = null)
     {
@@ -225,7 +231,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private (bool childHovered, bool childClicked) DrawHorizontal(IRenderApi renderer, int contentX, int contentY,
         int contentHeight, int contentWidth)
     {
-        var children = SolidChildren.ToArray();
+        var children = SolidChildren;
         BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
         BoundChildHeights(children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
         if (HorizontalAlignment == ItemsAlignment.Stretch)
@@ -234,8 +240,8 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         }
 
         var childrenWidth = children.Sum(child => child.Width);
-        var spacing = GetSpacing(HorizontalAlignment, contentWidth, childrenWidth, children.Length);
-        var cursorX = contentX + GetOffset(HorizontalAlignment, contentWidth, childrenWidth, spacing, children.Length);
+        var spacing = GetSpacing(HorizontalAlignment, contentWidth, childrenWidth, children.Count);
+        var cursorX = contentX + GetOffset(HorizontalAlignment, contentWidth, childrenWidth, spacing, children.Count);
         var childHovered = false;
         var childClicked = false;
 
@@ -256,7 +262,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private (bool childHovered, bool childClicked) DrawVertical(IRenderApi renderer, int contentX, int contentY,
         int contentHeight, int contentWidth)
     {
-        var children = SolidChildren.ToArray();
+        var children = SolidChildren;
         BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
         BoundChildHeights(children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
         if (VerticalAlignment == ItemsAlignment.Stretch)
@@ -265,8 +271,8 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         }
 
         var childrenHeight = children.Sum(child => child.Height);
-        var verticalSpacing = GetSpacing(VerticalAlignment, contentHeight, childrenHeight, children.Length);
-        var cursorY = contentY + GetOffset(VerticalAlignment, contentHeight, childrenHeight, verticalSpacing, children.Length);
+        var verticalSpacing = GetSpacing(VerticalAlignment, contentHeight, childrenHeight, children.Count);
+        var cursorY = contentY + GetOffset(VerticalAlignment, contentHeight, childrenHeight, verticalSpacing, children.Count);
         var childHovered = false;
         var childClicked = false;
 
@@ -284,7 +290,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         return (childHovered, childClicked);
     }
 
-    private void StretchChildWidths(Node[] children, int availableWidth)
+    private void StretchChildWidths(ICollection<Node> children, int availableWidth)
     {
         var stretchable = children
             .OfType<IWidthBoundNode>()
@@ -298,7 +304,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         var fixedWidth = children
             .Where(child => child is not IWidthBoundNode { AcceptsWidthBound: true })
             .Sum(child => child.Width);
-        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Length - 1));
+        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Count - 1));
         for (var i = 0; i < stretchable.Length; i++)
         {
             var targetWidth = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
@@ -306,7 +312,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         }
     }
 
-    private void StretchChildHeights(IReadOnlyList<Node> children, int availableHeight)
+    private void StretchChildHeights(ICollection<Node> children, int availableHeight)
     {
         var stretchable = children
             .OfType<IHeightBoundNode>()
@@ -330,7 +336,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
     private void PrepareChildWidthBounds()
     {
-        var children = SolidChildren.ToArray();
+        var children = SolidChildren;
         var contentWidth = Math.Max(0, Width - HorizontalInset);
         BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
         if (Direction == Direction.Horizontal && HorizontalAlignment == ItemsAlignment.Stretch)

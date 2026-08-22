@@ -1,9 +1,10 @@
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.GUI.Layout.Nodes;
 
-public sealed class SwitchNode(bool on, RefFloat animation) : Node
+public sealed class SwitchNode(bool on, Ref<float> animation) : Node
 {
     private const int SWITCH_WIDTH = 44;
     private const int SWITCH_HEIGHT = 28;

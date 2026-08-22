@@ -1,3 +1,4 @@
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
@@ -11,7 +12,7 @@ public sealed class SliderNode(
     Color fillColor,
     Color thumbColor,
     Action<float> onValueChanged,
-    RefBool dragging,
+    Ref<bool> dragging,
     float scrollStep = 0.05f) : Node
 {
     private const float TRACK_HEIGHT = 6.0f;

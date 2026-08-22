@@ -1,3 +1,4 @@
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -60,7 +61,7 @@ public static class ModulesCommon
         public ItemsAlignment HorizontalAlignment { get; init; }
         public Func<bool, bool> GetShouldShowPopup { get; init; } = hovered => hovered;
 
-        private readonly RefBool _hovered = new();
+        private readonly Ref<bool> _hovered = new();
 
         public bool IsHovered => _hovered.Value;
         public bool ShouldShowPopup => GetShouldShowPopup(IsHovered);
@@ -214,10 +215,10 @@ public static class ModulesCommon
 
     public class BoxState
     {
-        public RefBool Hovered { get; } = new();
+        public Ref<bool> Hovered { get; } = new();
         public Color Background { get; set; }
 
         public static implicit operator Color(BoxState state) => state.Background;
-        public static implicit operator RefBool(BoxState state) => state.Hovered;
+        public static implicit operator Ref<bool>(BoxState state) => state.Hovered;
     }
 }

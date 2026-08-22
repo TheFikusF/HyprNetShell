@@ -2,6 +2,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;
@@ -19,7 +20,7 @@ internal sealed class NetworkModule(
     private IReadOnlyList<WifiNetworkSnapshot> _wifiNetworks = [];
     private DateTime _lastWifiScan = DateTime.MinValue;
     private Task? _wifiScanTask;
-    private readonly RefFloat _wifiSwitchAnimation = new();
+    private readonly Ref<float> _wifiSwitchAnimation = new();
     private bool? _wifiEnabledOverride;
 
     private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "network_module")

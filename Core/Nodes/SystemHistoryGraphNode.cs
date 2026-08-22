@@ -2,7 +2,7 @@ using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar.Modules;
+namespace HyprNetShell.Core.Nodes;
 
 internal sealed class SystemHistoryGraphNode(
     int width,

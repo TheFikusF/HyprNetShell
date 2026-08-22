@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Platform;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -9,9 +10,9 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class PowerModule(Theme theme, ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly RefBool _lockHovered = new();
-    private readonly RefBool _powerOffHovered = new();
-    private readonly RefBool _rebootHovered = new();
+    private readonly Ref<bool> _lockHovered = new();
+    private readonly Ref<bool> _powerOffHovered = new();
+    private readonly Ref<bool> _rebootHovered = new();
 
     private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "power_module")
     {
@@ -48,7 +49,7 @@ internal sealed class PowerModule(Theme theme, ModulesCommon.PopupCoordinator po
         ],
     };
 
-    private Node BuildAction(string label, SvgAsset icon, Color accent, RefBool hovered, Action onClick)
+    private Node BuildAction(string label, SvgAsset icon, Color accent, Ref<bool> hovered, Action onClick)
     {
         var background = ModulesCommon.ToBackground(theme, accent);
         if (hovered)

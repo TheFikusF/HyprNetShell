@@ -1,6 +1,8 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
+using HyprNetShell.Core.Nodes;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -16,11 +18,11 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
-    private readonly Dictionary<string, RefBool> _sliderDragging = [];
+    private readonly Dictionary<string, Ref<bool>> _sliderDragging = [];
     private readonly Dictionary<string, int> _overrides = [];
     private readonly Dictionary<string, ValueUpdateQueue> _updateQueues = [];
     private readonly TemperatureCurveDragState _curveDragState = new();
-    private readonly RefFloat _automaticTemperatureSwitchAnimation = new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
+    private readonly Ref<float> _automaticTemperatureSwitchAnimation = new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
     private float _iconRotation = 0;
 
     public Node Draw()
@@ -233,14 +235,14 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         queue.Submit(value);
     }
 
-    private RefBool GetSliderDragging(string key)
+    private Ref<bool> GetSliderDragging(string key)
     {
         if (_sliderDragging.TryGetValue(key, out var dragging))
         {
             return dragging;
         }
 
-        dragging = new RefBool();
+        dragging = new Ref<bool>();
         _sliderDragging[key] = dragging;
         return dragging;
     }

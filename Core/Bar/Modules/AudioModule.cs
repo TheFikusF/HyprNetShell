@@ -1,6 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -20,15 +21,15 @@ internal sealed class AudioModule(
     private const float LABEL_ANIMATION_DECAY = 18.0f;
     private const int LABEL_SPACING = 7;
 
-    private readonly Dictionary<string, RefBool> _sliderDragging = [];
-    private readonly Dictionary<string, RefFloat> _muteSwitchAnimations = [];
+    private readonly Dictionary<string, Ref<bool>> _sliderDragging = [];
+    private readonly Dictionary<string, Ref<float>> _muteSwitchAnimations = [];
     private readonly Dictionary<string, int> _volumeOverrides = [];
     private readonly Dictionary<string, bool> _muteOverrides = [];
     private readonly Dictionary<string, VolumeUpdateQueue> _volumeQueues = [];
     private readonly Queue<NoteParticle> _notes = new(NOTE_CAPACITY);
-    private readonly RefBool _widgetHovered = new();
-    private readonly RefBool _microphoneHovered = new();
-    private readonly RefBool _volumeHovered = new();
+    private readonly Ref<bool> _widgetHovered = new();
+    private readonly Ref<bool> _microphoneHovered = new();
+    private readonly Ref<bool> _volumeHovered = new();
 
     private bool _wasWidgetHovered;
     private float _microphoneLabelWidth;
@@ -120,7 +121,7 @@ internal sealed class AudioModule(
     private BoxNode BuildHoverLabel(
         Node icon,
         string text,
-        RefBool hovered,
+        Ref<bool> hovered,
         ref float animatedWidth,
         ref float animatedSpacing,
         ref Color? animatedColor,
@@ -511,26 +512,26 @@ internal sealed class AudioModule(
         queue.Submit(volume);
     }
 
-    private RefBool GetSliderDragging(string deviceId)
+    private Ref<bool> GetSliderDragging(string deviceId)
     {
         if (_sliderDragging.TryGetValue(deviceId, out var dragging))
         {
             return dragging;
         }
 
-        dragging = new RefBool();
+        dragging = new Ref<bool>();
         _sliderDragging[deviceId] = dragging;
         return dragging;
     }
 
-    private RefFloat GetMuteSwitchAnimation(string deviceId, bool muted)
+    private Ref<float> GetMuteSwitchAnimation(string deviceId, bool muted)
     {
         if (_muteSwitchAnimations.TryGetValue(deviceId, out var animation))
         {
             return animation;
         }
 
-        animation = new RefFloat(muted ? 1.0f : 0.0f);
+        animation = new Ref<float>(muted ? 1.0f : 0.0f);
         _muteSwitchAnimations[deviceId] = animation;
         return animation;
     }

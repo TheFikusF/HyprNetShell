@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -9,7 +10,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Theme theme) : IMainDialogTab
 {
-    private readonly RefFloat _slideshowSwitchAnimation = new(wallpapers.SlideshowEnabled ? 1.0f : 0.0f);
+    private readonly Ref<float> _slideshowSwitchAnimation = new(wallpapers.SlideshowEnabled ? 1.0f : 0.0f);
     private readonly ModulesCommon.BoxState _decreaseState = new();
     private readonly ModulesCommon.BoxState _increaseState = new();
 

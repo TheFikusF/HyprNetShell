@@ -3,6 +3,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;
@@ -32,7 +33,7 @@ internal sealed class MusicModule(
     };
 
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
-    private readonly RefBool _progressDragging = new();
+    private readonly Ref<bool> _progressDragging = new();
     private readonly ModulesCommon.BoxState _coverButton = new() { Background = Color.White with { A = 0 } };
     private readonly SeekUpdateQueue _seekQueue = new();
     private long _positionOverrideMicros;

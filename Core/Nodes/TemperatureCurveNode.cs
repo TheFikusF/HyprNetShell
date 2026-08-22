@@ -1,10 +1,9 @@
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
-using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar.Modules;
+namespace HyprNetShell.Core.Nodes;
 
 internal sealed class TemperatureCurveDragState
 {
@@ -22,7 +21,7 @@ internal sealed class TemperatureCurveNode(
     private Color _gridColor = gridColor;
     private Color _curveColor = curveColor;
     private Color _pointColor = pointColor;
-    
+
     private const float LEFT = 42.0f;
     private const float RIGHT = 8.0f;
     private const float TOP = 10.0f;
