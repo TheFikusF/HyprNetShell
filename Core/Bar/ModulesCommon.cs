@@ -170,14 +170,18 @@ public static class ModulesCommon
             right ? theme.BorderRadius : 0, left ? theme.BorderRadius : 0),
         BorderWidth = new Insets(theme.BorderWidth, right ? theme.BorderWidth : 0,
             theme.BorderWidth, left ? theme.BorderWidth : 0),
-        Padding = new Insets(8, 6)
+        Padding = new Insets(8, 6),
+        ShadowColor = Color.Black with { A = 0.45f },
+        ShadowDistance = 4.0f
     };
 
     public static Style PopupStyle(Theme theme) => ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.85f)) with
     {
         BorderRadius = 8,
         Padding = 8,
-        Spacing = 8
+        Spacing = 8,
+        ShadowColor = Color.Black with { A = 0.65f },
+        ShadowDistance = 8.0f
     };
 
     public static string AppBadge(string className)

@@ -64,12 +64,15 @@ internal sealed class NetworkModule(
                     ? new ImageNode(Icons.Ethernet, 18, 18, theme.Text)
                     : new ImageNode(Icons.Globe, 18, 18, theme.Text);
 
+        var background = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Green, Color.Blue, 0.3f));
         return new BoxNode
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme,
-                ModulesCommon.ToBackground(theme, Color.Lerp(Color.Green, Color.Blue, 0.3f)), left: false),
+            Style = ModulesCommon.ModuleStyle(theme, background, left: false) with
+            {
+                ShadowColor = null
+            },
             Children = [icon],
         };
     }

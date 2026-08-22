@@ -8,9 +8,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class BatteryModule(
-    BatteryModuleService service,
-    Theme theme,
+internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
     ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _profileStates = [];
@@ -97,7 +95,12 @@ internal sealed class BatteryModule(
                         GradientDirection = GradientDirection.Vertical,
                         HorizontalAlignment = ItemsAlignment.Center,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Style = new Style { BorderRadius = 3, Spacing = 4, Padding = new Insets(0, 0, 2, 0) },
+                        Style = new Style
+                        {
+                            BorderRadius = 3,
+                            Spacing = 4,
+                            Padding = new Insets(0, 0, 2, 0)
+                        },
                         Children = battery.IsCharging
                             ?
                             [
@@ -106,15 +109,6 @@ internal sealed class BatteryModule(
                             ]
                             : [new TextNode($"{percentage:0}%", theme.TextSize, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }]
                     },
-                    new BoxNode(80, 14 + 8 + 8)
-                    {
-                        IgnoreLayout = true,
-                        Style = new Style
-                        {
-                            BorderRadius = 8, BorderWidth = theme.BorderWidth,
-                            BorderColor = theme.Border,
-                        }
-                    },
                 ],
             },
             new BoxNode(4, 16)
@@ -122,9 +116,23 @@ internal sealed class BatteryModule(
                 Style = new Style
                 {
                     BackgroundColor = theme.Border,
-                    BorderRadius = new BorderRadius(0, 4, 4, 0)
+                    BorderRadius = new BorderRadius(0, 4, 4, 0),
+                    ShadowColor = Color.Black with { A = 0.45f },
+                    ShadowDistance = 5.0f
                 }
-            }
+            },
+            new BoxNode(80, 14 + 8 + 8)
+            {
+                IgnoreLayout = true,
+                Style = new Style
+                {
+                    BorderRadius = 8,
+                    BorderWidth = theme.BorderWidth,
+                    BorderColor = theme.Border,
+                    ShadowColor = Color.Black with { A = 0.45f },
+                    ShadowDistance = 5.0f
+                }
+            },
         };
     }
 

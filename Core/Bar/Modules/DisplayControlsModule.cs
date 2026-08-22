@@ -47,7 +47,8 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             Style = ModulesCommon.ModuleStyle(theme, color, false, false) with
             {
                 Spacing = 8,
-                BorderWidth = new Insets(theme.BorderWidth, 0, theme.BorderWidth, 1)
+                BorderWidth = new Insets(theme.BorderWidth, 0, theme.BorderWidth, 1),
+                ShadowColor = null
             },
             Children = [new ImageNode(Icons.Brightness[brightness switch
             {

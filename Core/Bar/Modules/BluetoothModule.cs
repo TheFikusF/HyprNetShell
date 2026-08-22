@@ -43,7 +43,8 @@ internal sealed class BluetoothModule(
         return ModulesCommon.BuildTextWithIcon(theme, icon, connectedCount.ToString(),
             style: ModulesCommon.ModuleStyle(theme, bg, false, false) with
             {
-                BorderWidth = new Insets(1, theme.BorderWidth)
+                BorderWidth = new Insets(1, theme.BorderWidth),
+                ShadowColor = null
             }, width: 55);
     }
 

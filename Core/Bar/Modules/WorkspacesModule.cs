@@ -78,7 +78,9 @@ internal sealed class WorkspacesModule : IDrawableModule
                     Spacing = 4,
                     BorderColor = _theme.Border,
                     BorderRadius = new BorderRadius(0, _theme.BorderRadius, _theme.BorderRadius, 0),
-                    Padding = new Insets(8, 8)
+                    Padding = new Insets(8, 8),
+                    ShadowColor = Color.Black with { A = 0.45f },
+                    ShadowDistance = 5.0f
                 },
                 Children =
                 {
@@ -104,6 +106,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             .Distinct()
             .Order()
             .ToArray() ?? [];
+
         if (workspaces.Length < 2)
         {
             return;

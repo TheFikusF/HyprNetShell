@@ -33,7 +33,7 @@ internal sealed class MusicModule(
 
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
     private readonly RefBool _progressDragging = new();
-    private readonly ModulesCommon.BoxState _coverButton = new() { Background = Color.White with { A = 0 }};
+    private readonly ModulesCommon.BoxState _coverButton = new() { Background = Color.White with { A = 0 } };
     private readonly SeekUpdateQueue _seekQueue = new();
     private long _positionOverrideMicros;
 
@@ -46,12 +46,7 @@ internal sealed class MusicModule(
         }
 
         return _node.Draw([
-            BuildSurface(music, [new ImageNode(Icons.SkipBack, 18, 18, theme.Text)],
-                right: false,
-                onClick: () => Control(music, PlayerAction.Previous),
-                padding: new Insets(6, 4)
-            ),
-            BuildCover(music),
+
             BuildTextBody(music)
         ], () => BuildPopup(music));
     }
@@ -63,47 +58,61 @@ internal sealed class MusicModule(
                 ? Color.White
                 : Color.White with { A = 0 }, 18.0f, ModulesCommon.DELTA_TIME);
 
-        return BuildSurface(music, [
-            string.IsNullOrWhiteSpace(music.ImagePath)
-                ? new SpacerNode()
-                : new ImageNode(music.ImagePath, IMAGE_SIZE, IMAGE_SIZE),
-            new BoxNode(IMAGE_SIZE, IMAGE_SIZE)
+        return BuildSurface(music,
+            [
+                string.IsNullOrWhiteSpace(music.ImagePath)
+                    ? new SpacerNode()
+                    : new ImageNode(music.ImagePath, IMAGE_SIZE, IMAGE_SIZE),
+                new BoxNode(IMAGE_SIZE, IMAGE_SIZE)
+                {
+                    IgnoreLayout = true,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    HorizontalAlignment = ItemsAlignment.Center,
+                    IsHovered = _coverButton.Hovered,
+                    Style = new Style
+                    {
+                        BackgroundColor = Color.Black with
+                        {
+                            A = _coverButton.Background.A * (string.IsNullOrWhiteSpace(music.ImagePath) ? 0 : 0.6f)
+                        }
+                    },
+                    Children = [new ImageNode(music.Playing ? Icons.Pause : Icons.Play, 18, 18, _coverButton.Background)]
+                }
+            ],
+            width: IMAGE_SIZE + 6, height: IMAGE_SIZE + 6, 4, 0,
+            onClick: () => Control(music, PlayerAction.PlayPause),
+            ignoreLayout: true);
+    }
+
+    private Node BuildTextBody(MusicSnapshot music) => BuildSurface(music,
+        [
+            new BoxNode
             {
                 IgnoreLayout = true,
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
-                IsHovered = _coverButton.Hovered,
-                Style = new Style
-                {
-                    BackgroundColor = Color.Black with
-                    {
-                        A = _coverButton.Background.A * (string.IsNullOrWhiteSpace(music.ImagePath) ? 0 : 0.6f)
-                    }
-                },
-                Children = [new ImageNode(music.Playing ? Icons.Pause : Icons.Play, 18, 18, _coverButton.Background)]
-            }
-        ], width: IMAGE_SIZE + 6, height: IMAGE_SIZE + 6, 4, 0, onClick: () => Control(music, PlayerAction.PlayPause));
-    }
-
-    private Node BuildTextBody(MusicSnapshot music) =>
-        BuildSurface(music, [
-                new BoxNode
-                {
-                    IgnoreLayout = true,
-                    Style = new Style() { Padding = new Insets(0, 0, 0, -40) },
-                    Children =
-                    [
-                        BuildSurface(music, [new ImageNode(Icons.SkipForward, 18, 18, theme.Text)],
-                            left: false,
-                            onClick: () => Control(music, PlayerAction.Next),
-                            padding: new Insets(6, 4)
-                        )
-                    ]
-                },
-                new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
-            ], left: false, padding: new Insets(6, 8, 6, 40),
-            horizontalAlignment: ItemsAlignment.Start, darken: 0.5f
-        );
+                Left = 0,
+                Children =
+                [
+                    BuildSurface(music, [new ImageNode(Icons.SkipBack, 18, 18, theme.Text)],
+                        right: false,
+                        onClick: () => Control(music, PlayerAction.Previous),
+                        padding: new Insets(6, 4)
+                    ),
+                    new BoxNode(IMAGE_SIZE),
+                    BuildCover(music),
+                    BuildSurface(music, [new ImageNode(Icons.SkipForward, 18, 18, theme.Text)],
+                        left: false,
+                        onClick: () => Control(music, PlayerAction.Next),
+                        padding: new Insets(6, 4)
+                    )
+                ]
+            },
+            new BoxNode(18 * 2 + 6 * 4 + 2 * 2 + IMAGE_SIZE),
+            new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
+        ], padding: new Insets(6, 8, 6, -2),
+        horizontalAlignment: ItemsAlignment.Start, darken: 0.5f
+    );
 
     private Node BuildSurface(
         MusicSnapshot music,
@@ -116,6 +125,7 @@ internal sealed class MusicModule(
         bool right = true,
         Action? onClick = null,
         bool ignoreLayout = false,
+        bool shadow = true,
         ItemsAlignment horizontalAlignment = ItemsAlignment.Center,
         ItemsAlignment verticalAlignment = ItemsAlignment.Center,
         float darken = 0)
@@ -130,6 +140,11 @@ internal sealed class MusicModule(
         if (padding.HasValue)
         {
             style = style with { Padding = padding.Value };
+        }
+
+        if (shadow == false)
+        {
+            style = style with { ShadowColor = null };
         }
 
         return music.Playing
@@ -157,7 +172,7 @@ internal sealed class MusicModule(
             };
     }
 
-    private BoxNode BuildPopup(MusicSnapshot music) => new (POPUP_WIDTH)
+    private BoxNode BuildPopup(MusicSnapshot music) => new(POPUP_WIDTH)
     {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Start,

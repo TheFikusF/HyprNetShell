@@ -55,29 +55,43 @@ internal sealed class CenterModule : IDrawableModule
         return _node.Draw([
                 new BoxNode(400 - 27 - 27)
                 {
-                    BuildDateBadge(now), new BoxNode(148, 36)
+                    new BoxNode()
                     {
-                        Direction = Direction.Horizontal,
-                        HorizontalAlignment = ItemsAlignment.Center,
-                        VerticalAlignment = ItemsAlignment.Center,
-                        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, false, false) with
+                        Style = new Style()
                         {
-                            Padding = new Insets(6, 4),
-                            Spacing = 6,
-                        }
-                    },
-                    BuildTimeWidget(now), BuildNotificationsBadge(snapshot)
+                            BorderRadius = 999,
+                            ShadowColor = Color.Black with { A = 0.45f },
+                            ShadowDistance = 5.0f
+                        },
+                        Children = [
+                            BuildDateBadge(now),
+                            new BoxNode(148, 36)
+                            {
+                                Direction = Direction.Horizontal,
+                                HorizontalAlignment = ItemsAlignment.Center,
+                                VerticalAlignment = ItemsAlignment.Center,
+                                Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, false, false) with
+                                {
+                                    Padding = new Insets(6, 4),
+                                    ShadowColor = null,
+                                    Spacing = 6,
+                                }
+                            },
+                            BuildTimeWidget(now),
+                            BuildNotificationsBadge(snapshot)
+                        ]
+                    }
                 }
             ],
             () => BuildPopup(now, snapshot));
         // () => new SpacerNode());
     }
 
-    private BoxNode BuildDateBadge(DateTime now) => new (height: 36)
+    private BoxNode BuildDateBadge(DateTime now) => new(height: 36)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, right: false),
+        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, right: false) with { ShadowColor = null },
         Children = [new TextNode(now.ToString(" ddd dd, MMM"), 14, _theme.Text)],
     };
 
@@ -92,7 +106,7 @@ internal sealed class CenterModule : IDrawableModule
         _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, ModulesCommon.DELTA_TIME);
         return new BoxNode(CLOCK_SIZE + 6)
         {
-            Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) /2,
+            Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) / 2,
             IgnoreLayout = true,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
@@ -110,7 +124,9 @@ internal sealed class CenterModule : IDrawableModule
                             BorderColor = Color.White,
                             BorderWidth = _theme.BorderWidth,
                             BorderRadius = 999,
-                            BackgroundColor = Color.Black
+                            BackgroundColor = Color.Black,
+                            ShadowColor = Color.Black with { A = 0.45f },
+                            ShadowDistance = 5.0f
                         })
                         {
                             new ImageNode(OtherAssets.ClockFace, CLOCK_SIZE, CLOCK_SIZE)
@@ -180,19 +196,19 @@ internal sealed class CenterModule : IDrawableModule
         };
     }
 
-    private BoxNode BuildNotificationsBadge(NotificationsSnapshot snapshot) => new ()
+    private BoxNode BuildNotificationsBadge(NotificationsSnapshot snapshot) => new()
     {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = _notificationService.ToggleDoNotDisturb,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, left: false),
+        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, left: false) with { ShadowColor = null },
         Children =
         [
             ModulesCommon.BuildTextWithIcon(_theme, snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, $"{snapshot.Count}")
         ],
     };
 
-    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new ()
+    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new()
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,

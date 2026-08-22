@@ -6,6 +6,19 @@ namespace HyprNetShell.Rendering;
 
 public sealed unsafe class Renderer : IRenderApi, IDisposable
 {
+    private const int MAX_SHADOW_CACHE_ENTRIES = 256;
+    private const int MAX_SHADOW_CACHE_BYTES = 64 * 1024 * 1024;
+    private const float MAX_SHADOW_DISTANCE = 256.0f;
+
+    private readonly record struct ShadowTextureKey(
+        int Width,
+        int Height,
+        BorderRadius Radius,
+        float Distance,
+        int Spread);
+
+    private readonly record struct CachedShadow(Texture Texture, long LastAccess, int ByteSize);
+
     private readonly GL _gl;
 
     private readonly uint _program;
@@ -29,8 +42,11 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly int _svgTextureColorLocation;
 
     private readonly TextureRepository _textureRepository;
+    private readonly Dictionary<ShadowTextureKey, CachedShadow> _shadowTextures = [];
 
     private readonly FontRenderer _font;
+    private long _shadowAccessCounter;
+    private long _shadowCacheBytes;
 
     private bool _disposed;
 
@@ -122,6 +138,43 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public void FillRoundedRect(Rect rect, BorderRadius radius, Color color)
         => DrawRoundedRect(rect.X, rect.Y, rect.Width, rect.Height, radius, color);
 
+    public void FillRoundedShadow(Rect rect, BorderRadius radius, Color color, float distance)
+    {
+        if (rect.Width <= 0.0f || rect.Height <= 0.0f || color.A <= 0.0f ||
+            !float.IsFinite(distance) || distance <= 0.0f)
+        {
+            return;
+        }
+
+        distance = MathF.Min(distance, MAX_SHADOW_DISTANCE);
+        var width = Math.Max(1, (int)MathF.Ceiling(rect.Width));
+        var height = Math.Max(1, (int)MathF.Ceiling(rect.Height));
+        var spread = Math.Max(1, (int)MathF.Ceiling(distance));
+        radius = ClampCornerRadius(radius, width, height);
+        var key = new ShadowTextureKey(width, height, radius, distance, spread);
+
+        if (!_shadowTextures.TryGetValue(key, out var cached))
+        {
+            var byteSize = checked((width + spread * 2) * (height + spread * 2) * 4);
+            cached = new CachedShadow(CreateShadowTexture(key), ++_shadowAccessCounter, byteSize);
+            CacheShadow(key, cached);
+        }
+        else
+        {
+            cached = cached with { LastAccess = ++_shadowAccessCounter };
+            _shadowTextures[key] = cached;
+        }
+
+        DrawTexture(
+            cached.Texture,
+            new Rect(rect.X - spread, rect.Y - spread, width + spread * 2, height + spread * 2),
+            color,
+            _textureProgram,
+            _textureViewportLocation,
+            _textureLocation,
+            _textureColorLocation);
+    }
+
     public void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
         => DrawRoundedBorder(rect, radius, thickness, color);
 
@@ -154,6 +207,108 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         ];
 
         DrawVertices(vertices, PrimitiveType.Triangles);
+    }
+
+    private Texture CreateShadowTexture(ShadowTextureKey key)
+    {
+        var textureWidth = checked(key.Width + key.Spread * 2);
+        var textureHeight = checked(key.Height + key.Spread * 2);
+        var pixels = new byte[checked(textureWidth * textureHeight * 4)];
+
+        for (var y = 0; y < textureHeight; y++)
+        {
+            var boxY = y + 0.5f - key.Spread;
+            for (var x = 0; x < textureWidth; x++)
+            {
+                var offset = (y * textureWidth + x) * 4;
+                pixels[offset] = 255;
+                pixels[offset + 1] = 255;
+                pixels[offset + 2] = 255;
+
+                var boxX = x + 0.5f - key.Spread;
+                var outsideDistance = RoundedRectOutsideDistance(boxX, boxY, key.Width, key.Height, key.Radius);
+                if (outsideDistance <= 0.0f || outsideDistance >= key.Distance)
+                {
+                    continue;
+                }
+
+                var gradient = 1.0f - outsideDistance / key.Distance;
+                pixels[offset + 3] = (byte)Math.Clamp(
+                    (int)MathF.Round(gradient * gradient * 255.0f),
+                    0,
+                    255);
+            }
+        }
+
+        var id = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, id);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        fixed (byte* data = pixels)
+        {
+            _gl.TexImage2D(
+                TextureTarget.Texture2D,
+                0,
+                InternalFormat.Rgba,
+                (uint)textureWidth,
+                (uint)textureHeight,
+                0,
+                PixelFormat.Rgba,
+                PixelType.UnsignedByte,
+                data);
+        }
+
+        return new Texture(id);
+    }
+
+    private void CacheShadow(ShadowTextureKey key, CachedShadow shadow)
+    {
+        while (_shadowTextures.Count > 0 &&
+               (_shadowTextures.Count >= MAX_SHADOW_CACHE_ENTRIES ||
+                _shadowCacheBytes + shadow.ByteSize > MAX_SHADOW_CACHE_BYTES))
+        {
+            var oldest = _shadowTextures.MinBy(entry => entry.Value.LastAccess);
+            _gl.DeleteTexture(oldest.Value.Texture.Id);
+            _shadowTextures.Remove(oldest.Key);
+            _shadowCacheBytes -= oldest.Value.ByteSize;
+        }
+
+        _shadowTextures[key] = shadow;
+        _shadowCacheBytes += shadow.ByteSize;
+    }
+
+    private static float RoundedRectOutsideDistance(
+        float x,
+        float y,
+        float width,
+        float height,
+        BorderRadius radius)
+    {
+        if (x < radius.TopLeft && y < radius.TopLeft)
+        {
+            return MathF.Sqrt(MathF.Pow(x - radius.TopLeft, 2) + MathF.Pow(y - radius.TopLeft, 2)) - radius.TopLeft;
+        }
+
+        if (x > width - radius.TopRight && y < radius.TopRight)
+        {
+            return MathF.Sqrt(MathF.Pow(x - (width - radius.TopRight), 2) + MathF.Pow(y - radius.TopRight, 2)) - radius.TopRight;
+        }
+
+        if (x > width - radius.BottomRight && y > height - radius.BottomRight)
+        {
+            return MathF.Sqrt(MathF.Pow(x - (width - radius.BottomRight), 2) + MathF.Pow(y - (height - radius.BottomRight), 2)) - radius.BottomRight;
+        }
+
+        if (x < radius.BottomLeft && y > height - radius.BottomLeft)
+        {
+            return MathF.Sqrt(MathF.Pow(x - radius.BottomLeft, 2) + MathF.Pow(y - (height - radius.BottomLeft), 2)) - radius.BottomLeft;
+        }
+
+        var dx = MathF.Max(MathF.Max(-x, x - width), 0.0f);
+        var dy = MathF.Max(MathF.Max(-y, y - height), 0.0f);
+        return dx == 0.0f && dy == 0.0f ? -1.0f : MathF.Sqrt(dx * dx + dy * dy);
     }
 
     private void DrawRoundedRect(float x, float y, float width, float height, BorderRadius radius, Color color)
@@ -224,7 +379,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     private static (float X, float Y)[] BuildRoundedContour(Rect rect, BorderRadius radius)
     {
-        const int SEGMENTS = 6;
+        const int SEGMENTS = 16;
         var points = new (float X, float Y)[4 * (SEGMENTS + 1)];
         var index = 0;
 
@@ -253,7 +408,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         float sharpX,
         float sharpY)
     {
-        const int SEGMENTS = 6;
+        const int SEGMENTS = 16;
         for (var i = 0; i <= SEGMENTS; i++)
         {
             if (radius <= 0.0f)
@@ -685,7 +840,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        const int SEGMENTS = 6;
+        const int SEGMENTS = 16;
         for (var i = 0; i <= SEGMENTS; i++)
         {
             var t = fromDegrees + (toDegrees - fromDegrees) * i / SEGMENTS;
@@ -720,6 +875,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DeleteProgram(_program);
         _gl.DeleteProgram(_textureProgram);
         _gl.DeleteProgram(_svgTextureProgram);
+        foreach (var shadow in _shadowTextures.Values)
+        {
+            _gl.DeleteTexture(shadow.Texture.Id);
+        }
+        _shadowTextures.Clear();
+        _shadowCacheBytes = 0;
         _textureRepository.Dispose();
         _font.Dispose();
         _disposed = true;

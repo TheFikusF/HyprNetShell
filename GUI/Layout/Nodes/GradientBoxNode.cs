@@ -49,6 +49,15 @@ public class GradientBoxNode : BoxNode
             ? style.BorderRadius.Inset(style.BorderWidth)
             : style.BorderRadius;
 
+        if (style.ShadowColor.HasValue && style.ShadowDistance > 0.0f)
+        {
+            renderer.FillRoundedShadow(
+                rect,
+                style.BorderRadius,
+                style.ShadowColor.Value.PushOpacity(Opacity),
+                style.ShadowDistance);
+        }
+
         if (style.BorderColor.HasValue)
         {
             renderer.FillRoundedBorder(rect, style.BorderRadius, style.BorderWidth, style.BorderColor.Value);
@@ -62,7 +71,7 @@ public class GradientBoxNode : BoxNode
             _offset());
 
         Layout.AddInputRegion(rect);
-        Style = style with { BackgroundColor = null, BorderColor = null };
+        Style = style with { BackgroundColor = null, BorderColor = null, ShadowColor = null };
         base.Draw(renderer, x, y);
         Style = style;
     }

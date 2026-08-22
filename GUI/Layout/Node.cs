@@ -38,6 +38,8 @@ public struct Style
     public Color? BorderColor;
     public BorderRadius BorderRadius;
     public Insets BorderWidth;
+    public Color? ShadowColor;
+    public float ShadowDistance;
 
     public static readonly Style Empty = new ();
     public static readonly Style Spacer = new() { Spacing = 8 };

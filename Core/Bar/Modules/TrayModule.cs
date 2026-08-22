@@ -23,6 +23,12 @@ internal sealed class TrayModule(
             {
                 Direction = Direction.Horizontal,
                 VerticalAlignment = ItemsAlignment.Center,
+                Style = new Style()
+                {
+                    BorderRadius = 999,
+                    ShadowColor = Color.Black with { A = 0.45f },
+                    ShadowDistance = 5.0f
+                },
                 Children = items.Select((item, index) => BuildItem(item, index == 0, index == items.Count - 1))
                     .ToArray(),
             }
@@ -34,7 +40,7 @@ internal sealed class TrayModule(
         if (_nodes.TryGetValue(item.Id, out var node) == false)
         {
             node = new ModulesCommon.NodeWithPopup(popupCoordinator, $"tray_module_{item.Id}")
-                { HorizontalAlignment = ItemsAlignment.End };
+            { HorizontalAlignment = ItemsAlignment.End };
             _nodes[item.Id] = node;
         }
 
@@ -51,6 +57,7 @@ internal sealed class TrayModule(
                 Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
                 {
                     Padding = new Insets(6, right ? 8 : 4, 6, left ? 8 : 4),
+                    ShadowColor = null,
                 },
                 Children = [icon],
             }

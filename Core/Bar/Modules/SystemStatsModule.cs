@@ -67,17 +67,30 @@ internal sealed class SystemStatsModule(
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Center,
+        Style = new Style()
+        {
+            BorderRadius = 999,
+            ShadowColor = Color.Black with { A = 0.45f },
+            ShadowDistance = 5.0f
+        },
         Children =
         {
             ModulesCommon.BuildTextWithIcon(theme, Icons.CPU, FormatPercent(stats.CpuPercent),
-                style: ModulesCommon.ModuleStyle(theme, _currentCpuColor, right: false), width: WIDTH),
+                style: ModulesCommon.ModuleStyle(theme, _currentCpuColor, right: false) with
+                {
+                    ShadowColor = null,
+                }, width: WIDTH),
             ModulesCommon.BuildTextWithIcon(theme, Icons.RAM, FormatPercent(stats.RamPercent),
                 style: ModulesCommon.ModuleStyle(theme, _currentRamColor, false, false) with
                 {
-                    BorderWidth = new Insets(1, theme.BorderWidth)
+                    BorderWidth = new Insets(1, theme.BorderWidth),
+                    ShadowColor = null,
                 }, width: WIDTH),
             ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, FormatTemperature(stats.TemperatureCelsius),
-                style: ModulesCommon.ModuleStyle(theme, _currentTempColor, left: false), width: WIDTH),
+                style: ModulesCommon.ModuleStyle(theme, _currentTempColor, left: false) with
+                {
+                    ShadowColor = null,
+                }, width: WIDTH),
         },
     };
 

@@ -12,6 +12,7 @@ public interface IRenderApi
     void FillRect(Rect rect, Color color);
     void FillRoundedRect(Rect rect, float radius, Color color);
     void FillRoundedRect(Rect rect, BorderRadius radius, Color color);
+    void FillRoundedShadow(Rect rect, BorderRadius radius, Color color, float distance);
     void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color);
     void FillRoundedRectGradient(
         Rect rect,

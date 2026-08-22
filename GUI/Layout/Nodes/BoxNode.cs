@@ -383,6 +383,15 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         var borderThickness = Style.BorderWidth;
         var cornerRadius = BorderRadius;
 
+        if (Style.ShadowColor.HasValue && Style.ShadowDistance > 0.0f)
+        {
+            renderer.FillRoundedShadow(
+                rect,
+                cornerRadius,
+                Style.ShadowColor.Value.PushOpacity(Opacity),
+                Style.ShadowDistance);
+        }
+
         if (Style.BorderColor.HasValue)
         {
             renderer.FillRoundedBorder(rect, cornerRadius, borderThickness, Style.BorderColor.Value.PushOpacity(Opacity));

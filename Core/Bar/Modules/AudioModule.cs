@@ -99,7 +99,8 @@ internal sealed class AudioModule(
             Style = ModulesCommon.ModuleStyle(theme, bg, right: false) with
             {
                 Spacing = 0,
-                Padding = new Insets(4, 0)
+                Padding = new Insets(4, 0),
+                ShadowColor = null
             },
             Children =
             [
