@@ -26,6 +26,17 @@ try
     }
 
     using var renderer = new Renderer(HyprLayer.GetProcAddress);
+#if HYPRNETSHELL_PERFORMANCE_PROFILING
+    using var performanceProfiler = PerformanceProfiler.TryCreate();
+    renderer.SetDiagnosticsEnabled(performanceProfiler is not null);
+    if (performanceProfiler is not null)
+    {
+        AppLogger.Info("Performance", $"Performance profiling enabled; writing {performanceProfiler.OutputPath}");
+    }
+#else
+    PerformanceProfiler? performanceProfiler = null;
+#endif
+
     var services = new StatusBarServices();
     var mainDialog = services.MainDialog;
     var views = new Dictionary<ulong, StatusBar>();
@@ -35,8 +46,18 @@ try
 
     try
     {
-        while (layer.Update())
+        while (true)
         {
+            PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.Frame);
+            PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.Update);
+            var shouldContinue = layer.Update();
+            PerformanceProfiler.End(performanceProfiler, PerformancePhase.Update);
+            if (!shouldContinue)
+            {
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.Frame);
+                break;
+            }
+
             if (layer.TopologyChanged)
             {
                 var currentOutputIds = layer.Outputs.Select(output => output.Id).ToHashSet();
@@ -75,7 +96,10 @@ try
                 }
             }
 
+            PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.RefreshState);
             services.RefreshState();
+            PerformanceProfiler.End(performanceProfiler, PerformancePhase.RefreshState);
+
             var focusedMonitorName = services.FocusedMonitorName;
             var compositorFocusedOutputId = layer.Outputs.FirstOrDefault(output =>
                 string.Equals(output.Name, focusedMonitorName, StringComparison.Ordinal))?.Id;
@@ -120,19 +144,40 @@ try
                     continue;
                 }
 
+                Layout.BeginDiagnosticsFrame(performanceProfiler is not null);
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.BeginRender);
                 renderer.BeginFrame(output.Width, output.Height);
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.BeginRender);
+
                 Layout.Input = output.Input;
                 Layout.BeginInputRegionFrame();
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.DrawBar);
                 views[output.Id].Draw();
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawBar);
+
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.DrawDialog);
                 if (dialogOwnerId == output.Id && mainDialog.IsVisible)
                 {
                     using var dialogLayout = new Layout(renderer, renderer.Width, renderer.Height);
                     dialogLayout.AddNode(mainDialog.Draw());
                 }
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawDialog);
 
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.SetInputRegions);
                 layer.SetInputRegions(output.Id, Layout.GetInputRegions());
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.SetInputRegions);
+
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.EndRender);
                 renderer.EndFrame();
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.EndRender);
+
+                PerformanceProfiler.AddFrameMetrics(
+                    performanceProfiler,
+                    Layout.GetFrameMetrics(),
+                    renderer.GetFrameMetrics());
+                PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.SwapBuffers);
                 _ = layer.SwapBuffers(output.Id);
+                PerformanceProfiler.End(performanceProfiler, PerformancePhase.SwapBuffers);
             }
 
             if (!mainDialog.IsVisible)
@@ -141,7 +186,11 @@ try
             }
 
             layer.SetKeyboardInteractiveBar(mainDialog.IsOpen ? dialogOwnerId ?? 0 : 0);
+            PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.PaceFrame);
             layer.PaceFrame();
+            PerformanceProfiler.End(performanceProfiler, PerformancePhase.PaceFrame);
+            PerformanceProfiler.End(performanceProfiler, PerformancePhase.Frame);
+            PerformanceProfiler.CompleteFrame(performanceProfiler);
         }
 
         return layer.ReturnCode;

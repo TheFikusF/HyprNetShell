@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using HyprNetShell.Rendering.Primitives;
 using Silk.NET.OpenGL;
@@ -49,6 +50,18 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private long _shadowCacheBytes;
 
     private bool _disposed;
+    private bool _diagnosticsEnabled;
+    private long _coloredDrawRequests;
+    private long _coloredVerticesCount;
+    private long _textDraws;
+    private long _textureDraws;
+    private long _coloredFlushes;
+    private long _glDrawCalls;
+    private long _bufferUploads;
+    private long _bufferUploadBytes;
+    private long _roundedRects;
+    private long _roundedBorders;
+    private long _shadows;
 
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -105,6 +118,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void BeginFrame(int width, int height)
     {
+        ResetFrameMetrics();
         _coloredVertices.Clear();
         _textureRepository.RemoveUnusedPathResources();
 
@@ -128,6 +142,22 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.Flush();
     }
 
+    [Conditional(PerformanceProfiling.Symbol)]
+    public void SetDiagnosticsEnabled(bool enabled) => _diagnosticsEnabled = enabled;
+
+    public RendererFrameMetrics GetFrameMetrics() => new(
+        _coloredDrawRequests,
+        _coloredVerticesCount,
+        _textDraws,
+        _textureDraws,
+        _coloredFlushes,
+        _glDrawCalls,
+        _bufferUploads,
+        _bufferUploadBytes,
+        _roundedRects,
+        _roundedBorders,
+        _shadows);
+
     public float MeasureText(string text, float fontSize) => _font.MeasureText(text, fontSize);
 
     public void FillRect(Rect rect, Color color) => DrawRect(rect.X, rect.Y, rect.Width, rect.Height, color);
@@ -136,7 +166,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         => FillRoundedRect(rect, new BorderRadius(radius), color);
 
     public void FillRoundedRect(Rect rect, BorderRadius radius, Color color)
-        => DrawRoundedRect(rect.X, rect.Y, rect.Width, rect.Height, radius, color);
+    {
+        RecordRoundedRect();
+        DrawRoundedRect(rect.X, rect.Y, rect.Width, rect.Height, radius, color);
+    }
 
     public void FillRoundedShadow(Rect rect, BorderRadius radius, Color color, float distance)
     {
@@ -146,6 +179,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
+        RecordShadow();
         distance = MathF.Min(distance, MAX_SHADOW_DISTANCE);
         var width = Math.Max(1, (int)MathF.Ceiling(rect.Width));
         var height = Math.Max(1, (int)MathF.Ceiling(rect.Height));
@@ -176,7 +210,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     }
 
     public void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
-        => DrawRoundedBorder(rect, radius, thickness, color);
+    {
+        RecordRoundedBorder();
+        DrawRoundedBorder(rect, radius, thickness, color);
+    }
 
     public void FillRoundedRectGradient(
         Rect rect,
@@ -311,8 +348,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         return dx == 0.0f && dy == 0.0f ? -1.0f : MathF.Sqrt(dx * dx + dy * dy);
     }
 
-    private const int CORNER_SEGMENTS = 16;
-    private static readonly List<Point> _cornerPoints = new(CORNER_SEGMENTS);
+    private const int ROUNDED_CONTOUR_SEGMENTS = 16;
+    private const int ROUNDED_CONTOUR_POINTS = 4 * (ROUNDED_CONTOUR_SEGMENTS + 1);
+    private static readonly Point[] RoundedRectContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
+    private static readonly Point[] InnerContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
+    private static readonly Point[] OuterContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
+
     private void DrawRoundedRect(float x, float y, float width, float height, BorderRadius radius, Color color)
     {
         if (width <= 0 || height <= 0)
@@ -321,26 +362,19 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         radius = ClampCornerRadius(radius, width, height);
-        _cornerPoints.Clear();
-        AddCorner(x + width - radius.TopRight, y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, x + width, y);
-        AddCorner(x + width - radius.BottomRight, y + height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f, x + width, y + height);
-        AddCorner(x + radius.BottomLeft, y + height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f, x, y + height);
-        AddCorner(x + radius.TopLeft, y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, x, y);
-
-        var vertices = new float[(_cornerPoints.Count + 2) * 6];
-        WriteVertex(vertices, 0, x + width * 0.5f, y + height * 0.5f, color);
-        for (var i = 0; i < _cornerPoints.Count; i++)
+        var rect = new Rect(x, y, width, height);
+        var pointCount = BuildCompactRoundedContour(RoundedRectContourBuffer, rect, radius);
+        var center = new Point(x + width * 0.5f, y + height * 0.5f);
+        BeginColoredGeometry(pointCount * 3);
+        for (var i = 0; i < pointCount; i++)
         {
-            WriteVertex(vertices, i + 1, _cornerPoints[i].X, _cornerPoints[i].Y, color);
+            AppendColoredTriangle(
+                center,
+                RoundedRectContourBuffer[i],
+                RoundedRectContourBuffer[(i + 1) % pointCount],
+                color);
         }
-        WriteVertex(vertices, _cornerPoints.Count + 1, _cornerPoints[0].X, _cornerPoints[0].Y, color);
-
-        DrawVertices(vertices, PrimitiveType.TriangleFan);
     }
-
-    private const int ROUNDED_CONTOUR_SEGMENTS = 16;
-    private static readonly Point[] _innerContourBuffer = new Point[4 * (ROUNDED_CONTOUR_SEGMENTS + 1)];
-    private static readonly Point[] _outerContourBuffer = new Point[4 * (ROUNDED_CONTOUR_SEGMENTS + 1)];
 
     private void DrawRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
     {
@@ -363,26 +397,43 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        BuildRoundedContour(_outerContourBuffer, rect, radius);
+        BuildRoundedContour(OuterContourBuffer, rect, radius);
         var innerRadius = ClampCornerRadius(radius.Inset(thickness), innerRect.Width, innerRect.Height);
-        BuildRoundedContour(_innerContourBuffer, innerRect, innerRadius);
-        var inner = _innerContourBuffer;
-        var outer = _outerContourBuffer;
-        var vertices = new float[outer.Length * 6 * 6];
-        var vertex = 0;
+        BuildRoundedContour(InnerContourBuffer, innerRect, innerRadius);
+        BeginColoredGeometry(ROUNDED_CONTOUR_POINTS * 6);
 
-        for (var i = 0; i < outer.Length; i++)
+        for (var i = 0; i < ROUNDED_CONTOUR_POINTS; i++)
         {
-            var next = (i + 1) % outer.Length;
-            WriteVertex(vertices, vertex++, outer[i].X, outer[i].Y, color);
-            WriteVertex(vertices, vertex++, outer[next].X, outer[next].Y, color);
-            WriteVertex(vertices, vertex++, inner[next].X, inner[next].Y, color);
-            WriteVertex(vertices, vertex++, outer[i].X, outer[i].Y, color);
-            WriteVertex(vertices, vertex++, inner[next].X, inner[next].Y, color);
-            WriteVertex(vertices, vertex++, inner[i].X, inner[i].Y, color);
+            var next = (i + 1) % ROUNDED_CONTOUR_POINTS;
+            AppendColoredTriangle(
+                OuterContourBuffer[i],
+                OuterContourBuffer[next],
+                InnerContourBuffer[next],
+                color);
+            AppendColoredTriangle(
+                OuterContourBuffer[i],
+                InnerContourBuffer[next],
+                InnerContourBuffer[i],
+                color);
         }
+    }
 
-        DrawVertices(vertices, PrimitiveType.Triangles);
+    private static int BuildCompactRoundedContour(Point[] points, Rect rect, BorderRadius radius)
+    {
+        var index = 0;
+
+        AddCompactContourCorner(points, ref index, rect.X + rect.Width - radius.TopRight,
+            rect.Y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, rect.X + rect.Width, rect.Y);
+        AddCompactContourCorner(points, ref index, rect.X + rect.Width - radius.BottomRight,
+            rect.Y + rect.Height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f,
+            rect.X + rect.Width, rect.Y + rect.Height);
+        AddCompactContourCorner(points, ref index, rect.X + radius.BottomLeft,
+            rect.Y + rect.Height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f,
+            rect.X, rect.Y + rect.Height);
+        AddCompactContourCorner(points, ref index, rect.X + radius.TopLeft,
+            rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
+
+        return index;
     }
 
     private static void BuildRoundedContour(Point[] points, Rect rect, BorderRadius radius)
@@ -399,6 +450,31 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             rect.X, rect.Y + rect.Height);
         AddContourCorner(points, ref index, rect.X + radius.TopLeft,
             rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
+    }
+
+    private static void AddCompactContourCorner(
+        Point[] points,
+        ref int index,
+        float cx,
+        float cy,
+        float radius,
+        float fromDegrees,
+        float toDegrees,
+        float sharpX,
+        float sharpY)
+    {
+        if (radius <= 0.0f)
+        {
+            points[index++] = new Point(sharpX, sharpY);
+            return;
+        }
+
+        for (var i = 0; i <= ROUNDED_CONTOUR_SEGMENTS; i++)
+        {
+            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / ROUNDED_CONTOUR_SEGMENTS;
+            var radians = degrees * MathF.PI / 180.0f;
+            points[index++] = new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
+        }
     }
 
     private static void AddContourCorner(
@@ -584,6 +660,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void DrawText(string text, float x, float y, float fontSize, Color color, float charDistance)
     {
+        RecordTextDraw();
         FlushColoredGeometry();
         _font.DrawText(text, x, y, fontSize, charDistance, color);
     }
@@ -655,6 +732,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         int colorLocation,
         float rotationRadians = 0)
     {
+        RecordTextureDraw();
         FlushColoredGeometry();
 
         var x = rect.X;
@@ -693,6 +771,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data, BufferUsageARB.DynamicDraw);
         }
 
+        RecordBufferUpload(vertices.Length * sizeof(float));
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
     }
 
@@ -745,10 +824,37 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
+    private void BeginColoredGeometry(int vertexCount)
+    {
+        RecordColoredDraw(vertexCount);
+        _coloredVertices.EnsureCapacity(_coloredVertices.Count + vertexCount * 6);
+    }
+
+    private void AppendColoredTriangle(Point first, Point second, Point third, Color color)
+    {
+        AppendColoredVertex(first, color);
+        AppendColoredVertex(second, color);
+        AppendColoredVertex(third, color);
+    }
+
+    private void AppendColoredVertex(Point point, Color color)
+    {
+        _coloredVertices.Add(point.X);
+        _coloredVertices.Add(point.Y);
+        _coloredVertices.Add(color.R);
+        _coloredVertices.Add(color.G);
+        _coloredVertices.Add(color.B);
+        _coloredVertices.Add(color.A);
+    }
+
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
     {
         const int FLOATS_PER_VERTEX = 6;
         var vertexCount = vertices.Length / FLOATS_PER_VERTEX;
+        RecordColoredDraw(
+            primitiveType == PrimitiveType.TriangleFan
+                ? Math.Max(0, vertexCount - 2) * 3
+                : vertexCount);
 
         switch (primitiveType)
         {
@@ -795,8 +901,104 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         {
             _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data, BufferUsageARB.DynamicDraw);
         }
+
+        RecordColoredFlush(vertices.Length * sizeof(float));
         _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)(vertices.Length / 6));
         _coloredVertices.Clear();
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordRoundedRect()
+    {
+        if (_diagnosticsEnabled)
+        {
+            _roundedRects++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordRoundedBorder()
+    {
+        if (_diagnosticsEnabled)
+        {
+            _roundedBorders++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordShadow()
+    {
+        if (_diagnosticsEnabled)
+        {
+            _shadows++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordTextDraw()
+    {
+        if (_diagnosticsEnabled)
+        {
+            _textDraws++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordTextureDraw()
+    {
+        if (_diagnosticsEnabled)
+        {
+            _textureDraws++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordColoredDraw(int vertices)
+    {
+        if (_diagnosticsEnabled)
+        {
+            _coloredDrawRequests++;
+            _coloredVerticesCount += vertices;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordBufferUpload(int bytes)
+    {
+        if (_diagnosticsEnabled)
+        {
+            _bufferUploads++;
+            _bufferUploadBytes += bytes;
+            _glDrawCalls++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void RecordColoredFlush(int bytes)
+    {
+        if (_diagnosticsEnabled)
+        {
+            _coloredFlushes++;
+            _bufferUploads++;
+            _bufferUploadBytes += bytes;
+            _glDrawCalls++;
+        }
+    }
+
+    [Conditional(PerformanceProfiling.Symbol)]
+    private void ResetFrameMetrics()
+    {
+        _coloredDrawRequests = 0;
+        _coloredVerticesCount = 0;
+        _textDraws = 0;
+        _textureDraws = 0;
+        _coloredFlushes = 0;
+        _glDrawCalls = 0;
+        _bufferUploads = 0;
+        _bufferUploadBytes = 0;
+        _roundedRects = 0;
+        _roundedBorders = 0;
+        _shadows = 0;
     }
 
     private static BorderRadius ClampCornerRadius(BorderRadius radius, float width, float height)
@@ -827,39 +1029,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         return used <= 0.0f ? scale : MathF.Min(scale, available / used);
     }
 
-    private static void AddCorner(
-        float cx,
-        float cy,
-        float radius,
-        float fromDegrees,
-        float toDegrees,
-        float sharpX,
-        float sharpY)
-    {
-        if (radius <= 0.0f)
-        {
-            _cornerPoints.Add(new Point(sharpX, sharpY));
-            return;
-        }
 
-        for (var i = 0; i <= CORNER_SEGMENTS; i++)
-        {
-            var t = fromDegrees + (toDegrees - fromDegrees) * i / CORNER_SEGMENTS;
-            var radians = t * MathF.PI / 180.0f;
-            _cornerPoints.Add(new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius));
-        }
-    }
-
-    private static void WriteVertex(float[] vertices, int vertex, float x, float y, Color color)
-    {
-        var offset = vertex * 6;
-        vertices[offset] = x;
-        vertices[offset + 1] = y;
-        vertices[offset + 2] = color.R;
-        vertices[offset + 3] = color.G;
-        vertices[offset + 4] = color.B;
-        vertices[offset + 5] = color.A;
-    }
 
     public void Dispose()
     {

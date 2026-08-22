@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <HyprNetShellPerformanceProfiling Condition="'$(HyprNetShellPerformanceProfiling)' == ''">false</HyprNetShellPerformanceProfiling>
+    <DefineConstants Condition="'$(HyprNetShellPerformanceProfiling)' == 'true'">$(DefineConstants);HYPRNETSHELL_PERFORMANCE_PROFILING</DefineConstants>
+  </PropertyGroup>
+</Project>

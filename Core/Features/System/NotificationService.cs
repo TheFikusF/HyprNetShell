@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
@@ -92,7 +91,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             if (@interface == INTERFACE && member == "GetCapabilities")
             {
                 using var writer = context.CreateReplyWriter("as");
-                writer.WriteArray(new[] { "actions", "body", "body-markup", "icon-static", "persistence" });
+                writer.WriteArray(CAPABILITIES_STRING);
                 context.Reply(writer.CreateMessage());
                 return;
             }
@@ -551,4 +550,5 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
                                                <interface name="org.freedesktop.DBus.Introspectable"><method name="Introspect"><arg type="s" direction="out"/></method></interface>
                                              </node>
                                              """;
+    internal static readonly string[] CAPABILITIES_STRING = new[] { "actions", "body", "body-markup", "icon-static", "persistence" };
 }

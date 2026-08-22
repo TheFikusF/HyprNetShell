@@ -53,12 +53,8 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
             if (_measuredWidth.HasValue == false)
             {
-                _measuredWidth = (SolidChildren.Any()
-                    ? Direction == Direction.Horizontal
-                        ? SolidChildren.Sum(child => child.Width) +
-                          Style.Spacing * Math.Max(0, SolidChildren.Count() - 1)
-                        : SolidChildren.Max(child => child.Width)
-                    : 0) + HorizontalInset;
+                Layout.RecordWidthMeasurement();
+                _measuredWidth = MeasureChildrenWidth() + HorizontalInset;
             }
 
             return _maxWidth.HasValue
@@ -84,14 +80,10 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
             if (_measuredHeight.HasValue == false)
             {
+                Layout.RecordHeightMeasurement();
                 PrepareChildWidthBounds();
 
-                _measuredHeight = (SolidChildren.Any()
-                    ? Direction == Direction.Vertical
-                        ? SolidChildren.Sum(child => child.Height) +
-                          Style.Spacing * Math.Max(0, SolidChildren.Count() - 1)
-                        : SolidChildren.Max(child => child.Height)
-                    : 0) + VerticalInset;
+                _measuredHeight = MeasureChildrenHeight() + VerticalInset;
             }
 
             return _maxHeight.HasValue
@@ -111,26 +103,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
     public ICollection<Node> Children { get; init; } = [];
 
-    private ICollection<Node> _solidChildren;
-    private ICollection<Node> _ephemeralChildren;
-
-    private ICollection<Node> SolidChildren
-    {
-        get
-        {
-            _solidChildren ??= Children.Where(x => x is not BoxNode box || box.IgnoreLayout == false).ToArray();
-            return _solidChildren;
-        }
-    }
-
-    private ICollection<Node> EphemeralChildren
-    {
-        get
-        {
-            _ephemeralChildren ??= [.. Children.Where(x => x is BoxNode { IgnoreLayout: true })];
-            return _ephemeralChildren;
-        }
-    }
+    private static bool ParticipatesInLayout(Node child) => child is not BoxNode { IgnoreLayout: true };
 
     public BoxNode(int? width = null, int? height = null)
     {
@@ -178,6 +151,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
     public override void Draw(IRenderApi renderer, int x, int y)
     {
+        Layout.RecordBoxDraw();
         var hovered = Layout.Input.Contains(new Rect(x, y, Width, Height));
         var clicked = hovered && Layout.Input.PointerPressed;
 
@@ -207,8 +181,13 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
             ? DrawHorizontal(renderer, contentX, contentY, contentHeight, contentWidth)
             : DrawVertical(renderer, contentX, contentY, contentHeight, contentWidth);
 
-        foreach (var child in EphemeralChildren)
+        foreach (var child in Children)
         {
+            if (ParticipatesInLayout(child))
+            {
+                continue;
+            }
+
             child.Opacity *= Opacity;
             var childX = contentX + GetAbsoluteHorizontalOffset(child, contentWidth);
             var childY = contentY + GetAbsoluteVerticalOffset(child, contentHeight);
@@ -228,27 +207,106 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 #endif
     }
 
+    private int MeasureChildrenWidth()
+    {
+        if (Direction == Direction.Horizontal)
+        {
+            var width = SumChildWidths(out var count);
+            return width + Style.Spacing * Math.Max(0, count - 1);
+        }
+
+        var maximum = 0;
+        foreach (var child in Children)
+        {
+            if (ParticipatesInLayout(child))
+            {
+                maximum = Math.Max(maximum, child.Width);
+            }
+        }
+
+        return maximum;
+    }
+
+    private int MeasureChildrenHeight()
+    {
+        if (Direction == Direction.Vertical)
+        {
+            var height = SumChildHeights(out var count);
+            return height + Style.Spacing * Math.Max(0, count - 1);
+        }
+
+        var maximum = 0;
+        foreach (var child in Children)
+        {
+            if (ParticipatesInLayout(child))
+            {
+                maximum = Math.Max(maximum, child.Height);
+            }
+        }
+
+        return maximum;
+    }
+
+    private int SumChildWidths(out int count)
+    {
+        count = 0;
+        var width = 0;
+        foreach (var child in Children)
+        {
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
+
+            count++;
+            width += child.Width;
+        }
+
+        return width;
+    }
+
+    private int SumChildHeights(out int count)
+    {
+        count = 0;
+        var height = 0;
+        foreach (var child in Children)
+        {
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
+
+            count++;
+            height += child.Height;
+        }
+
+        return height;
+    }
+
     private (bool childHovered, bool childClicked) DrawHorizontal(IRenderApi renderer, int contentX, int contentY,
         int contentHeight, int contentWidth)
     {
-        var children = SolidChildren;
-        BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
-        BoundChildHeights(children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
+        BoundChildWidths(Children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
+        BoundChildHeights(Children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
         if (HorizontalAlignment == ItemsAlignment.Stretch)
         {
-            StretchChildWidths(children, contentWidth);
+            StretchChildWidths(contentWidth);
         }
 
-        var childrenWidth = children.Sum(child => child.Width);
-        var spacing = GetSpacing(HorizontalAlignment, contentWidth, childrenWidth, children.Count);
-        var cursorX = contentX + GetOffset(HorizontalAlignment, contentWidth, childrenWidth, spacing, children.Count);
+        var childrenWidth = SumChildWidths(out var childCount);
+        var spacing = GetSpacing(HorizontalAlignment, contentWidth, childrenWidth, childCount);
+        var cursorX = contentX + GetOffset(HorizontalAlignment, contentWidth, childrenWidth, spacing, childCount);
         var childHovered = false;
         var childClicked = false;
 
-        foreach (var child in children)
+        foreach (var child in Children)
         {
-            child.Opacity *= Opacity;
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
 
+            child.Opacity *= Opacity;
             var childY = contentY + GetCrossAxisOffset(VerticalAlignment, contentHeight, child.Height);
             child.Draw(renderer, cursorX, childY);
             childHovered |= child.LastHoveredInTree;
@@ -262,102 +320,152 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private (bool childHovered, bool childClicked) DrawVertical(IRenderApi renderer, int contentX, int contentY,
         int contentHeight, int contentWidth)
     {
-        var children = SolidChildren;
-        BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
-        BoundChildHeights(children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
+        BoundChildWidths(Children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
+        BoundChildHeights(Children, contentHeight, VerticalAlignment == ItemsAlignment.Stretch);
         if (VerticalAlignment == ItemsAlignment.Stretch)
         {
-            StretchChildHeights(children, contentHeight);
+            StretchChildHeights(contentHeight);
         }
 
-        var childrenHeight = children.Sum(child => child.Height);
-        var verticalSpacing = GetSpacing(VerticalAlignment, contentHeight, childrenHeight, children.Count);
-        var cursorY = contentY + GetOffset(VerticalAlignment, contentHeight, childrenHeight, verticalSpacing, children.Count);
+        var childrenHeight = SumChildHeights(out var childCount);
+        var spacing = GetSpacing(VerticalAlignment, contentHeight, childrenHeight, childCount);
+        var cursorY = contentY + GetOffset(VerticalAlignment, contentHeight, childrenHeight, spacing, childCount);
         var childHovered = false;
         var childClicked = false;
 
-        foreach (var child in children)
+        foreach (var child in Children)
         {
-            child.Opacity *= Opacity;
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
 
+            child.Opacity *= Opacity;
             var childX = contentX + GetCrossAxisOffset(HorizontalAlignment, contentWidth, child.Width);
             child.Draw(renderer, childX, cursorY);
             childHovered |= child.LastHoveredInTree;
             childClicked |= child.LastClickedInTree;
-            cursorY += child.Height + verticalSpacing;
+            cursorY += child.Height + spacing;
         }
 
         return (childHovered, childClicked);
     }
 
-    private void StretchChildWidths(ICollection<Node> children, int availableWidth)
+    private void StretchChildWidths(int availableWidth)
     {
-        var stretchable = children
-            .OfType<IWidthBoundNode>()
-            .Where(child => child.AcceptsWidthBound)
-            .ToArray();
-        if (stretchable.Length == 0)
+        var childCount = 0;
+        var stretchableCount = 0;
+        var fixedWidth = 0;
+        foreach (var child in Children)
+        {
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
+
+            childCount++;
+            if (child is IWidthBoundNode { AcceptsWidthBound: true })
+            {
+                stretchableCount++;
+            }
+            else
+            {
+                fixedWidth += child.Width;
+            }
+        }
+
+        if (stretchableCount == 0)
         {
             return;
         }
 
-        var fixedWidth = children
-            .Where(child => child is not IWidthBoundNode { AcceptsWidthBound: true })
-            .Sum(child => child.Width);
-        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, children.Count - 1));
-        for (var i = 0; i < stretchable.Length; i++)
+        var remaining = Math.Max(0, availableWidth - fixedWidth - Style.Spacing * Math.Max(0, childCount - 1));
+        var index = 0;
+        foreach (var child in Children)
         {
-            var targetWidth = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
-            stretchable[i].SetMaxWidth(targetWidth, true);
+            if (!ParticipatesInLayout(child) || child is not IWidthBoundNode { AcceptsWidthBound: true } stretchable)
+            {
+                continue;
+            }
+
+            var targetWidth = remaining / stretchableCount + (index < remaining % stretchableCount ? 1 : 0);
+            stretchable.SetMaxWidth(targetWidth, true);
+            index++;
         }
     }
 
-    private void StretchChildHeights(ICollection<Node> children, int availableHeight)
+    private void StretchChildHeights(int availableHeight)
     {
-        var stretchable = children
-            .OfType<IHeightBoundNode>()
-            .Where(child => child.AcceptsHeightBound)
-            .ToArray();
-        if (stretchable.Length == 0)
+        var childCount = 0;
+        var stretchableCount = 0;
+        var fixedHeight = 0;
+        foreach (var child in Children)
+        {
+            if (!ParticipatesInLayout(child))
+            {
+                continue;
+            }
+
+            childCount++;
+            if (child is IHeightBoundNode { AcceptsHeightBound: true })
+            {
+                stretchableCount++;
+            }
+            else
+            {
+                fixedHeight += child.Height;
+            }
+        }
+
+        if (stretchableCount == 0)
         {
             return;
         }
 
-        var fixedHeight = children
-            .Where(child => child is not IHeightBoundNode { AcceptsHeightBound: true })
-            .Sum(child => child.Height);
-        var remaining = Math.Max(0, availableHeight - fixedHeight - Style.Spacing * Math.Max(0, children.Count - 1));
-        for (var i = 0; i < stretchable.Length; i++)
+        var remaining = Math.Max(0, availableHeight - fixedHeight - Style.Spacing * Math.Max(0, childCount - 1));
+        var index = 0;
+        foreach (var child in Children)
         {
-            var targetHeight = remaining / stretchable.Length + (i < remaining % stretchable.Length ? 1 : 0);
-            stretchable[i].SetMaxHeight(targetHeight, true);
+            if (!ParticipatesInLayout(child) || child is not IHeightBoundNode { AcceptsHeightBound: true } stretchable)
+            {
+                continue;
+            }
+
+            var targetHeight = remaining / stretchableCount + (index < remaining % stretchableCount ? 1 : 0);
+            stretchable.SetMaxHeight(targetHeight, true);
+            index++;
         }
     }
 
     private void PrepareChildWidthBounds()
     {
-        var children = SolidChildren;
         var contentWidth = Math.Max(0, Width - HorizontalInset);
-        BoundChildWidths(children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
+        BoundChildWidths(Children, contentWidth, HorizontalAlignment == ItemsAlignment.Stretch);
         if (Direction == Direction.Horizontal && HorizontalAlignment == ItemsAlignment.Stretch)
         {
-            StretchChildWidths(children, contentWidth);
+            StretchChildWidths(contentWidth);
         }
     }
 
     private static void BoundChildWidths(IEnumerable<Node> children, int maxWidth, bool stretch)
     {
-        foreach (var child in children.OfType<IWidthBoundNode>().Where(child => child.AcceptsWidthBound))
+        foreach (var child in children)
         {
-            child.SetMaxWidth(maxWidth, stretch);
+            if (ParticipatesInLayout(child) && child is IWidthBoundNode { AcceptsWidthBound: true } bound)
+            {
+                bound.SetMaxWidth(maxWidth, stretch);
+            }
         }
     }
 
     private static void BoundChildHeights(IEnumerable<Node> children, int maxHeight, bool stretch)
     {
-        foreach (var child in children.OfType<IHeightBoundNode>().Where(child => child.AcceptsHeightBound))
+        foreach (var child in children)
         {
-            child.SetMaxHeight(maxHeight, stretch);
+            if (ParticipatesInLayout(child) && child is IHeightBoundNode { AcceptsHeightBound: true } bound)
+            {
+                bound.SetMaxHeight(maxHeight, stretch);
+            }
         }
     }
 
