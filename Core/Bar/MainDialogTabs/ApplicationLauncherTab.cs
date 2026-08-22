@@ -6,6 +6,7 @@ using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 using FuzzySharp;
+using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
@@ -14,7 +15,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
     private class ButtonState : ModulesCommon.BoxState
     {
         public int ActionIndex { get; set; }
-        public Dictionary<int, ModulesCommon.BoxState> Actions { get; } = new ();
+        public Dictionary<int, ModulesCommon.BoxState> Actions { get; } = [];
     }
 
     private enum Column
@@ -25,7 +26,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
 
     private const int FUZZY_SCORE_CUTOFF = 35;
     private readonly AppIconResolver _icons = new();
-    private readonly Dictionary<int, ButtonState> _buttonsState = new();
+    private readonly Dictionary<int, ButtonState> _buttonsState = [];
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<DesktopApplication> _filteredApplications = [];
     private string _query = "";

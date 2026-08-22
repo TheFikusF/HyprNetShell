@@ -80,7 +80,7 @@ internal static class DesktopApplicationParser
         return groups;
     }
 
-    private static IReadOnlyList<DesktopAction> ParseActions(
+    private static List<DesktopAction> ParseActions(
         IReadOnlyDictionary<string, string> entry,
         IReadOnlyDictionary<string, Dictionary<string, string>> groups)
     {
@@ -103,11 +103,7 @@ internal static class DesktopApplicationParser
                 continue;
             }
 
-            actions.Add(new DesktopAction(
-                id,
-                Unescape(name),
-                values.GetValueOrDefault("Icon"),
-                exec));
+            actions.Add(new DesktopAction(id, Unescape(name), values.GetValueOrDefault("Icon"), exec));
         }
 
         return actions;

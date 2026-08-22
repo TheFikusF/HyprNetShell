@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -12,7 +13,7 @@ internal sealed class WorkspacesModule : IDrawableModule
 {
     private readonly Dictionary<int, ModulesCommon.BoxState> _popupWorkspaceStates = [];
     private readonly Theme _theme;
-    private readonly ModulesCommon.NodeWithPopup _node;
+    private readonly NodeWithPopup _node;
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
     private readonly Func<string> _getOutputName;
@@ -20,11 +21,11 @@ internal sealed class WorkspacesModule : IDrawableModule
     public WorkspacesModule(
         HyprlandService hyprland,
         IHyprctl hyprctl,
-        SuperKeyStateService superKey,
+        KeyStateService keyState,
         Theme theme,
         Func<string> getOutputName,
         Func<bool> blockPopup,
-        ModulesCommon.PopupCoordinator popupCoordinator)
+        PopupCoordinator popupCoordinator)
     {
         _theme = theme;
         _hyprland = hyprland;
@@ -34,7 +35,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         _node = new(popupCoordinator, "workspaces_module", ignorePopupQueue: true)
         {
             TopOffset = 36,
-            GetShouldShowPopup = hovered => (superKey.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
+            GetShouldShowPopup = hovered => (keyState.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
                                             blockPopup1() == false,
         };
     }

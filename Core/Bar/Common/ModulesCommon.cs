@@ -4,117 +4,10 @@ using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.Core.Bar.Common;
 
 public static class ModulesCommon
 {
-    public sealed class PopupCoordinator
-    {
-        private readonly Dictionary<string, DateTime> _cantOpenBefore = [];
-        private string? _lastOpenedId;
-        private string? _pendingOpenedId;
-
-        public void Register(string moduleId) =>
-            _cantOpenBefore[moduleId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
-
-        public bool IsOpen(string moduleId) => _lastOpenedId == moduleId;
-
-        public bool TryRequestOpen(string moduleId)
-        {
-            if (!_cantOpenBefore.TryGetValue(moduleId, out var cantOpenBefore))
-            {
-                Register(moduleId);
-                return false;
-            }
-
-            if (cantOpenBefore >= DateTime.Now
-                || (_lastOpenedId == moduleId && !string.IsNullOrEmpty(_pendingOpenedId)))
-            {
-                return false;
-            }
-
-            _pendingOpenedId = moduleId;
-            return true;
-        }
-
-        public void EndFrame()
-        {
-            if (_pendingOpenedId != _lastOpenedId && _lastOpenedId is { } lastOpenedId)
-            {
-                _cantOpenBefore[lastOpenedId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
-            }
-
-            _lastOpenedId = _pendingOpenedId;
-            _pendingOpenedId = null;
-        }
-    }
-
-    public class NodeWithPopup
-    {
-        private readonly PopupCoordinator _popupCoordinator;
-        private readonly string _moduleId;
-        private readonly bool _ignorePopupQueue;
-
-        private float _popupOpacity = 0f;
-
-        public int TopOffset { get; init; } = 33;
-        public ItemsAlignment HorizontalAlignment { get; init; }
-        public Func<bool, bool> GetShouldShowPopup { get; init; } = hovered => hovered;
-
-        private readonly Ref<bool> _hovered = new();
-
-        public bool IsHovered => _hovered.Value;
-        public bool ShouldShowPopup => GetShouldShowPopup(IsHovered);
-
-        public NodeWithPopup(
-            PopupCoordinator popupCoordinator,
-            string moduleId = "",
-            bool ignorePopupQueue = false)
-        {
-            _popupCoordinator = popupCoordinator;
-            _moduleId = moduleId;
-            _ignorePopupQueue = ignorePopupQueue;
-            _popupCoordinator.Register(moduleId);
-        }
-
-        public Node Draw(ICollection<Node> module, Func<Node> popup)
-        {
-            var shouldShowExternal = GetShouldShowPopup(IsHovered);
-            var shouldShow = shouldShowExternal && (_popupCoordinator.IsOpen(_moduleId) || _ignorePopupQueue);
-            if (!_ignorePopupQueue && shouldShowExternal)
-            {
-                _popupCoordinator.TryRequestOpen(_moduleId);
-            }
-
-            _popupOpacity = PrimitivesMath.LerpSmooth(_popupOpacity, shouldShow ? 1 : 0, 24.0f, DELTA_TIME);
-
-            return new BoxNode
-            {
-                Direction = Direction.Horizontal,
-                VerticalAlignment = ItemsAlignment.Start,
-                HorizontalAlignment = HorizontalAlignment,
-                IsHoveredThrough = _hovered,
-                Children =
-                [
-                    new BoxNode
-                    {
-                        VerticalAlignment = ItemsAlignment.Center,
-                        Children = module
-                    },
-                    _popupOpacity > 0.1f
-                        ? new BoxNode
-                        {
-                            IgnoreLayout = true,
-                            Opacity = _popupOpacity,
-                            HorizontalAlignment = ItemsAlignment.Stretch,
-                            Style = new Style { Padding = new Insets(TopOffset, 0, 0, 0) },
-                            Children = [popup()],
-                        }
-                        : new SpacerNode()
-                ],
-            };
-        }
-    }
 
     public const float DELTA_TIME = 1.0f / 30.0f;
 
@@ -133,12 +26,12 @@ public static class ModulesCommon
         };
 
     public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null,
-        Style? style = null, int? width = null) =>
+        Style style = default, int? width = null) =>
         new BoxNode(width)
         {
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = (style ?? new Style()) with { Spacing = 8 },
+            Style = style with { Spacing = 8 },
             Children =
             [
                 new ImageNode(icon, 18, 18, color ?? theme.Text),

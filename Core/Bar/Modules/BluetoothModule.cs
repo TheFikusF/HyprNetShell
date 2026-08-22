@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Helpers;
@@ -12,14 +13,14 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class BluetoothModule(
     BluetoothModuleService service,
     Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, bool> _connectionOverrides = [];
     private readonly Ref<float> _powerSwitchAnimation = new();
     private bool? _poweredOverride;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "bluetooth_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "bluetooth_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
@@ -9,9 +10,9 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class TrayModule(
     SniTrayService service,
     Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly Dictionary<string, ModulesCommon.NodeWithPopup> _nodes = [];
+    private readonly Dictionary<string, NodeWithPopup> _nodes = [];
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
 
     public Node Draw()
@@ -39,7 +40,7 @@ internal sealed class TrayModule(
     {
         if (_nodes.TryGetValue(item.Id, out var node) == false)
         {
-            node = new ModulesCommon.NodeWithPopup(popupCoordinator, $"tray_module_{item.Id}")
+            node = new NodeWithPopup(popupCoordinator, $"tray_module_{item.Id}")
             { HorizontalAlignment = ItemsAlignment.End };
             _nodes[item.Id] = node;
         }

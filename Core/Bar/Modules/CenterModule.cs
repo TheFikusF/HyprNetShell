@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -27,13 +28,13 @@ internal sealed class CenterModule : IDrawableModule
     private float _clockRotation;
     private Rect? _clockBounds;
 
-    private readonly ModulesCommon.NodeWithPopup _node;
+    private readonly NodeWithPopup _node;
 
     public CenterModule(
         NotificationService notificationService,
         WeatherWidget weather,
         Theme theme,
-        ModulesCommon.PopupCoordinator popupCoordinator)
+        PopupCoordinator popupCoordinator)
     {
         _notificationService = notificationService;
         _theme = theme;

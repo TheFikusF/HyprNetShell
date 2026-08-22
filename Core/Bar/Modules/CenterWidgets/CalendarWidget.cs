@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 

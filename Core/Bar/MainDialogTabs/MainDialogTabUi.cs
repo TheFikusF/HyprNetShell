@@ -1,4 +1,5 @@
 using System.Globalization;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;

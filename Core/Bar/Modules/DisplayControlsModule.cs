@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Nodes;
@@ -11,9 +12,9 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class DisplayControlsModule(DisplayControlsModuleService service, Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "display_controls_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "display_controls_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

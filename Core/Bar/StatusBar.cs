@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Modules;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
@@ -12,21 +13,12 @@ public interface IDrawableModule
     public Node Draw();
 }
 
-file class CompositeModule : IDrawableModule
+file class CompositeModule(Style style, params ICollection<IDrawableModule> drawableModules) : IDrawableModule
 {
-    private readonly ICollection<IDrawableModule> _drawableModules;
-    private readonly Style _style;
-
-    public CompositeModule(Style style, params ICollection<IDrawableModule> drawableModules)
-    {
-        _style = style;
-        _drawableModules = drawableModules;
-    }
-
     public Node Draw() => new BoxNode
     {
-        Style = _style,
-        Children = [.. _drawableModules.Select(x => x.Draw())]
+        Style = style,
+        Children = [.. drawableModules.Select(x => x.Draw())]
     };
 }
 
@@ -36,7 +28,7 @@ public sealed class StatusBar
     private readonly IRenderApi _renderer;
     private readonly NotificationService _notificationService;
     private readonly CenterModule _centerModule;
-    private readonly ModulesCommon.PopupCoordinator _popupCoordinator = new();
+    private readonly PopupCoordinator _popupCoordinator = new();
     private readonly Insets _layoutInsets = new(6, 6, 0, 6);
     private readonly ICollection<IDrawableModule> _leftModules;
     private readonly ICollection<IDrawableModule> _rightModules;
@@ -65,7 +57,6 @@ public sealed class StatusBar
             _popupCoordinator);
         var bluetoothModule = new BluetoothModule(services.Bluetooth, Theme.Default, _popupCoordinator);
         var batteryModule = new BatteryModule(services.Battery, Theme.Default, _popupCoordinator);
-        _centerModule = new CenterModule(services.Notifications, services.Weather, Theme.Default, _popupCoordinator);
         var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
         var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);
         var powerModule = new PowerModule(Theme.Default, _popupCoordinator);
@@ -78,6 +69,7 @@ public sealed class StatusBar
             () => languageModule.IsShown,
             _popupCoordinator);
 
+        _centerModule = new CenterModule(services.Notifications, services.Weather, Theme.Default, _popupCoordinator);
         _leftModules = [workspacesModule, musicModule];
         _rightModules =
         [
@@ -95,8 +87,6 @@ public sealed class StatusBar
         ];
     }
 
-
-
     public void Draw()
     {
         try
@@ -111,26 +101,19 @@ public sealed class StatusBar
         }
     }
 
-
+    private static BoxNode DrawSide(IEnumerable<IDrawableModule> modules) => new ()
+    {
+        Direction = Direction.Horizontal,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = Style.Spacer,
+        Children = [.. modules.Select(x => x.Draw())],
+    };
 
     private void DrawLeftRight()
     {
         using var layout = new Layout(_renderer, _renderer.Width, _barHeight, new Style { Padding = _layoutInsets });
-        layout.AddNode(new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Spacing = 6 },
-            Children = [.. _leftModules.Select(x => x.Draw())],
-        });
-
-        layout.AddNode(new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Spacing = 6 },
-            Children = [.. _rightModules.Select(x => x.Draw())],
-        });
+        layout.AddNode(DrawSide(_leftModules));
+        layout.AddNode(DrawSide(_rightModules));
     }
 
     private void DrawCenter()
@@ -150,5 +133,4 @@ public sealed class StatusBar
             _renderer.Height,
             _barHeight));
     }
-
 }

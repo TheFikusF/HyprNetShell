@@ -3,7 +3,7 @@ using HyprNetShell.Core.Logging;
 
 namespace HyprNetShell.Core.Features.System;
 
-internal sealed class SuperKeyStateService : IDisposable
+internal sealed class KeyStateService : IDisposable
 {
     private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(2);
     private const string SUPER_DOWN_BIND = "SUPER_L";
@@ -25,7 +25,7 @@ internal sealed class SuperKeyStateService : IDisposable
 
     public bool ConsumeLauncherToggleRequested() => Interlocked.Exchange(ref _launcherToggleRequested, 0) != 0;
 
-    public SuperKeyStateService(IHyprctl hyprctl)
+    public KeyStateService(IHyprctl hyprctl)
     {
         _hyprctl = hyprctl;
         _runTask = Task.Run(() => RunAsync(_cts.Token));

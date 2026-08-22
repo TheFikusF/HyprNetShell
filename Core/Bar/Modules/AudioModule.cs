@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Helpers;
@@ -13,7 +14,7 @@ internal sealed class AudioModule(
     AudioModuleService service,
     BluetoothModuleService bluetoothService,
     Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int NOTE_CAPACITY = 20;
     private const long NOTE_SPAWN_INTERVAL_MS = 500;
@@ -42,7 +43,7 @@ internal sealed class AudioModule(
     private long _nextNoteSpawnMs;
     private long _noteSequence;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "audio_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "audio_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

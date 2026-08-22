@@ -18,7 +18,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = new Style { Spacing = 8 },
+        Style = Style.Spacer,
         Children =
         [
             new BoxNode(new Style(), ItemsAlignment.Spread, ItemsAlignment.Center)

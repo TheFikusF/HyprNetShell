@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
@@ -9,7 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _profileStates = [];
     private readonly ModulesCommon.BoxState _chargeLimitDecreaseState = new();
@@ -30,7 +31,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
         // new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
         new Gradient.Stop(1.0f, Color.FromRgb(0, 0, 0, 0.45f)));
 
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "battery_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "battery_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

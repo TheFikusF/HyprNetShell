@@ -17,12 +17,13 @@ public sealed class StatusBarServices : IDisposable
 
     private readonly List<ScheduledService> _scheduledServices;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly List<IBarDataService> _dueServicesBuffer = [];
     private Task? _refreshTask;
     private bool _disposed;
 
     internal IHyprctl Hyprctl { get; }
     internal HyprlandService Hyprland { get; }
-    internal SuperKeyStateService SuperKey { get; }
+    internal KeyStateService SuperKey { get; }
     internal NotificationService Notifications { get; }
     internal MusicModuleService Music { get; }
     internal ClipboardHistoryService ClipboardHistory { get; }
@@ -35,17 +36,18 @@ public sealed class StatusBarServices : IDisposable
     internal BatteryModuleService Battery { get; }
     internal SystemStatsModuleService SystemStats { get; }
     internal WeatherWidget Weather { get; }
+
     public MainDialog MainDialog { get; }
 
-    public string? FocusedMonitorName =>
-        Hyprland.Snapshot.MonitorWorkspaces.FirstOrDefault(monitor => monitor.Current)?.Name;
+    public string? FocusedMonitorName => Hyprland.Snapshot.MonitorWorkspaces
+        .FirstOrDefault(monitor => monitor.Current)?.Name;
 
     public StatusBarServices()
     {
         Hyprctl = new Hyprctl();
         Hyprland = new HyprlandService();
         Notifications = new NotificationService(Hyprland, Hyprctl);
-        SuperKey = new SuperKeyStateService(Hyprctl);
+        SuperKey = new KeyStateService(Hyprctl);
         DisplayControls = new DisplayControlsModuleService(Hyprctl);
         Wallpapers = new WallpaperModuleService(Hyprctl);
         Network = new NetworkModuleService();
@@ -57,6 +59,7 @@ public sealed class StatusBarServices : IDisposable
         Music = new MusicModuleService();
         ClipboardHistory = new ClipboardHistoryService();
         Tray = new SniTrayService();
+
         MainDialog = new MainDialog(ClipboardHistory, Hyprctl, Wallpapers, Theme.Default);
 
         _scheduledServices =
@@ -80,21 +83,15 @@ public sealed class StatusBarServices : IDisposable
         }
 
         var now = Stopwatch.GetTimestamp();
-        List<IBarDataService>? dueServices = null;
-        foreach (var scheduled in _scheduledServices)
+        _dueServicesBuffer.Clear();
+        foreach (var scheduled in _scheduledServices.Where(x => x.TrySchedule(now)))
         {
-            if (!scheduled.TrySchedule(now))
-            {
-                continue;
-            }
-
-            dueServices ??= new List<IBarDataService>(_scheduledServices.Count);
-            dueServices.Add(scheduled.Service);
+            _dueServicesBuffer.Add(scheduled.Service);
         }
 
-        if (dueServices is not null)
+        if (_dueServicesBuffer.Count > 0)
         {
-            _refreshTask = RefreshStateAsync(dueServices, _lifetime.Token);
+            _refreshTask = RefreshStateAsync(_lifetime.Token);
         }
     }
 
@@ -104,18 +101,17 @@ public sealed class StatusBarServices : IDisposable
         return SuperKey.ConsumeLauncherToggleRequested();
     }
 
-    private static async Task RefreshStateAsync(
-        IReadOnlyList<IBarDataService> services,
+    private async Task RefreshStateAsync(
         CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(2));
         try
         {
-            var refreshTasks = new Task[services.Count];
-            for (var index = 0; index < services.Count; index++)
+            var refreshTasks = new Task[_dueServicesBuffer.Count];
+            for (var index = 0; index < _dueServicesBuffer.Count; index++)
             {
-                refreshTasks[index] = services[index].RefreshAsync(timeout.Token).AsTask();
+                refreshTasks[index] = _dueServicesBuffer[index].RefreshAsync(timeout.Token).AsTask();
             }
 
             await Task.WhenAll(refreshTasks);

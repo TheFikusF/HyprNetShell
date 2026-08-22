@@ -4,6 +4,7 @@ using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using FuzzySharp;
+using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 

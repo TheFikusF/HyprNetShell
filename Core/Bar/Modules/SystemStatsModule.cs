@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Nodes;
@@ -11,13 +12,13 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class SystemStatsModule(
     SystemStatsModuleService service,
     Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int WIDTH = 75;
     private const int GRAPH_WIDTH = 400;
     private const int GRAPH_HEIGHT = 92;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "system_stats_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "system_stats_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

@@ -19,8 +19,8 @@ public class Layout : IDisposable
     private static long _childArrayAllocations;
     private static long _childArrayElements;
     private readonly BoxNode _root;
-    
-    public Layout(IRenderApi renderer, int width, int height, Style? style = null, LayoutInput? input = null)
+
+    public Layout(IRenderApi renderer, int width, int height, Style style = default, LayoutInput? input = null)
     {
         Renderer = renderer;
         if (_diagnosticsEnabled)
@@ -38,7 +38,7 @@ public class Layout : IDisposable
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = style ?? new Style()
+            Style = style
         };
     }
 
@@ -46,7 +46,7 @@ public class Layout : IDisposable
     {
         _root.AddNode(node);
     }
-    
+
     public void Dispose()
     {
         if (_diagnosticsEnabled)

@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
@@ -12,7 +13,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class NetworkModule(
     NetworkModuleService service,
     Theme theme,
-    ModulesCommon.PopupCoordinator popupCoordinator) : IDrawableModule
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private static readonly TimeSpan WifiScanInterval = TimeSpan.FromSeconds(5);
 
@@ -23,7 +24,7 @@ internal sealed class NetworkModule(
     private readonly Ref<float> _wifiSwitchAnimation = new();
     private bool? _wifiEnabledOverride;
 
-    private readonly ModulesCommon.NodeWithPopup _node = new(popupCoordinator, "network_module")
+    private readonly NodeWithPopup _node = new(popupCoordinator, "network_module")
     {
         HorizontalAlignment = ItemsAlignment.Center,
     };

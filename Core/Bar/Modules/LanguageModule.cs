@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -24,7 +25,7 @@ internal sealed class LanguageModule : IDrawableModule
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
     private readonly Theme _theme;
-    private readonly ModulesCommon.NodeWithPopup _node;
+    private readonly NodeWithPopup _node;
 
     private string _lastLayoutName = "";
     private DateTime _showUntil = DateTime.MinValue;
@@ -35,7 +36,7 @@ internal sealed class LanguageModule : IDrawableModule
             HyprlandService hyprland,
             IHyprctl hyprctl,
             Theme theme,
-            ModulesCommon.PopupCoordinator popupCoordinator)
+            PopupCoordinator popupCoordinator)
     {
         _hyprland = hyprland;
         _hyprctl = hyprctl;

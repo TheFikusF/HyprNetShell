@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
