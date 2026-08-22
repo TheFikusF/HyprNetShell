@@ -1,76 +1,322 @@
 using System.Diagnostics;
+using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Features.System;
 
-internal sealed class NetworkModuleService : IBarDataService
+internal sealed class NetworkModuleService : IBarDataService, IDisposable
 {
+    private const string NetworkManagerBusName = "org.freedesktop.NetworkManager";
+    private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan SignalCoalesceDelay = TimeSpan.FromMilliseconds(150);
+
+    private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _initializeGate = new(1, 1);
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly CancellationTokenSource _lifetime = new();
+    private DBusConnection? _connection;
+    private IDisposable? _networkManagerSubscription;
+    private IDisposable? _nameOwnerSubscription;
+    private Task? _callbackTask;
+    private DateTime _nextSubscriptionAttemptUtc = DateTime.MinValue;
+    private DateTime _nextRecoveryUtc = DateTime.MinValue;
+    private int _invalidated;
+    private bool _hasSnapshot;
+    private bool _disposed;
+
     public NetworkSnapshot Snapshot { get; private set; } = NetworkSnapshot.Empty;
 
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
-        var radioTask = CommandRunner.TryReadAsync(
-            "nmcli",
-            "radio wifi",
-            TimeSpan.FromMilliseconds(800),
-            cancellationToken);
-        var devicesTask = CommandRunner.TryReadAsync(
-            "nmcli",
-            "-t -f DEVICE,TYPE,STATE,CONNECTION device",
-            TimeSpan.FromMilliseconds(800),
-            cancellationToken);
-        await Task.WhenAll(radioTask, devicesTask);
-
-        var radioOutput = await radioTask;
-        var output = await devicesTask;
-        var wifiAvailable = radioOutput is not null;
-        var wifiEnabled = radioOutput?.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase) == true;
-
-        var snapshot = new NetworkSnapshot(wifiAvailable, wifiEnabled, false, "", "", "", [], null);
-
-        if (!string.IsNullOrWhiteSpace(output))
+        bool recoveryDue;
+        lock (_stateLock)
         {
-            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (_disposed)
             {
-                var parts = line.Split(':');
-                if (parts.Length < 4)
-                {
-                    continue;
-                }
+                return;
+            }
 
-                var device = parts[0];
-                var type = parts[1];
-                var stateName = parts[2];
-                var connection = parts[3];
-
-                if (stateName != "connected" || string.IsNullOrWhiteSpace(connection))
-                {
-                    continue;
-                }
-
-                var wifiSignal = type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-                    ? await ReadWifiSignalAsync(device, cancellationToken)
-                    : null;
-                
-                snapshot = new NetworkSnapshot(
-                    wifiAvailable,
-                    wifiEnabled,
-                    true,
-                    device,
-                    type,
-                    connection,
-                    ReadIpAddresses(device),
-                    wifiSignal);
-                
-                break;
+            var now = DateTime.UtcNow;
+            recoveryDue = !_hasSnapshot || now >= _nextRecoveryUtc;
+            if (recoveryDue)
+            {
+                _nextRecoveryUtc = now + RecoveryInterval;
             }
         }
 
-        Snapshot = snapshot;
+        await EnsureInitializedAsync(cancellationToken);
+        if (recoveryDue || Interlocked.Exchange(ref _invalidated, 0) != 0)
+        {
+            await RefreshSnapshotAsync(cancellationToken);
+        }
+    }
+
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
+    {
+        lock (_stateLock)
+        {
+            if (_disposed || _connection is not null || DateTime.UtcNow < _nextSubscriptionAttemptUtc)
+            {
+                return;
+            }
+        }
+
+        await _initializeGate.WaitAsync(cancellationToken);
+        try
+        {
+            lock (_stateLock)
+            {
+                if (_disposed || _connection is not null || DateTime.UtcNow < _nextSubscriptionAttemptUtc)
+                {
+                    return;
+                }
+
+                _nextSubscriptionAttemptUtc = DateTime.UtcNow + RecoveryInterval;
+            }
+
+            DBusConnection? connection = null;
+            IDisposable? networkManagerSubscription = null;
+            IDisposable? nameOwnerSubscription = null;
+            var published = false;
+            try
+            {
+                connection = new DBusConnection(
+                    DBusAddress.System ?? throw new InvalidOperationException("The system D-Bus address is unavailable"));
+                await connection.ConnectAsync();
+                networkManagerSubscription = await connection.AddMatchAsync(
+                    new MatchRule
+                    {
+                        Type = MessageType.Signal,
+                        Sender = NetworkManagerBusName,
+                    },
+                    static (_, _) => true,
+                    static notification =>
+                    {
+                        var service = (NetworkModuleService)notification.State!;
+                        if (!notification.HasValue)
+                        {
+                            service.ResetSubscriptions();
+                        }
+                        else if (notification.Value)
+                        {
+                            service.Invalidate();
+                        }
+                    },
+                    false,
+                    Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
+                    this);
+                nameOwnerSubscription = await connection.AddMatchAsync(
+                    new MatchRule
+                    {
+                        Type = MessageType.Signal,
+                        Interface = "org.freedesktop.DBus",
+                        Member = "NameOwnerChanged",
+                    },
+                    static (message, _) =>
+                    {
+                        var reader = message.GetBodyReader();
+                        return reader.ReadString().Equals(NetworkManagerBusName, StringComparison.Ordinal);
+                    },
+                    static notification =>
+                    {
+                        var service = (NetworkModuleService)notification.State!;
+                        if (!notification.HasValue)
+                        {
+                            service.ResetSubscriptions();
+                        }
+                        else if (notification.Value)
+                        {
+                            service.Invalidate();
+                        }
+                    },
+                    false,
+                    Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
+                    this);
+
+                lock (_stateLock)
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    _connection = connection;
+                    _networkManagerSubscription = networkManagerSubscription;
+                    _nameOwnerSubscription = nameOwnerSubscription;
+                    published = true;
+                }
+            }
+            catch
+            {
+                // nmcli snapshots remain available when the system bus is unavailable.
+            }
+            finally
+            {
+                if (!published)
+                {
+                    nameOwnerSubscription?.Dispose();
+                    networkManagerSubscription?.Dispose();
+                    connection?.Dispose();
+                }
+            }
+        }
+        finally
+        {
+            _initializeGate.Release();
+        }
+    }
+
+    private void ResetSubscriptions()
+    {
+        IDisposable? networkManagerSubscription;
+        IDisposable? nameOwnerSubscription;
+        DBusConnection? connection;
+        lock (_stateLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            networkManagerSubscription = _networkManagerSubscription;
+            _networkManagerSubscription = null;
+            nameOwnerSubscription = _nameOwnerSubscription;
+            _nameOwnerSubscription = null;
+            connection = _connection;
+            _connection = null;
+            _nextSubscriptionAttemptUtc = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        }
+
+        nameOwnerSubscription?.Dispose();
+        networkManagerSubscription?.Dispose();
+        connection?.Dispose();
+    }
+
+    private void Invalidate()
+    {
+        Interlocked.Exchange(ref _invalidated, 1);
+        lock (_stateLock)
+        {
+            if (_disposed || _callbackTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _callbackTask = RefreshAfterSignalAsync(_lifetime.Token);
+        }
+    }
+
+    private async Task RefreshAfterSignalAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(SignalCoalesceDelay, cancellationToken);
+            while (Interlocked.Exchange(ref _invalidated, 0) != 0)
+            {
+                await RefreshSnapshotAsync(cancellationToken);
+                if (Volatile.Read(ref _invalidated) != 0)
+                {
+                    await Task.Delay(SignalCoalesceDelay, cancellationToken);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Keep the previous snapshot after transient callback refresh failures.
+        }
+        finally
+        {
+            lock (_stateLock)
+            {
+                _callbackTask = null;
+                if (!_disposed && Volatile.Read(ref _invalidated) != 0)
+                {
+                    _callbackTask = RefreshAfterSignalAsync(_lifetime.Token);
+                }
+            }
+        }
+    }
+
+    private async Task RefreshSnapshotAsync(CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
+        try
+        {
+            var radioTask = CommandRunner.TryReadAsync(
+                "nmcli",
+                "radio wifi",
+                TimeSpan.FromMilliseconds(800),
+                cancellationToken);
+            var devicesTask = CommandRunner.TryReadAsync(
+                "nmcli",
+                "-t -f DEVICE,TYPE,STATE,CONNECTION device",
+                TimeSpan.FromMilliseconds(800),
+                cancellationToken);
+            await Task.WhenAll(radioTask, devicesTask);
+
+            var radioOutput = await radioTask;
+            var output = await devicesTask;
+            var wifiAvailable = radioOutput is not null;
+            var wifiEnabled = radioOutput?.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase) == true;
+
+            var snapshot = new NetworkSnapshot(wifiAvailable, wifiEnabled, false, "", "", "", [], null);
+
+            if (!string.IsNullOrWhiteSpace(output))
+            {
+                foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var parts = line.Split(':');
+                    if (parts.Length < 4)
+                    {
+                        continue;
+                    }
+
+                    var device = parts[0];
+                    var type = parts[1];
+                    var stateName = parts[2];
+                    var connection = parts[3];
+
+                    if (stateName != "connected" || string.IsNullOrWhiteSpace(connection))
+                    {
+                        continue;
+                    }
+
+                    var wifiSignal = type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
+                        ? await ReadWifiSignalAsync(device, cancellationToken)
+                        : null;
+
+                    snapshot = new NetworkSnapshot(
+                        wifiAvailable,
+                        wifiEnabled,
+                        true,
+                        device,
+                        type,
+                        connection,
+                        ReadIpAddresses(device),
+                        wifiSignal);
+
+                    break;
+                }
+            }
+
+            Snapshot = snapshot;
+            lock (_stateLock)
+            {
+                _hasSnapshot = true;
+            }
+        }
+        finally
+        {
+            _refreshGate.Release();
+        }
     }
 
     internal Task SetWifiEnabledAsync(bool enabled) =>
@@ -196,6 +442,47 @@ internal sealed class NetworkModuleService : IBarDataService
         }
 
         return null;
+    }
+
+    public void Dispose()
+    {
+        Task? callbackTask;
+        IDisposable? networkManagerSubscription;
+        IDisposable? nameOwnerSubscription;
+        DBusConnection? connection;
+        lock (_stateLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            callbackTask = _callbackTask;
+            _callbackTask = null;
+            networkManagerSubscription = _networkManagerSubscription;
+            _networkManagerSubscription = null;
+            nameOwnerSubscription = _nameOwnerSubscription;
+            _nameOwnerSubscription = null;
+            connection = _connection;
+            _connection = null;
+        }
+
+        _lifetime.Cancel();
+        nameOwnerSubscription?.Dispose();
+        networkManagerSubscription?.Dispose();
+        connection?.Dispose();
+        try
+        {
+            callbackTask?.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _lifetime.Dispose();
+        }
     }
 
     private static IReadOnlyList<string> ReadIpAddresses(string device)

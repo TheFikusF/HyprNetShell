@@ -11,6 +11,8 @@ namespace HyprNetShell.Core.Features.System;
 internal sealed class DisplayControlsModuleService : IBarDataService
 {
     private const int DEFAULT_TEMPERATURE = 6000;
+    private static readonly TimeSpan BacklightRefreshInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TemperatureRecoveryInterval = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim HyprsunsetLock = new(1, 1);
     private readonly object _curveLock = new();
     private readonly object _temperatureQueueLock = new();
@@ -25,7 +27,11 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private bool? _hyprsunsetInstalled;
     private int _temperature = DEFAULT_TEMPERATURE;
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
-    public DisplayControlsSnapshot Snapshot { get; private set; } = DisplayControlsSnapshot.Empty;
+    private DateTime _nextBacklightRefreshUtc = DateTime.MinValue;
+    private DateTime _nextTemperatureRecoveryUtc = DateTime.MinValue;
+    private DisplayControlsSnapshot _snapshot = DisplayControlsSnapshot.Empty;
+
+    public DisplayControlsSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
     public DisplayControlsModuleService(IHyprctl hyprctl)
     {
@@ -51,22 +57,9 @@ internal sealed class DisplayControlsModuleService : IBarDataService
 
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
-        var temperature = await _hyprctl.GetColorTemperatureAsync(cancellationToken);
-        var running = temperature.HasValue;
-        if (running)
-        {
-            _hyprsunsetInstalled = true;
-            _temperature = temperature!.Value;
-        }
-        else if (!_hyprsunsetInstalled.HasValue)
-        {
-            var version = await CommandRunner.TryReadAsync(
-                "hyprsunset",
-                "--version",
-                TimeSpan.FromMilliseconds(500),
-                cancellationToken);
-            _hyprsunsetInstalled = !string.IsNullOrWhiteSpace(version);
-        }
+        var utcNow = DateTime.UtcNow;
+        var refreshBacklights = utcNow >= _nextBacklightRefreshUtc;
+        var recoverTemperature = utcNow >= _nextTemperatureRecoveryUtc;
 
         bool automaticTemperatureEnabled;
         lock (_curveLock)
@@ -74,7 +67,36 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             automaticTemperatureEnabled = _automaticTemperatureEnabled;
         }
 
-        if (_hyprsunsetInstalled == true && automaticTemperatureEnabled && DateTime.Now >= _nextTemperatureUpdate)
+        var updateAutomaticTemperature = automaticTemperatureEnabled && DateTime.Now >= _nextTemperatureUpdate;
+        if (!refreshBacklights && !recoverTemperature && !updateAutomaticTemperature)
+        {
+            return;
+        }
+
+        var current = Snapshot;
+        var running = current.HyprsunsetRunning;
+        if (recoverTemperature)
+        {
+            _nextTemperatureRecoveryUtc = utcNow + TemperatureRecoveryInterval;
+            var temperature = await _hyprctl.GetColorTemperatureAsync(cancellationToken);
+            running = temperature.HasValue;
+            if (temperature.HasValue)
+            {
+                _hyprsunsetInstalled = true;
+                _temperature = temperature.Value;
+            }
+            else if (!_hyprsunsetInstalled.HasValue)
+            {
+                var version = await CommandRunner.TryReadAsync(
+                    "hyprsunset",
+                    "--version",
+                    TimeSpan.FromMilliseconds(500),
+                    cancellationToken);
+                _hyprsunsetInstalled = !string.IsNullOrWhiteSpace(version);
+            }
+        }
+
+        if (_hyprsunsetInstalled == true && updateAutomaticTemperature)
         {
             TemperatureCurvePoint[] curve;
             lock (_curveLock)
@@ -85,7 +107,17 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             var now = DateTime.Now;
             _temperature = TemperatureCurveMath.Evaluate(curve, now.Hour + now.Minute / 60.0f);
             await SetTemperatureAsync(_temperature);
+            running = Snapshot.HyprsunsetRunning;
             _nextTemperatureUpdate = now.AddMinutes(5);
+        }
+
+        BacklightSnapshot? display = current.Display;
+        BacklightSnapshot? keyboard = current.Keyboard;
+        if (refreshBacklights)
+        {
+            _nextBacklightRefreshUtc = utcNow + BacklightRefreshInterval;
+            display = ReadBacklight("/sys/class/backlight");
+            keyboard = ReadBacklight("/sys/class/leds", IsKeyboardBacklight);
         }
 
         TemperatureCurvePoint[] snapshotCurve;
@@ -94,14 +126,14 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             snapshotCurve = [.._temperatureCurve];
         }
 
-        Snapshot = new DisplayControlsSnapshot(
-            ReadBacklight("/sys/class/backlight"),
-            ReadBacklight("/sys/class/leds", IsKeyboardBacklight),
+        Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
+            display,
+            keyboard,
             _hyprsunsetInstalled == true,
             running,
             _temperature,
             snapshotCurve,
-            automaticTemperatureEnabled);
+            automaticTemperatureEnabled));
     }
 
     internal void SetCurvePoint(int index, float hour, int temperatureKelvin)
@@ -162,6 +194,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             CancellationToken.None);
         if (result is not null)
         {
+            PublishBacklightValue(backlight, value);
             return;
         }
 
@@ -170,6 +203,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             await File.WriteAllTextAsync(
                 Path.Combine(backlight.DevicePath, "brightness"),
                 value.ToString(CultureInfo.InvariantCulture));
+            PublishBacklightValue(backlight, value);
         }
         catch
         {
@@ -185,16 +219,41 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         {
             if (await _hyprctl.SetColorTemperatureAsync(temperatureKelvin))
             {
+                PublishTemperature(temperatureKelvin, running: true);
                 return;
             }
 
-            StartHyprsunset(temperatureKelvin);
-            await Task.Delay(150);
+            if (StartHyprsunset(temperatureKelvin))
+            {
+                PublishTemperature(temperatureKelvin, running: true);
+                await Task.Delay(150);
+            }
         }
         finally
         {
             HyprsunsetLock.Release();
         }
+    }
+
+    private void PublishBacklightValue(BacklightSnapshot backlight, int value)
+    {
+        var current = Snapshot;
+        var updated = backlight with { Value = value };
+        Volatile.Write(ref _snapshot, string.Equals(current.Display?.DevicePath, backlight.DevicePath, StringComparison.Ordinal)
+            ? current with { Display = updated }
+            : current with { Keyboard = updated });
+    }
+
+    private void PublishTemperature(int temperatureKelvin, bool running)
+    {
+        _temperature = temperatureKelvin;
+        var current = Snapshot;
+        Volatile.Write(ref _snapshot, current with
+        {
+            HyprsunsetInstalled = true,
+            HyprsunsetRunning = running,
+            TemperatureKelvin = temperatureKelvin,
+        });
     }
 
     private static BacklightSnapshot? ReadBacklight(
@@ -417,7 +476,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         return Path.Combine(configRoot, "hyprnetshell", "temperature-curve.json");
     }
 
-    private static void StartHyprsunset(int temperatureKelvin)
+    private static bool StartHyprsunset(int temperatureKelvin)
     {
         try
         {
@@ -429,11 +488,12 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             };
             startInfo.ArgumentList.Add("--temperature");
             startInfo.ArgumentList.Add(temperatureKelvin.ToString(CultureInfo.InvariantCulture));
-            Process.Start(startInfo)?.Dispose();
+            using var process = Process.Start(startInfo);
+            return process is not null;
         }
         catch
         {
-            // The popup keeps the control marked unavailable if startup fails.
+            return false;
         }
     }
 }

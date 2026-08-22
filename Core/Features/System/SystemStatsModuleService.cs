@@ -8,6 +8,8 @@ namespace HyprNetShell.Core.Features.System;
 internal sealed class SystemStatsModuleService : IBarDataService
 {
     private const int HISTORY_CAPACITY = 56;
+    private static readonly TimeSpan SAMPLE_INTERVAL = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan GPU_COMMAND_INTERVAL = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DISK_CACHE_INTERVAL = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DISK_RETRY_INTERVAL = TimeSpan.FromSeconds(5);
 
@@ -15,6 +17,10 @@ internal sealed class SystemStatsModuleService : IBarDataService
     private NetworkSample? _previousNetworkSample;
     private string? _gpuUtilizationPath;
     private bool _gpuUtilizationPathSearched;
+    private bool _gpuCommandAttempted;
+    private int? _cachedGpuPercent;
+    private long _lastSampleTimestamp;
+    private long _lastGpuCommandTimestamp;
     private readonly Queue<float> _cpuHistory = new(HISTORY_CAPACITY);
     private readonly Queue<float> _gpuHistory = new(HISTORY_CAPACITY);
     private readonly Queue<float> _ramHistory = new(HISTORY_CAPACITY);
@@ -29,6 +35,14 @@ internal sealed class SystemStatsModuleService : IBarDataService
 
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
+        var now = Stopwatch.GetTimestamp();
+        if (_lastSampleTimestamp != 0 &&
+            Stopwatch.GetElapsedTime(_lastSampleTimestamp, now) < SAMPLE_INTERVAL)
+        {
+            return;
+        }
+
+        _lastSampleTimestamp = now;
         var cpuPercent = ReadCpuPercent();
         var gpuPercent = await ReadGpuPercentAsync(cancellationToken);
         var (ramPercent, swapPercent) = ReadMemoryPercentages();
@@ -209,7 +223,8 @@ internal sealed class SystemStatsModuleService : IBarDataService
             {
                 if (int.TryParse((await File.ReadAllTextAsync(_gpuUtilizationPath, cancellationToken)).Trim(), out var percent))
                 {
-                    return ClampPercent(percent);
+                    _cachedGpuPercent = ClampPercent(percent);
+                    return _cachedGpuPercent;
                 }
             }
             catch
@@ -218,6 +233,15 @@ internal sealed class SystemStatsModuleService : IBarDataService
             }
         }
 
+        var now = Stopwatch.GetTimestamp();
+        if (_gpuCommandAttempted &&
+            Stopwatch.GetElapsedTime(_lastGpuCommandTimestamp, now) < GPU_COMMAND_INTERVAL)
+        {
+            return _cachedGpuPercent;
+        }
+
+        _gpuCommandAttempted = true;
+        _lastGpuCommandTimestamp = now;
         var output = await CommandRunner.TryReadAsync(
             "nvidia-smi",
             "--query-gpu=utilization.gpu --format=csv,noheader,nounits",
@@ -225,7 +249,12 @@ internal sealed class SystemStatsModuleService : IBarDataService
             cancellationToken);
         var firstLine = output?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault();
-        return int.TryParse(firstLine, out var gpuPercent) ? ClampPercent(gpuPercent) : null;
+        if (int.TryParse(firstLine, out var gpuPercent))
+        {
+            _cachedGpuPercent = ClampPercent(gpuPercent);
+        }
+
+        return _cachedGpuPercent;
     }
 
     private (long Download, long Upload) ReadNetworkRates()

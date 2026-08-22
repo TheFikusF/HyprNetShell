@@ -7,6 +7,9 @@ wayland_client = dependency('wayland-client')
 wayland_egl = dependency('wayland-egl')
 egl = dependency('egl')
 xkbcommon = dependency('xkbcommon')
+wireplumber = dependency('wireplumber-0.5', version: '>= 0.5.0', required: false)
+threads = dependency('threads')
+libm = cc.find_library('m', required: true)
 
 wayland_scanner = find_program('wayland-scanner')
 layer_shell_xml = files('protocols/wlr-layer-shell-unstable-v1.xml')
@@ -39,4 +42,13 @@ static_library(
   hypr_layer_sources,
   dependencies: hypr_layer_dependencies,
   include_directories: hypr_layer_include_directories,
-  install: true)
+  install: false)
+
+if wireplumber.found()
+  shared_library(
+    'hypr_audio',
+    ['hypr_audio.c'],
+    dependencies: [wireplumber, threads, libm],
+    include_directories: hypr_layer_include_directories,
+    install: false)
+endif

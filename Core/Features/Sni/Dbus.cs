@@ -9,6 +9,8 @@ internal static class Dbus
     public const string BUS_NAME = "org.freedesktop.DBus";
     public const string BUS_PATH = "/org/freedesktop/DBus";
     public const string BUS_INTERFACE = "org.freedesktop.DBus";
+    public const ObserverFlags CONNECTION_FAILURE_OBSERVER_FLAGS =
+        ObserverFlags.EmitOnConnectionClosed | ObserverFlags.EmitOnConnectionFailed;
 
     public static string SessionAddress =>
         Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS")

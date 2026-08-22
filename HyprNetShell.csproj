@@ -56,6 +56,10 @@
         <Exec Command="meson compile -C &quot;$(MSBuildProjectDirectory)/Native/build&quot;" />
     </Target>
 
+    <Target Name="CopyOptionalAudioNativeLibrary" AfterTargets="Publish" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')">
+        <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    </Target>
+
     <Target Name="RemovePublishDebugArtifacts" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
         <ItemGroup>
             <PublishDebugArtifact Include="$(PublishDir)*.pdb" />
@@ -68,6 +72,7 @@
     <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
         <ItemGroup>
             <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
+            <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')" />
         </ItemGroup>
 
         <Copy SourceFiles="@(HyprLayerNativeLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />

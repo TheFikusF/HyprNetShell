@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
@@ -9,11 +10,13 @@ namespace HyprNetShell.Core.Bar;
 
 public sealed class StatusBarServices : IDisposable
 {
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(700);
+    private static readonly TimeSpan FastSampleInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan TrayRefreshInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan AudioFallbackInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(15);
 
-    private readonly List<IBarDataService> _dataServices;
+    private readonly List<ScheduledService> _scheduledServices;
     private readonly CancellationTokenSource _lifetime = new();
-    private DateTime _lastRefresh = DateTime.MinValue;
     private Task? _refreshTask;
     private bool _disposed;
 
@@ -56,28 +59,43 @@ public sealed class StatusBarServices : IDisposable
         Tray = new SniTrayService();
         MainDialog = new MainDialog(ClipboardHistory, Hyprctl, Wallpapers, Theme.Default);
 
-        _dataServices =
+        _scheduledServices =
         [
-            Network,
-            Audio,
-            DisplayControls,
-            Bluetooth,
-            Battery,
-            SystemStats,
-            Tray,
+            new(Network, RecoveryInterval),
+            new(Audio, AudioFallbackInterval),
+            new(DisplayControls, FastSampleInterval),
+            new(Bluetooth, RecoveryInterval),
+            new(Battery, RecoveryInterval),
+            new(SystemStats, FastSampleInterval),
+            new(Tray, TrayRefreshInterval),
         ];
     }
 
     public void RefreshState()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_refreshTask is { IsCompleted: false } || DateTime.UtcNow - _lastRefresh < RefreshInterval)
+        if (_refreshTask is { IsCompleted: false })
         {
             return;
         }
 
-        _lastRefresh = DateTime.UtcNow;
-        _refreshTask = RefreshStateAsync(_lifetime.Token);
+        var now = Stopwatch.GetTimestamp();
+        List<IBarDataService>? dueServices = null;
+        foreach (var scheduled in _scheduledServices)
+        {
+            if (!scheduled.TrySchedule(now))
+            {
+                continue;
+            }
+
+            dueServices ??= new List<IBarDataService>(_scheduledServices.Count);
+            dueServices.Add(scheduled.Service);
+        }
+
+        if (dueServices is not null)
+        {
+            _refreshTask = RefreshStateAsync(dueServices, _lifetime.Token);
+        }
     }
 
     public bool ConsumeLauncherToggleRequested()
@@ -86,13 +104,21 @@ public sealed class StatusBarServices : IDisposable
         return SuperKey.ConsumeLauncherToggleRequested();
     }
 
-    private async Task RefreshStateAsync(CancellationToken cancellationToken)
+    private static async Task RefreshStateAsync(
+        IReadOnlyList<IBarDataService> services,
+        CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(2));
         try
         {
-            await Task.WhenAll(_dataServices.Select(service => service.RefreshAsync(timeout.Token).AsTask()));
+            var refreshTasks = new Task[services.Count];
+            for (var index = 0; index < services.Count; index++)
+            {
+                refreshTasks[index] = services[index].RefreshAsync(timeout.Token).AsTask();
+            }
+
+            await Task.WhenAll(refreshTasks);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
@@ -104,6 +130,29 @@ public sealed class StatusBarServices : IDisposable
         catch (Exception exception)
         {
             AppLogger.Warning("StatusBar", "Could not refresh bar services; keeping their previous state", exception);
+        }
+    }
+
+    private sealed class ScheduledService(IBarDataService service, TimeSpan interval)
+    {
+        private readonly long _intervalTicks = Math.Max(
+            1,
+            (long)Math.Ceiling(interval.TotalSeconds * Stopwatch.Frequency));
+        private long _nextRefreshTimestamp;
+
+        public IBarDataService Service { get; } = service;
+
+        public bool TrySchedule(long timestamp)
+        {
+            if (timestamp < _nextRefreshTimestamp)
+            {
+                return false;
+            }
+
+            _nextRefreshTimestamp = timestamp > long.MaxValue - _intervalTicks
+                ? long.MaxValue
+                : timestamp + _intervalTicks;
+            return true;
         }
     }
 
@@ -132,6 +181,10 @@ public sealed class StatusBarServices : IDisposable
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();
+        Battery.Dispose();
+        Bluetooth.Dispose();
+        Audio.Dispose();
+        Network.Dispose();
         Wallpapers.Dispose();
         SuperKey.Dispose();
         Notifications.Dispose();
