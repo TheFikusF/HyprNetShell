@@ -48,6 +48,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
 
     internal MainDialog(
         ClipboardHistoryService clipboardHistory,
+        HistoryStore history,
         IHyprctl hyprctl,
         WallpaperModuleService wallpapers,
         Action closeDialog,
@@ -61,7 +62,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
             new Tab(new CalculatorTab()),
             new Tab(new ClipboardManagerTab(clipboardHistory, closeDialog, theme)),
             new Tab(new WallpapersTab(wallpapers, closeDialog, theme)),
-            new Tab(new ConfigurationTab(wallpapers, theme)),
+            new Tab(new ConfigurationTab(wallpapers, history, theme)),
         ];
 
         _actions = new Dictionary<DialogKey, Action>

@@ -103,6 +103,12 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/clipboard.svg")]
     public static partial SvgAsset Clipboard { get; }
 
+    [SvgAsset("assets/icons/lucide/pin.svg")]
+    public static partial SvgAsset Pin { get; }
+
+    [SvgAsset("assets/icons/lucide/pin-off.svg")]
+    public static partial SvgAsset PinOff { get; }
+
     [SvgAsset("assets/icons/lucide/wallpaper.svg")]
     public static partial SvgAsset Wallpaper { get; }
 

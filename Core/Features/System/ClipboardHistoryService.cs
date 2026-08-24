@@ -8,7 +8,6 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class ClipboardHistoryService : IDisposable
 {
-    private const int MAX_ENTRIES = 100;
     private const int MAX_ENTRY_BYTES = 64 * 1024 * 1024;
     private const int MAX_HISTORY_BYTES = 256 * 1024 * 1024;
 
@@ -23,6 +22,7 @@ internal sealed class ClipboardHistoryService : IDisposable
     ];
 
     private readonly Lock _gate = new();
+    private readonly HistoryStore _history;
     private readonly List<ClipboardHistoryEntry> _entries = [];
     private readonly CancellationTokenSource _disposeCancellation = new();
     private readonly Task _watchTask;
@@ -31,8 +31,11 @@ internal sealed class ClipboardHistoryService : IDisposable
 
     public int Version => Volatile.Read(ref _version);
 
-    public ClipboardHistoryService()
+    public ClipboardHistoryService(HistoryStore history)
     {
+        _history = history;
+        _entries.AddRange(history.LoadClipboardEntries());
+        _history.LimitsChanged += ApplyHistoryLimit;
         _watchTask = Task.Run(() => WatchAsync(_disposeCancellation.Token));
     }
 
@@ -41,6 +44,30 @@ internal sealed class ClipboardHistoryService : IDisposable
         lock (_gate)
         {
             return _entries.ToArray();
+        }
+    }
+
+    public void TogglePinned(ClipboardHistoryEntry entry)
+    {
+        lock (_gate)
+        {
+            var index = _entries.FindIndex(candidate =>
+                candidate.Hash == entry.Hash &&
+                candidate.MimeType.Equals(entry.MimeType, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                return;
+            }
+
+            var updated = _entries[index] with { IsPinned = !_entries[index].IsPinned };
+            _history.SetClipboardPinned(updated.MimeType, updated.Hash, updated.IsPinned);
+            _entries[index] = updated;
+            _entries.Sort(static (left, right) =>
+            {
+                var pinned = right.IsPinned.CompareTo(left.IsPinned);
+                return pinned != 0 ? pinned : right.CapturedAt.CompareTo(left.CapturedAt);
+            });
+            Interlocked.Increment(ref _version);
         }
     }
 
@@ -168,11 +195,12 @@ internal sealed class ClipboardHistoryService : IDisposable
 
     private void AddEntry(string mimeType, byte[] data)
     {
+        mimeType = mimeType.ToLowerInvariant();
         var isImage = mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
         var hash = Convert.ToHexString(SHA256.HashData(data));
         var preview = isImage ? ImagePreview(mimeType, data.Length) : TextPreview(data);
         var image = isImage ? new EncodedImageData(mimeType, data) : null;
-        var entry = new ClipboardHistoryEntry(mimeType, data, preview, image, hash);
+        var entry = new ClipboardHistoryEntry(0, mimeType, data, preview, image, hash, false, DateTime.UtcNow);
 
         lock (_gate)
         {
@@ -185,13 +213,19 @@ internal sealed class ClipboardHistoryService : IDisposable
                     return;
                 }
 
-                entry = _entries[existingIndex];
+                entry = entry with
+                {
+                    Id = _entries[existingIndex].Id,
+                    IsPinned = _entries[existingIndex].IsPinned,
+                };
                 _entries.RemoveAt(existingIndex);
             }
 
-            _entries.Insert(0, entry);
+            var insertionIndex = entry.IsPinned ? 0 : _entries.FindLastIndex(candidate => candidate.IsPinned) + 1;
+            _entries.Insert(insertionIndex, entry);
+            _history.SaveClipboardEntry(entry);
             var storedBytes = _entries.Sum(candidate => (long)candidate.Data.Length);
-            while (_entries.Count > MAX_ENTRIES || storedBytes > MAX_HISTORY_BYTES)
+            while (_entries.Count > _history.ClipboardLimit || storedBytes > MAX_HISTORY_BYTES)
             {
                 storedBytes -= _entries[^1].Data.Length;
                 _entries.RemoveAt(_entries.Count - 1);
@@ -347,8 +381,24 @@ internal sealed class ClipboardHistoryService : IDisposable
         }
     }
 
+    private void ApplyHistoryLimit()
+    {
+        lock (_gate)
+        {
+            var storedBytes = _entries.Sum(candidate => (long)candidate.Data.Length);
+            while (_entries.Count > _history.ClipboardLimit || storedBytes > MAX_HISTORY_BYTES)
+            {
+                storedBytes -= _entries[^1].Data.Length;
+                _entries.RemoveAt(_entries.Count - 1);
+            }
+
+            Interlocked.Increment(ref _version);
+        }
+    }
+
     public void Dispose()
     {
+        _history.LimitsChanged -= ApplyHistoryLimit;
         _disposeCancellation.Cancel();
         lock (_gate)
         {
@@ -370,8 +420,11 @@ internal sealed class ClipboardHistoryService : IDisposable
 }
 
 internal sealed record ClipboardHistoryEntry(
+    long Id,
     string MimeType,
     byte[] Data,
     string Preview,
     EncodedImageData? Image,
-    string Hash);
+    string Hash,
+    bool IsPinned,
+    DateTime CapturedAt);

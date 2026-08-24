@@ -11,17 +11,40 @@ namespace HyprNetShell.Core.Bar;
 
 public sealed class StatusBarServices : IDisposable
 {
+    private sealed class ScheduledService(IBarDataService service, TimeSpan interval)
+    {
+        private readonly long _intervalTicks = Math.Max(1, (long)Math.Ceiling(interval.TotalSeconds * Stopwatch.Frequency));
+        private long _nextRefreshTimestamp;
+
+        public IBarDataService Service { get; } = service;
+
+        public bool TrySchedule(long timestamp)
+        {
+            if (timestamp < _nextRefreshTimestamp)
+            {
+                return false;
+            }
+
+            _nextRefreshTimestamp = timestamp > long.MaxValue - _intervalTicks
+                ? long.MaxValue
+                : timestamp + _intervalTicks;
+
+            return true;
+        }
+    }
+
     private static readonly TimeSpan FastSampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan TrayRefreshInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan AudioFallbackInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(15);
 
-    private readonly List<ScheduledService> _scheduledServices;
+    private readonly IReadOnlyCollection<ScheduledService> _scheduledServices;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<IBarDataService> _dueServicesBuffer = [];
     private Task? _refreshTask;
     private bool _disposed;
 
+    internal HistoryStore History { get; }
     internal IHyprctl Hyprctl { get; }
     internal HyprlandService Hyprland { get; }
     internal KeyStateService SuperKey { get; }
@@ -45,9 +68,10 @@ public sealed class StatusBarServices : IDisposable
 
     public StatusBarServices()
     {
+        History = new HistoryStore();
         Hyprctl = new Hyprctl();
         Hyprland = new HyprlandService();
-        Notifications = new NotificationService(Hyprland, Hyprctl);
+        Notifications = new NotificationService(Hyprland, Hyprctl, History);
         SuperKey = new KeyStateService(Hyprctl);
         DisplayControls = new DisplayControlsModuleService(Hyprctl);
         Wallpapers = new WallpaperModuleService(Hyprctl);
@@ -58,10 +82,10 @@ public sealed class StatusBarServices : IDisposable
         SystemStats = new SystemStatsModuleService();
         Weather = new WeatherWidget(Theme.Default);
         Music = new MusicModuleService();
-        ClipboardHistory = new ClipboardHistoryService();
+        ClipboardHistory = new ClipboardHistoryService(History);
         Tray = new SniTrayService();
 
-        Dialogs = new DialogService(ClipboardHistory, Hyprctl, Wallpapers, Network, Theme.Default);
+        Dialogs = new DialogService(this, Theme.Default);
 
         _scheduledServices =
         [
@@ -117,39 +141,13 @@ public sealed class StatusBarServices : IDisposable
 
             await Task.WhenAll(refreshTasks);
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                AppLogger.Warning("StatusBar", "Bar service refresh timed out; keeping existing service state");
-            }
+            AppLogger.Warning("StatusBar", "Bar service refresh timed out; keeping existing service state");
         }
         catch (Exception exception)
         {
             AppLogger.Warning("StatusBar", "Could not refresh bar services; keeping their previous state", exception);
-        }
-    }
-
-    private sealed class ScheduledService(IBarDataService service, TimeSpan interval)
-    {
-        private readonly long _intervalTicks = Math.Max(
-            1,
-            (long)Math.Ceiling(interval.TotalSeconds * Stopwatch.Frequency));
-        private long _nextRefreshTimestamp;
-
-        public IBarDataService Service { get; } = service;
-
-        public bool TrySchedule(long timestamp)
-        {
-            if (timestamp < _nextRefreshTimestamp)
-            {
-                return false;
-            }
-
-            _nextRefreshTimestamp = timestamp > long.MaxValue - _intervalTicks
-                ? long.MaxValue
-                : timestamp + _intervalTicks;
-            return true;
         }
     }
 
@@ -187,6 +185,7 @@ public sealed class StatusBarServices : IDisposable
         Notifications.Dispose();
         Hyprland.Dispose();
         Hyprctl.Dispose();
+        History.Dispose();
         _lifetime.Dispose();
     }
 }

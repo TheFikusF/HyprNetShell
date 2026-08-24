@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
@@ -25,6 +26,8 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
     private readonly DBusConnection _connection = new(Dbus.SessionAddress);
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
+    private readonly HistoryStore _history;
+    private readonly AppIconResolver _iconResolver = new();
     private readonly List<NotificationSnapshot> _items = [];
     private uint _nextId = 1;
     private bool _ownsName;
@@ -33,10 +36,25 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
     public string Path => OBJECT_PATH;
     public bool HandlesChildPaths => false;
 
-    public NotificationService(HyprlandService hyprland, IHyprctl hyprctl)
+    public NotificationService(HyprlandService hyprland, IHyprctl hyprctl, HistoryStore history)
     {
         _hyprland = hyprland;
         _hyprctl = hyprctl;
+        _history = history;
+        _items.AddRange(history.LoadNotifications().Select(item => new NotificationSnapshot(
+            item.RuntimeId,
+            item.Title,
+            item.Body,
+            item.AppName,
+            item.DesktopEntry,
+            item.IconName,
+            null,
+            item.Image,
+            [],
+            item.Resident,
+            item.ReceivedAt,
+            DateTime.MinValue)));
+        _history.LimitsChanged += ApplyHistoryLimit;
         // Claim the bus name before the bar starts drawing so notifications sent
         // during startup cannot race the embedded daemon initialization.
         StartAsync().GetAwaiter().GetResult();
@@ -165,6 +183,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             _items.Clear();
         }
 
+        _history.ClearNotifications();
         foreach (var id in ids)
         {
             EmitClosed(id, 2);
@@ -223,6 +242,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             iconName = desktopEntry;
         }
 
+        var historyImage = EncodeHistoryImage(imageData, iconName);
         var now = DateTime.UtcNow;
         uint id;
         lock (_gate)
@@ -239,6 +259,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
                 desktopEntry,
                 iconName,
                 imageData,
+                null,
                 actions,
                 BoolHint(hints, "resident"),
                 now,
@@ -250,10 +271,12 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             }
 
             _items.Insert(0, notification);
-            if (_items.Count > MAX_NOTIFICATIONS)
+            if (_items.Count > _history.NotificationLimit)
             {
-                _items.RemoveRange(MAX_NOTIFICATIONS, _items.Count - MAX_NOTIFICATIONS);
+                _items.RemoveRange(_history.NotificationLimit, _items.Count - _history.NotificationLimit);
             }
+
+            _history.SaveNotification(notification, historyImage);
         }
 
         using var writer = context.CreateReplyWriter("u");
@@ -286,6 +309,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
 
         if (removed)
         {
+            _history.DeleteNotification(id);
             EmitClosed(id, reason);
         }
     }
@@ -528,7 +552,67 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
     [GeneratedRegex("\\s+")]
     private static partial Regex WhitespaceRegex();
 
-    public void Dispose() => _connection.Dispose();
+    private EncodedImageData? EncodeHistoryImage(RawImageData? imageData, string iconName)
+    {
+        try
+        {
+            if (imageData is not null)
+            {
+                var encoded = ImageEncoding.EncodePng(imageData);
+                return encoded.Bytes.Length <= MAX_IMAGE_BYTES ? encoded : null;
+            }
+
+            if (string.IsNullOrWhiteSpace(iconName))
+            {
+                return null;
+            }
+
+            var path = _iconResolver.TryResolveIcon(iconName) ?? _iconResolver.TryResolve(iconName);
+            if (path is null)
+            {
+                return null;
+            }
+
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length <= 0 || file.Length > MAX_IMAGE_BYTES)
+            {
+                return null;
+            }
+
+            var mimeType = global::System.IO.Path.GetExtension(path).ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".webp" => "image/webp",
+                ".svg" => "image/svg+xml",
+                ".xpm" => "image/x-xpixmap",
+                _ => "application/octet-stream",
+            };
+            return new EncodedImageData(mimeType, File.ReadAllBytes(path));
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("Notifications", "Could not encode a notification image for history", exception);
+            return null;
+        }
+    }
+
+    private void ApplyHistoryLimit()
+    {
+        lock (_gate)
+        {
+            if (_items.Count > _history.NotificationLimit)
+            {
+                _items.RemoveRange(_history.NotificationLimit, _items.Count - _history.NotificationLimit);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _history.LimitsChanged -= ApplyHistoryLimit;
+        _connection.Dispose();
+    }
 
     private const string INTROSPECTION_XML = """
                                              <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">

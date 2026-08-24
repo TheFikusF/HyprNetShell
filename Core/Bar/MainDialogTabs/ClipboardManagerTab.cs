@@ -12,8 +12,19 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog, Theme theme)
     : IMainDialogTab
 {
+    private sealed class PinButtonState : ModulesCommon.BoxState
+    {
+        public float IconOpacity { get; set; }
+    }
+
+    private sealed class ClipboardButtonState : ModulesCommon.BoxState
+    {
+        public PinButtonState Pin { get; } = new();
+    }
+
     private const int FUZZY_SCORE_CUTOFF = 35;
-    private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
+    private const int PREVIEW_MAX_WIDTH = 700;
+    private readonly Dictionary<string, ClipboardButtonState> _buttonsState = new();
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -109,12 +120,19 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     private BoxNode BuildRow(ClipboardHistoryEntry entry, int index)
     {
         var selected = index == _selectedIndex;
-        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var stateKey = $"{entry.MimeType}\0{entry.Hash}";
+        var state = _buttonsState.GetState(stateKey, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
+            HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
             {
+                if (state.Pin.Hovered.Value)
+                {
+                    return;
+                }
+
                 _selectedIndex = index;
                 ActivateSelection();
             },
@@ -128,10 +146,63 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
             },
             Children =
             [
-                entry.Image is not null
-                    ? new ImageNode(entry.Image, 46, 46)
-                    : new ImageNode(Icons.Copy, 30, 30, theme.Text),
-                new TextNode(entry.Preview, 15, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 5),
+                new BoxNode
+                {
+                    VerticalAlignment = ItemsAlignment.Center,
+                    Style = new Style { Spacing = 14 },
+                    Children =
+                    [
+                        entry.Image is not null
+                            ? new ImageNode(entry.Image, 46, 46)
+                            : new ImageNode(Icons.Copy, 30, 30, theme.Text),
+                        new TextNode(entry.Preview, theme.TextSize, theme.Text,
+                            maxWidth: PREVIEW_MAX_WIDTH,
+                            wrapping: TextWrapping.Wrap,
+                            maxLines: 5),
+                    ],
+                },
+                BuildPinButton(entry, selected || state.Hovered.Value, state.Pin),
+            ],
+        };
+    }
+
+    private Node BuildPinButton(
+        ClipboardHistoryEntry entry,
+        bool active,
+        PinButtonState state)
+    {
+        var transparent = Color.White with { A = 0.0f };
+        var hover = Color.White with { A = 0.3f };
+        state.Background = Color.LerpSmooth(
+            state.Background,
+            state.Hovered.Value ? hover : transparent,
+            18.0f,
+            Renderer.DeltaTime);
+        state.IconOpacity = PrimitivesMath.LerpSmooth(
+            state.IconOpacity,
+            entry.IsPinned || active ? 1.0f : 0.0f,
+            18.0f,
+            Renderer.DeltaTime);
+
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = () => history.TogglePinned(entry),
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                Padding = 0,
+                BorderRadius = 8,
+                BorderWidth = 0,
+                ShadowColor = null,
+            },
+            Children =
+            [
+                new ImageNode(entry.IsPinned && active ? Icons.PinOff : Icons.Pin, 18, 18, theme.Text)
+                {
+                    Opacity = state.IconOpacity,
+                },
             ],
         };
     }
@@ -156,7 +227,8 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
             : _entries
                 .Select(entry => (Entry: entry, Score: Fuzz.WeightedRatio(_query, entry.Preview)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
-                .OrderByDescending(result => result.Score)
+                .OrderByDescending(result => result.Entry.IsPinned)
+                .ThenByDescending(result => result.Score)
                 .Select(result => result.Entry)
                 .ToArray();
         _firstIndex = 0;

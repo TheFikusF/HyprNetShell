@@ -18,6 +18,7 @@ public sealed record NotificationSnapshot(
     string DesktopEntry,
     string IconName,
     RawImageData? ImageData,
+    EncodedImageData? StoredImage,
     IReadOnlyList<NotificationActionSnapshot> Actions,
     bool Resident,
     DateTime ReceivedAt,

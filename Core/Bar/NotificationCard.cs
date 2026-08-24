@@ -78,7 +78,7 @@ internal static class NotificationCard
             Style = new Style { Spacing = 12 },
             Children =
             [
-                ..BuildIcon(notification.ImageData, iconPath, 32),
+                ..BuildIcon(notification.ImageData, notification.StoredImage, iconPath, 32),
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
@@ -161,11 +161,19 @@ internal static class NotificationCard
         };
     }
 
-    private static IEnumerable<Node> BuildIcon(RawImageData? imageData, string? iconPath, int size)
+    private static IEnumerable<Node> BuildIcon(
+        RawImageData? imageData,
+        EncodedImageData? storedImage,
+        string? iconPath,
+        int size)
     {
         if (imageData is not null)
         {
             yield return new ImageNode(imageData, size, size);
+        }
+        else if (storedImage is not null)
+        {
+            yield return new ImageNode(storedImage, size, size);
         }
         else if (!string.IsNullOrWhiteSpace(iconPath))
         {

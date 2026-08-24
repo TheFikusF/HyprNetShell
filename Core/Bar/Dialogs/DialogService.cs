@@ -47,15 +47,10 @@ public sealed class DialogService : IDisposable
     private WindowState? _activeWindow;
     private bool _disposed;
 
-    internal DialogService(
-        ClipboardHistoryService clipboardHistory,
-        IHyprctl hyprctl,
-        WallpaperModuleService wallpapers,
-        NetworkModuleService network,
-        Theme theme)
+    internal DialogService(StatusBarServices services, Theme theme)
     {
-        Register(new MainDialog(clipboardHistory, hyprctl, wallpapers, Close, theme));
-        Register(new WifiDialog(network, theme));
+        Register(new MainDialog(services.ClipboardHistory, services.History, services.Hyprctl, services.Wallpapers, Close, theme));
+        Register(new WifiDialog(services.Network, theme));
     }
 
     public bool IsOpen => _activeWindow?.IsOpen == true;
@@ -137,11 +132,9 @@ public sealed class DialogService : IDisposable
             return new SpacerNode();
         }
 
-        state.Opacity = PrimitivesMath.LerpSmooth(
-            state.Opacity,
-            state.IsOpen ? 1 : 0,
-            24.0f,
-            Renderer.DeltaTime);
+        state.Opacity = PrimitivesMath.LerpSmooth(state.Opacity, state.IsOpen ? 1 : 0,
+            24.0f, Renderer.DeltaTime);
+
         if (state.Opacity <= 0.1f)
         {
             return new SpacerNode();
