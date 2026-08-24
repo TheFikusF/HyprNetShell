@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
@@ -12,11 +13,13 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class NetworkModule(
     NetworkModuleService service,
+    DialogService dialogs,
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private static readonly TimeSpan WifiScanInterval = TimeSpan.FromSeconds(5);
 
+    private readonly ModulesCommon.BoxState _settingsState = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private IReadOnlyList<WifiNetworkSnapshot> _wifiNetworks = [];
     private DateTime _lastWifiScan = DateTime.MinValue;
@@ -96,14 +99,20 @@ internal sealed class NetworkModule(
         ]
     };
 
+    private void OpenWifiSettings()
+    {
+        _node.ClosePopup();
+        dialogs.Open<WifiDialog>();
+    }
+
     private BoxNode BuildWifiPowerRow(NetworkSnapshot network)
     {
         var enabled = EffectiveWifiEnabled(network);
+        _settingsState.UpdateColor(theme.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            OnClick = network.WifiAvailable ? () => SetWifiEnabled(network, !enabled) : null,
             Style = new Style()
             {
                 BorderRadius = 8,
@@ -111,13 +120,37 @@ internal sealed class NetworkModule(
             },
             Children =
             [
-                new BoxNode(48),
+                new BoxNode(48 + 8 + 20 + 8),
                 ModulesCommon.BuildTextWithIcon(theme, Icons.WifiStrength[^1], "Wi-Fi"),
-                new SwitchNode(enabled, _wifiSwitchAnimation)
+                new BoxNode(Style.Spacer, ItemsAlignment.Center, ItemsAlignment.Center)
                 {
-                    OffTrackColor = theme.Muted,
-                    OnTrackColor = theme.Active,
-                    KnobColor = theme.Text,
+                    new BoxNode()
+                    {
+                        HorizontalAlignment = ItemsAlignment.Spread,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        IsHovered = _settingsState.Hovered,
+                        OnClick = network.WifiAvailable ? OpenWifiSettings : null,
+                        Style = ModulesCommon.ModuleStyle(theme, _settingsState.Background) with
+                        {
+                            Padding = 4,
+                            BorderRadius = 8,
+                            BorderWidth = 0,
+                        },
+                        Children = [new ImageNode(Icons.Settings, 20, 20, theme.Text)]
+                    },
+                    new BoxNode()
+                    {
+                        OnClick = network.WifiAvailable ? () => SetWifiEnabled(network, !enabled) : null,
+                        Children =
+                        [
+                            new SwitchNode(enabled, _wifiSwitchAnimation)
+                            {
+                                OffTrackColor = theme.Muted,
+                                OnTrackColor = theme.Active,
+                                KnobColor = theme.Text,
+                            }
+                        ]
+                    }
                 },
             ],
         };
@@ -174,7 +207,7 @@ internal sealed class NetworkModule(
             IsHovered = state.Hovered,
             OnClick = wifi.Active || string.IsNullOrWhiteSpace(wifi.Ssid)
                 ? null
-                : () => service.ConnectWifi(wifi.Ssid),
+                : () => service.ConnectWifiAsync(wifi.Ssid, null, CancellationToken.None),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 Spacing = 12,
@@ -241,7 +274,7 @@ internal sealed class NetworkModule(
         _lastWifiScan = DateTime.UtcNow;
         _wifiScanTask = Task.Run(async () =>
         {
-            _wifiNetworks = await service.ScanWifiNetworksAsync();
+            _wifiNetworks = await service.ScanWifiNetworksAsync(CancellationToken.None);
         });
     }
 
@@ -271,7 +304,7 @@ internal sealed class NetworkModule(
         _wifiEnabledOverride = enabled;
         _wifiNetworks = [];
         _lastWifiScan = DateTime.MinValue;
-        _ = service.SetWifiEnabledAsync(enabled);
+        _ = service.SetWifiEnabledAsync(enabled, CancellationToken.None);
     }
 
     private static int WifiStrengthIndex(int? signal) => signal switch

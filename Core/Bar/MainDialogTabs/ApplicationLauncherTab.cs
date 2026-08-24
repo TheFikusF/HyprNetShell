@@ -71,7 +71,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
     {
         if (direction is SelectionDirection.Up or SelectionDirection.Down)
         {
-            MainDialogTabUi.MoveSelection(
+            BoundedListUi.MoveSelection(
                 ref _selectedIndex,
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
@@ -191,21 +191,21 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                     _filteredApplications.Count,
                     "No matching applications")),
             MainDialogTabUi.BuildInput(_query, "Type to search..."),
-            MainDialogTabUi.BuildScrollableResults(
+            BoundedListUi.BuildScrollableResults(
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
                     HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style { Spacing = 8 },
                     Children = _filteredApplications
-                        .Skip(_firstIndex)
-                        .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
-                        .Select((app, visibleIndex) => BuildRow(app, _firstIndex + visibleIndex))
+                        .VisibleItems(_firstIndex)
+                        .Select(item => BuildRow(item.Item, item.Index))
                         .ToArray(),
                 },
                 _firstIndex,
                 _filteredApplications.Count,
-                MainDialogTabUi.VISIBLE_ROW_COUNT),
+                BoundedListUi.DefaultVisibleItemCount,
+                theme),
         ],
     };
 

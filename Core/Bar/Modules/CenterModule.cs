@@ -104,7 +104,7 @@ internal sealed class CenterModule : IDrawableModule
         const int OVERLAY_CENTER_X = 80;
         const int OVERLAY_CENTER_Y = -38;
         var targetRotation = ClockTargetRotation(now);
-        _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, ModulesCommon.DELTA_TIME);
+        _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, Renderer.DeltaTime);
         return new BoxNode(CLOCK_SIZE + 6)
         {
             Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) / 2,

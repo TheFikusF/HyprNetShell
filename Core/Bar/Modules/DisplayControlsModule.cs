@@ -41,7 +41,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             : (int?)null;
 
         var color = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Orange, Color.White, 0.25f));
-        _iconRotation = PrimitivesMath.LerpSmooth(_iconRotation, _node.IsHovered ? MathF.PI * 4 : 0, 18.0f, ModulesCommon.DELTA_TIME);
+        _iconRotation = PrimitivesMath.LerpSmooth(_iconRotation, _node.IsHovered ? MathF.PI * 4 : 0, 18.0f, Renderer.DeltaTime);
         return new BoxNode(40)
         {
             Direction = Direction.Horizontal,

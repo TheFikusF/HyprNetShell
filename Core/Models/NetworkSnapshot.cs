@@ -17,4 +17,17 @@ public sealed record WifiNetworkSnapshot(
     string Ssid,
     int? Signal,
     string Security,
-    bool Active);
+    bool Active,
+    string? SavedConnectionName);
+
+internal readonly record struct WifiOperationResult(bool Success, string? Error)
+{
+    public static WifiOperationResult Succeeded { get; } = new(true, null);
+    public static WifiOperationResult Failed(string? error) => new(false, error);
+}
+
+internal readonly record struct WifiPasswordResult(bool Success, string? Password, string? Error)
+{
+    public static WifiPasswordResult Succeeded(string password) => new(true, password, null);
+    public static WifiPasswordResult Failed(string? error) => new(false, null, error);
+}

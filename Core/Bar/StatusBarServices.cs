@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
@@ -37,7 +38,7 @@ public sealed class StatusBarServices : IDisposable
     internal SystemStatsModuleService SystemStats { get; }
     internal WeatherWidget Weather { get; }
 
-    public MainDialog MainDialog { get; }
+    public DialogService Dialogs { get; }
 
     public string? FocusedMonitorName => Hyprland.Snapshot.MonitorWorkspaces
         .FirstOrDefault(monitor => monitor.Current)?.Name;
@@ -60,7 +61,7 @@ public sealed class StatusBarServices : IDisposable
         ClipboardHistory = new ClipboardHistoryService();
         Tray = new SniTrayService();
 
-        MainDialog = new MainDialog(ClipboardHistory, Hyprctl, Wallpapers, Theme.Default);
+        Dialogs = new DialogService(ClipboardHistory, Hyprctl, Wallpapers, Network, Theme.Default);
 
         _scheduledServices =
         [
@@ -173,7 +174,7 @@ public sealed class StatusBarServices : IDisposable
             AppLogger.Warning("StatusBar", "Bar service refresh did not stop cleanly", exception);
         }
 
-        MainDialog.Dispose();
+        Dialogs.Dispose();
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();

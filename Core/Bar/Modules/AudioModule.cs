@@ -139,16 +139,16 @@ internal sealed class AudioModule(
             animatedWidth,
             targetWidth,
             LABEL_ANIMATION_DECAY,
-            ModulesCommon.DELTA_TIME);
+            Renderer.DeltaTime);
         animatedSpacing = PrimitivesMath.LerpSmooth(
             animatedSpacing,
             targetSpacing,
             LABEL_ANIMATION_DECAY,
-            ModulesCommon.DELTA_TIME);
+            Renderer.DeltaTime);
         animatedColor = (animatedColor ?? hiddenColor).LerpSmooth(
             targetColor,
             LABEL_ANIMATION_DECAY,
-            ModulesCommon.DELTA_TIME);
+            Renderer.DeltaTime);
 
         if (MathF.Abs(animatedWidth - targetWidth) < 0.05f)
         {
@@ -257,7 +257,7 @@ internal sealed class AudioModule(
             _noteFieldOpacity,
             hovered ? 1.0f : 0.0f,
             14.0f,
-            ModulesCommon.DELTA_TIME);
+            Renderer.DeltaTime);
 
         if (_noteFieldOpacity < 0.01f || _notes.Count == 0)
         {

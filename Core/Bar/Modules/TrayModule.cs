@@ -3,6 +3,7 @@ using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
@@ -88,7 +89,7 @@ internal sealed class TrayModule(
 
         var state = _rowStates.GetState(item.Id + ":" + (row.ActionId?.ToString() ?? row.Label), theme.Panel);
         var target = state.Hovered && row.Enabled ? Color.Lighten(theme.Panel, 0.12f) : theme.Panel;
-        state.Background = Color.LerpSmooth(state.Background, target, 18, ModulesCommon.DELTA_TIME);
+        state.Background = Color.LerpSmooth(state.Background, target, 18, Renderer.DeltaTime);
 
         return new BoxNode(height: 30)
         {

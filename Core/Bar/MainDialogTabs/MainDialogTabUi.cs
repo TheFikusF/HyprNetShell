@@ -8,7 +8,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal static class MainDialogTabUi
 {
-    public const int VISIBLE_ROW_COUNT = 7;
+
 
     public static Node BuildSectionHeader(string title, string status) => new BoxNode
     {
@@ -36,35 +36,7 @@ internal static class MainDialogTabUi
         ],
     };
 
-    public static Node BuildScrollableResults(
-        BoxNode content,
-        int firstItem,
-        int totalItems,
-        int visibleItems)
-    {
-        if (totalItems <= visibleItems)
-        {
-            return content;
-        }
 
-        return new BoxNode
-        {
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Start,
-            Style = new Style { Spacing = 8 },
-            Children =
-            [
-                content,
-                new ScrollbarNode(
-                    content.Height,
-                    firstItem,
-                    totalItems,
-                    visibleItems,
-                    Theme.Default.Panel,
-                    Theme.Default.Muted),
-            ],
-        };
-    }
 
     public static string ResultCount(int selectedIndex, int count, string emptyText) =>
         count == 0 ? emptyText : $"{selectedIndex + 1} / {count}";
@@ -78,21 +50,5 @@ internal static class MainDialogTabUi
     public static string Trim(string value, int maximumLength) =>
         value.Length <= maximumLength ? value : value[..(maximumLength - 3)] + "...";
 
-    public static void MoveSelection(ref int selectedIndex, ref int firstIndex, int direction, int itemCount)
-    {
-        if (itemCount == 0)
-        {
-            return;
-        }
 
-        selectedIndex = (itemCount + selectedIndex + direction) % (itemCount);
-        if (selectedIndex < firstIndex)
-        {
-            firstIndex = selectedIndex;
-        }
-        else if (selectedIndex >= firstIndex + VISIBLE_ROW_COUNT)
-        {
-            firstIndex = selectedIndex - VISIBLE_ROW_COUNT + 1;
-        }
-    }
 }

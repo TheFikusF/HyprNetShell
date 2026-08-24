@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
@@ -9,18 +10,17 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar;
 
-public sealed class MainDialog : IDrawableModule, IDisposable
+internal sealed class MainDialog : IDialogWindow, IDisposable
 {
     private class Tab : IMainDialogTab
     {
         private readonly IMainDialogTab _tab;
-        public ModulesCommon.BoxState BoxState { get; }
+        public ModulesCommon.BoxState BoxState { get; } = new();
         public IMainDialogTab InternalTab => _tab;
 
         public Tab(IMainDialogTab tab)
         {
             _tab = tab;
-            BoxState = new();
         }
 
         public string Title => _tab.Title;
@@ -39,112 +39,87 @@ public sealed class MainDialog : IDrawableModule, IDisposable
         public Node Draw() => _tab.Draw();
     }
 
-    private const int KEY_ESCAPE = 1;
-    private const int KEY_BACKSPACE = 14;
-    private const int KEY_TAB = 15;
-    private const int KEY_ENTER = 28;
-    private const int KEY_UP = 103;
-    private const int KEY_LEFT = 105;
-    private const int KEY_RIGHT = 106;
-    private const int KEY_DOWN = 108;
-
     private readonly Tab[] _tabs;
     private readonly Theme _theme;
-
-    private float _opacity;
-
-    private readonly IReadOnlyDictionary<int, Action> _actions;
+    private readonly IReadOnlyDictionary<DialogKey, Action> _actions;
 
     private int _activeTabIndex;
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex];
-
-    public bool IsOpen { get; private set; }
-    public bool IsVisible => IsOpen || _opacity > 0.1f;
 
     internal MainDialog(
         ClipboardHistoryService clipboardHistory,
         IHyprctl hyprctl,
         WallpaperModuleService wallpapers,
+        Action closeDialog,
         Theme theme)
     {
         _theme = theme;
 
         _tabs =
         [
-            new Tab(new ApplicationLauncherTab(hyprctl, Close, theme)),
+            new Tab(new ApplicationLauncherTab(hyprctl, closeDialog, theme)),
             new Tab(new CalculatorTab()),
-            new Tab(new ClipboardManagerTab(clipboardHistory, Close, theme)),
-            new Tab(new WallpapersTab(wallpapers, Close, theme)),
+            new Tab(new ClipboardManagerTab(clipboardHistory, closeDialog, theme)),
+            new Tab(new WallpapersTab(wallpapers, closeDialog, theme)),
             new Tab(new ConfigurationTab(wallpapers, theme)),
         ];
 
-        _actions = new Dictionary<int, Action>
+        _actions = new Dictionary<DialogKey, Action>
         {
-            [KEY_ESCAPE] = Close,
-            [KEY_BACKSPACE] = () => ActiveTab.HandleBackspace(),
-            [KEY_ENTER] = () => ActiveTab.ActivateSelection(),
-            [KEY_TAB] = () => SelectTab((_activeTabIndex + 1) % _tabs.Length),
-            [KEY_UP] = () => ActiveTab.MoveSelection(SelectionDirection.Up),
-            [KEY_LEFT] = () => ActiveTab.MoveSelection(SelectionDirection.Left),
-            [KEY_RIGHT] = () => ActiveTab.MoveSelection(SelectionDirection.Right),
-            [KEY_DOWN] = () => ActiveTab.MoveSelection(SelectionDirection.Down),
+            [DialogKey.Backspace] = () => ActiveTab.HandleBackspace(),
+            [DialogKey.Enter] = () => ActiveTab.ActivateSelection(),
+            [DialogKey.Tab] = () => SelectTab((_activeTabIndex + 1) % _tabs.Length),
+            [DialogKey.Up] = () => ActiveTab.MoveSelection(SelectionDirection.Up),
+            [DialogKey.Left] = () => ActiveTab.MoveSelection(SelectionDirection.Left),
+            [DialogKey.Right] = () => ActiveTab.MoveSelection(SelectionDirection.Right),
+            [DialogKey.Down] = () => ActiveTab.MoveSelection(SelectionDirection.Down),
         };
     }
 
-    public void Toggle()
-    {
-        Action action = IsOpen ? Close : Open;
-        action();
-    }
-
-    public void Open()
+    public void OnOpened()
     {
         _activeTabIndex = 0;
         ActiveTab.Activate();
-        IsOpen = true;
     }
 
-    public void Close() => IsOpen = false;
-
-    public void HandleInput(int pressedKey, string textInput, float scrollDelta)
+    public void OnClosed()
     {
-        if (!IsOpen)
+    }
+
+    public DialogInputResult HandleInput(DialogInput input)
+    {
+        if (input.Key == DialogKey.Escape)
         {
-            return;
+            return DialogInputResult.Close;
         }
 
-        if (_actions.TryGetValue(pressedKey, out var action))
+        if (_actions.TryGetValue(input.Key, out var action))
         {
             action();
-            return;
+            return DialogInputResult.None;
         }
 
-        if (!string.IsNullOrEmpty(textInput))
+        if (!string.IsNullOrEmpty(input.Text))
         {
-            ActiveTab.HandleTextInput(textInput);
+            ActiveTab.HandleTextInput(input.Text);
         }
 
-        if (scrollDelta != 0)
+        if (input.ScrollDelta != 0)
         {
-            ActiveTab.MoveSelection(scrollDelta > 0 ? SelectionDirection.Down : SelectionDirection.Up);
+            ActiveTab.MoveSelection(input.ScrollDelta > 0 ? SelectionDirection.Down : SelectionDirection.Up);
         }
+
+        return DialogInputResult.None;
     }
 
-    public Node Draw()
+    public Node Draw() => new BoxNode(900)
     {
-        _opacity = PrimitivesMath.LerpSmooth(_opacity, IsOpen ? 1 : 0, 24.0f, ModulesCommon.DELTA_TIME);
-        return _opacity > 0.1f
-            ? new BoxNode(900)
-            {
-                Direction = Direction.Vertical,
-                HorizontalAlignment = ItemsAlignment.Stretch,
-                VerticalAlignment = ItemsAlignment.Start,
-                Opacity = _opacity,
-                Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 8 },
-                Children = [BuildTabs(), ActiveTab.Draw()],
-            }
-            : new SpacerNode();
-    }
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Start,
+        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 8 },
+        Children = [BuildTabs(), ActiveTab.Draw()],
+    };
 
     private BoxNode BuildTabs() => new(height: 46)
     {
@@ -159,7 +134,7 @@ public sealed class MainDialog : IDrawableModule, IDisposable
         var index = Array.IndexOf(_tabs, tab);
         var normal = index == _activeTabIndex ? _theme.Active : _theme.Panel;
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
-        tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
+        tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, Renderer.DeltaTime);
 
         return new BoxNode(tab.InternalTab is ConfigurationTab ? 46 : null)
         {

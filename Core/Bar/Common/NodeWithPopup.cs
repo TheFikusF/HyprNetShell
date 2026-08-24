@@ -1,6 +1,7 @@
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Common;
@@ -33,6 +34,8 @@ public class NodeWithPopup
         _popupCoordinator.Register(moduleId);
     }
 
+    public void ClosePopup() => _popupCoordinator.Close(_moduleId);
+
     public Node Draw(ICollection<Node> module, Func<Node> popup)
     {
         var shouldShowExternal = GetShouldShowPopup(IsHovered);
@@ -42,7 +45,7 @@ public class NodeWithPopup
             _popupCoordinator.TryRequestOpen(_moduleId);
         }
 
-        _popupOpacity = PrimitivesMath.LerpSmooth(_popupOpacity, shouldShow ? 1 : 0, 24.0f, ModulesCommon.DELTA_TIME);
+        _popupOpacity = PrimitivesMath.LerpSmooth(_popupOpacity, shouldShow ? 1 : 0, 24.0f, Renderer.DeltaTime);
 
         return new BoxNode
         {

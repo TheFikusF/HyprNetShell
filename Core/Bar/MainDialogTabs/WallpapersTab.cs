@@ -187,11 +187,12 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
                     "Wallpapers",
                     status),
                 MainDialogTabUi.BuildInput(query, "Search wallpapers..."),
-                MainDialogTabUi.BuildScrollableResults(
+                BoundedListUi.BuildScrollableResults(
                     grid,
                     firstIndex / COLUMNS,
                     (totalCount + COLUMNS - 1) / COLUMNS,
-                    ROWS),
+                    ROWS,
+                    theme),
             ],
         };
     }

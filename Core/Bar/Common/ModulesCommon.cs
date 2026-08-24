@@ -8,9 +8,6 @@ namespace HyprNetShell.Core.Bar.Common;
 
 public static class ModulesCommon
 {
-
-    public const float DELTA_TIME = 1.0f / 30.0f;
-
     private static readonly AppIconResolver IconResolver = new();
 
     public static Color ToBackground(Theme theme, Color color) =>
@@ -102,7 +99,7 @@ public static class ModulesCommon
     public static TState UpdateColor<TState>(this TState state, Color color) where TState : BoxState, new()
     {
         var target = state.Hovered ? Color.Lighten(color, 0.18f) : color;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, DELTA_TIME);
+        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, Renderer.DeltaTime);
         return state;
     }
 

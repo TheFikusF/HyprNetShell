@@ -12,7 +12,6 @@ public sealed class SwitchNode(bool on, Ref<float> animation) : Node
     private const float TRACK_HEIGHT = 16.0f;
     private const float KNOB_SIZE = 20.0f;
     private const float ANIMATION_DECAY = 18.0f;
-    private const float DELTA_TIME = 1.0f / 30.0f;
 
     public Color OffTrackColor { get; init; } = Color.FromRgb(96, 96, 96);
     public Color OnTrackColor { get; init; } = Color.Orange;
@@ -28,7 +27,7 @@ public sealed class SwitchNode(bool on, Ref<float> animation) : Node
             Math.Clamp(animation.Value, 0.0f, 1.0f),
             target,
             ANIMATION_DECAY,
-            DELTA_TIME);
+            Renderer.DeltaTime);
 
         if (MathF.Abs(animation.Value - target) < 0.001f)
         {

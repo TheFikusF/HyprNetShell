@@ -14,6 +14,9 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/wifi-off.svg")]
     public static partial SvgAsset WifiOff { get; }
 
+    [SvgAsset("assets/icons/lucide/qr-code.svg")]
+    public static partial SvgAsset QrCode { get; }
+
     [SvgAsset("assets/icons/lucide/ethernet-port.svg")]
     public static partial SvgAsset Ethernet { get; }
 

@@ -45,7 +45,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     {
         if (direction is SelectionDirection.Up or SelectionDirection.Down)
         {
-            MainDialogTabUi.MoveSelection(
+            BoundedListUi.MoveSelection(
                 ref _selectedIndex,
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
@@ -85,7 +85,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                         _filteredEntries.Count,
                         "Clipboard history is empty")),
                 MainDialogTabUi.BuildInput(_query, "Search clipboard history..."),
-                MainDialogTabUi.BuildScrollableResults(
+                BoundedListUi.BuildScrollableResults(
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
@@ -94,14 +94,14 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                         Children =
                         [
                             .._filteredEntries
-                                .Skip(_firstIndex)
-                                .Take(MainDialogTabUi.VISIBLE_ROW_COUNT)
-                                .Select((entry, visibleIndex) => BuildRow(entry, _firstIndex + visibleIndex)),
+                                .VisibleItems(_firstIndex)
+                                .Select(item => BuildRow(item.Item, item.Index)),
                         ],
                     },
                     _firstIndex,
                     _filteredEntries.Count,
-                    MainDialogTabUi.VISIBLE_ROW_COUNT),
+                    BoundedListUi.DefaultVisibleItemCount,
+                    theme),
             ],
         };
     }

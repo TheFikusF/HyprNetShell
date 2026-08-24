@@ -49,7 +49,7 @@ public sealed class StatusBar
             Theme.Default,
             _popupCoordinator);
         var systemStatsModule = new SystemStatsModule(services.SystemStats, Theme.Default, _popupCoordinator);
-        var networkModule = new NetworkModule(services.Network, Theme.Default, _popupCoordinator);
+        var networkModule = new NetworkModule(services.Network, services.Dialogs, Theme.Default, _popupCoordinator);
         var audioModule = new AudioModule(services.Audio, services.Bluetooth, Theme.Default, _popupCoordinator);
         var displayControlsModule = new DisplayControlsModule(
             services.DisplayControls,

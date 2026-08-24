@@ -29,6 +29,8 @@ public sealed class PopupCoordinator
         return true;
     }
 
+    public void Close(string moduleId) => _cantOpenBefore[moduleId] = DateTime.Now + TimeSpan.FromMilliseconds(200);
+
     public void EndFrame()
     {
         if (_pendingOpenedId != _lastOpenedId && _lastOpenedId is { } lastOpenedId)

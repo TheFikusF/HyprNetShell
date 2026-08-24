@@ -7,6 +7,7 @@ using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
@@ -58,7 +59,7 @@ internal sealed class MusicModule(
         _coverButton.Background = Color.LerpSmooth(_coverButton.Background,
             _coverButton.Hovered || string.IsNullOrWhiteSpace(music.ImagePath)
                 ? Color.White
-                : Color.White with { A = 0 }, 18.0f, ModulesCommon.DELTA_TIME);
+                : Color.White with { A = 0 }, 18.0f, Renderer.DeltaTime);
 
         return BuildSurface(music,
             [
@@ -307,7 +308,7 @@ internal sealed class MusicModule(
         var target = state.Hovered
             ? Color.Lighten(defaultColor, 0.16f)
             : defaultColor;
-        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, ModulesCommon.DELTA_TIME);
+        state.Background = Color.LerpSmooth(state.Background, target, 18.0f, Renderer.DeltaTime);
 
         return new BoxNode(size, size)
         {

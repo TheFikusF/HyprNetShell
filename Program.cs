@@ -25,7 +25,7 @@ try
         throw new InvalidOperationException("Failed to make the fallback EGL surface current.");
     }
 
-    using var renderer = new Renderer(HyprLayer.GetProcAddress);
+    using var renderer = new Renderer((int)HyprLayer.TARGET_FRAMERATE, HyprLayer.GetProcAddress);
 #if HYPRNETSHELL_PERFORMANCE_PROFILING
     using var performanceProfiler = PerformanceProfiler.TryCreate();
     renderer.SetDiagnosticsEnabled(performanceProfiler is not null);
@@ -38,7 +38,7 @@ try
 #endif
 
     var services = new StatusBarServices();
-    var mainDialog = services.MainDialog;
+    var dialogs = services.Dialogs;
     var views = new Dictionary<ulong, StatusBar>();
     ulong? focusedOutputId = null;
     ulong? dialogOwnerId = null;
@@ -106,7 +106,7 @@ try
             var fallbackOutputId = layer.Outputs.Count > 0 ? layer.Outputs[0].Id : (ulong?)null;
             var inputOwnerId = compositorFocusedOutputId ?? pointerOutputId ?? focusedOutputId ?? fallbackOutputId;
 
-            if (mainDialog.IsVisible && dialogOwnerId is null)
+            if (dialogs.IsVisible && dialogOwnerId is null)
             {
                 dialogOwnerId = inputOwnerId;
             }
@@ -114,28 +114,28 @@ try
             launcherTogglePending |= services.ConsumeLauncherToggleRequested();
             if (launcherTogglePending && inputOwnerId is ulong toggleTargetId)
             {
-                if (!mainDialog.IsOpen)
+                if (!dialogs.IsOpen)
                 {
                     dialogOwnerId = toggleTargetId;
                 }
 
-                mainDialog.Toggle();
+                dialogs.ToggleMainDialog();
                 launcherTogglePending = false;
             }
 
-            if (mainDialog.IsOpen && dialogOwnerId is ulong currentOwnerId)
+            if (dialogs.IsOpen && dialogOwnerId is ulong currentOwnerId)
             {
                 var ownerOutput = layer.Outputs.FirstOrDefault(output => output.Id == currentOwnerId);
                 if (ownerOutput is not null)
                 {
-                    mainDialog.HandleInput(
+                    dialogs.HandleInput(
                         ownerOutput.PressedKey,
                         ownerOutput.TextInput,
                         ownerOutput.Input.ScrollDelta);
                 }
             }
 
-            layer.SetKeyboardInteractiveBar(mainDialog.IsOpen ? dialogOwnerId ?? 0 : 0);
+            layer.SetKeyboardInteractiveBar(dialogs.IsOpen ? dialogOwnerId ?? 0 : 0);
 
             foreach (var output in layer.Outputs)
             {
@@ -156,10 +156,10 @@ try
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawBar);
 
                 PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.DrawDialog);
-                if (dialogOwnerId == output.Id && mainDialog.IsVisible)
+                if (dialogOwnerId == output.Id && dialogs.IsVisible)
                 {
                     using var dialogLayout = new Layout(renderer, renderer.Width, renderer.Height);
-                    dialogLayout.AddNode(mainDialog.Draw());
+                    dialogLayout.AddNode(dialogs.Draw());
                 }
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawDialog);
 
@@ -180,12 +180,12 @@ try
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.SwapBuffers);
             }
 
-            if (!mainDialog.IsVisible)
+            if (!dialogs.IsVisible)
             {
                 dialogOwnerId = null;
             }
 
-            layer.SetKeyboardInteractiveBar(mainDialog.IsOpen ? dialogOwnerId ?? 0 : 0);
+            layer.SetKeyboardInteractiveBar(dialogs.IsOpen ? dialogOwnerId ?? 0 : 0);
             PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.PaceFrame);
             layer.PaceFrame();
             PerformanceProfiler.End(performanceProfiler, PerformancePhase.PaceFrame);

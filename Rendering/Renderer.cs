@@ -66,11 +66,17 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public int Width { get; private set; }
     public int Height { get; private set; }
 
+    public static int TargetFramerate { get; private set; }
+    public static float DeltaTime { get; private set; }
+
     public static event Action? OnFrameStart;
     public static event Action? OnFrameEnd;
 
-    public Renderer(Func<string, IntPtr> getProcAddress)
+    public Renderer(int targetFramerate, Func<string, IntPtr> getProcAddress)
     {
+        TargetFramerate = targetFramerate;
+        DeltaTime = 1.0f / TargetFramerate;
+
         _gl = GL.GetApi(getProcAddress);
         _program = GlShaders.CreateProgram(_gl, GlShaders.COLORED_VERTEX, GlShaders.COLORED_FRAGMENT, "colored");
         _viewportLocation = _gl.GetUniformLocation(_program, "uViewport");

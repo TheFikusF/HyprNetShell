@@ -5,14 +5,13 @@ using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Nodes;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
+using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class SystemStatsModule(
-    SystemStatsModuleService service,
-    Theme theme,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class SystemStatsModule(SystemStatsModuleService service,
+    Theme theme, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int WIDTH = 75;
     private const int GRAPH_WIDTH = 400;
@@ -50,7 +49,7 @@ internal sealed class SystemStatsModule(
 
     private void Lerp(ref Color color, Gradient gradient, float percent)
     {
-        color = color.LerpSmooth(gradient.Evaluate(percent), 18.0f, ModulesCommon.DELTA_TIME);
+        color = color.LerpSmooth(gradient.Evaluate(percent), 18.0f, Renderer.DeltaTime);
     }
 
     public Node Draw()
