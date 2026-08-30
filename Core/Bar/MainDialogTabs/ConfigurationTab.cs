@@ -20,7 +20,8 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
     private readonly ModulesCommon.BoxState _clipboardDecreaseState = new();
     private readonly ModulesCommon.BoxState _clipboardIncreaseState = new();
 
-    public string Title => "Configuration";
+    public string Id => "general";
+    public string Title => "General";
     public SvgAsset Icon => Icons.Settings;
 
     public void Activate()

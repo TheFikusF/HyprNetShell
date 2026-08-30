@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -19,6 +20,7 @@ internal sealed class WeatherWidget
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(12) };
 
     private readonly Lock _stateLock = new();
+    private readonly ModulesCommon.BoxState _titleState = new();
     private readonly Theme _theme;
     private readonly double _latitude;
     private readonly double _longitude;
@@ -42,7 +44,32 @@ internal sealed class WeatherWidget
             : $"https://www.google.com/search?q={Uri.EscapeDataString("weather " + _location)}";
     }
 
-    public Node Draw()
+    internal string Location => _location;
+
+    internal WeatherState Snapshot
+    {
+        get
+        {
+            EnsureRefresh();
+            lock (_stateLock)
+            {
+                return _state;
+            }
+        }
+    }
+
+    internal bool IsRefreshing
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _refreshTask is { IsCompleted: false };
+            }
+        }
+    }
+
+    public Node Draw(Action openExpanded)
     {
         EnsureRefresh();
 
@@ -59,7 +86,6 @@ internal sealed class WeatherWidget
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            OnClick = OpenInBrowser,
             Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
             {
                 BorderRadius = 8,
@@ -67,11 +93,7 @@ internal sealed class WeatherWidget
             },
             Children =
             [
-                new BoxNode(Style.Spacer, ItemsAlignment.Center, ItemsAlignment.Center)
-                {
-                    new ImageNode(Icons.CloudSun, 22, 22, _theme.Text),
-                    new TextNode("Weather", 22, _theme.Text)
-                },
+                BuildTitleButton(openExpanded),
                 new BoxNode(Style.Spacer, ItemsAlignment.End, ItemsAlignment.Center)
                 {
                     new TextNode(_location, _theme.TextSize, _theme.Muted),
@@ -82,6 +104,30 @@ internal sealed class WeatherWidget
                         _theme.Muted),
                 },
                 ..BuildWeatherContent(state, refreshing),
+            ],
+        };
+    }
+
+    private Node BuildTitleButton(Action openExpanded)
+    {
+        var state = _titleState.UpdateColor(_theme.Panel);
+        return new BoxNode(height: 34)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = openExpanded,
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            {
+                Padding = 0,
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Spacing = 7,
+            },
+            Children =
+            [
+                new ImageNode(Icons.CloudSun, 20, 20, _theme.Text),
+                new TextNode("Weather", 20, _theme.Text),
             ],
         };
     }
@@ -179,8 +225,9 @@ internal sealed class WeatherWidget
                 _nextRefresh = DateTime.UtcNow + RefreshInterval;
             }
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("Weather", "Could not refresh weather forecast", exception);
             lock (_stateLock)
             {
                 if (_state.Forecast.Count == 0)
@@ -206,6 +253,7 @@ internal sealed class WeatherWidget
             CultureInfo.InvariantCulture,
             "https://api.open-meteo.com/v1/forecast?latitude={0}&longitude={1}" +
             "&current=temperature_2m,weather_code" +
+            "&hourly=temperature_2m,weather_code,precipitation_probability" +
             "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
             "&temperature_unit=celsius&timezone=auto&forecast_days=7",
             _latitude,
@@ -241,15 +289,48 @@ internal sealed class WeatherWidget
             throw new InvalidDataException("Daily forecast is empty.");
         }
 
+        var hourly = new List<HourlyForecast>();
+        if (response.Hourly is { } hourlyResponse)
+        {
+            var hourlyCount = new[]
+            {
+                hourlyResponse.Time.Count,
+                hourlyResponse.Temperature.Count,
+                hourlyResponse.WeatherCode.Count,
+                hourlyResponse.PrecipitationProbability.Count,
+            }.Min();
+            for (var i = 0; i < hourlyCount; i++)
+            {
+                if (hourlyResponse.Temperature[i] is not { } temperature ||
+                    hourlyResponse.WeatherCode[i] is not { } weatherCode ||
+                    !DateTime.TryParse(
+                        hourlyResponse.Time[i],
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeLocal,
+                        out var time) ||
+                    time.Date != DateTime.Today)
+                {
+                    continue;
+                }
+
+                hourly.Add(new HourlyForecast(
+                    time,
+                    temperature,
+                    weatherCode,
+                    hourlyResponse.PrecipitationProbability[i] ?? 0));
+            }
+        }
+
         return new WeatherState(
             response.Current?.Temperature,
             response.Current?.WeatherCode ?? forecast[0].WeatherCode,
             forecast,
+            hourly,
             DateTime.Now,
             null);
     }
 
-    private void OpenInBrowser()
+    internal void OpenInBrowser()
     {
         try
         {
@@ -274,7 +355,7 @@ internal sealed class WeatherWidget
             ? value
             : fallback;
 
-    private static (string Icon, string Description) Condition(int code) => code switch
+    internal static (string Icon, string Description) Condition(int code) => code switch
     {
         0 => ("☀️", "Clear"),
         1 => ("🌤️", "Mostly clear"),
@@ -290,17 +371,20 @@ internal sealed class WeatherWidget
         _ => ("🌡️", "Weather"),
     };
 
-    private sealed record WeatherState(
+    internal sealed record WeatherState(
         double? CurrentTemperature,
         int CurrentWeatherCode,
         IReadOnlyList<ForecastDay> Forecast,
+        IReadOnlyList<HourlyForecast> Hourly,
         DateTime? UpdatedAt,
         string? Error)
     {
-        public static WeatherState Empty { get; } = new(null, 0, [], null, null);
+        public static WeatherState Empty { get; } = new(null, 0, [], [], null, null);
     }
 
-    private sealed record ForecastDay(DateOnly Date, double Minimum, double Maximum, int WeatherCode);
+    internal sealed record ForecastDay(DateOnly Date, double Minimum, double Maximum, int WeatherCode);
+
+    internal sealed record HourlyForecast(DateTime Time, double Temperature, int WeatherCode, int PrecipitationProbability);
 }
 
 file sealed class TemperatureRangeNode(

@@ -32,6 +32,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     private int _selectedIndex;
     private int _loadedVersion = -1;
 
+    public string Id => "clipboard";
     public string Title => "Clipboard";
     public SvgAsset Icon => Icons.Clipboard;
 

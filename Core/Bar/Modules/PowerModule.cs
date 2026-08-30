@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
@@ -9,8 +10,9 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class PowerModule(Theme theme, PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class PowerModule(DialogService dialogs, Theme theme, PopupCoordinator popupCoordinator) : IDrawableModule
 {
+    private readonly Ref<bool> _settingsHovered = new();
     private readonly Ref<bool> _lockHovered = new();
     private readonly Ref<bool> _powerOffHovered = new();
     private readonly Ref<bool> _rebootHovered = new();
@@ -42,6 +44,7 @@ internal sealed class PowerModule(Theme theme, PopupCoordinator popupCoordinator
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
+            BuildAction("Settings", Icons.Settings, Color.FromRgb(95, 120, 190), _settingsHovered, OpenSettings),
             BuildAction("Lock screen", Icons.Lock, Color.FromRgb(70, 125, 210), _lockHovered, LockScreen),
             BuildAction("Power off", Icons.PowerOff, Color.FromRgb(210, 55, 55), _powerOffHovered,
                 () => RunSystemctl("poweroff")),
@@ -75,6 +78,12 @@ internal sealed class PowerModule(Theme theme, PopupCoordinator popupCoordinator
                 new TextNode(label, 14, theme.Text),
             ],
         };
+    }
+
+    private void OpenSettings()
+    {
+        _node.ClosePopup();
+        dialogs.Open<SettingsDialog>();
     }
 
     private static void LockScreen() => CommandRunner.TryStart("hyprlock", []);

@@ -1,8 +1,7 @@
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
-using HyprNetShell.Core.Features.Hyprland;
-using HyprNetShell.Core.Features.System;
+
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -10,7 +9,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar;
 
-internal sealed class MainDialog : IDialogWindow, IDisposable
+internal sealed class CompositeWindow : IDialogWindow
 {
     private class Tab : IMainDialogTab
     {
@@ -23,6 +22,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
             _tab = tab;
         }
 
+        public string Id => _tab.Id;
         public string Title => _tab.Title;
         public SvgAsset Icon => _tab.Icon;
 
@@ -32,6 +32,8 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
 
         public void HandleBackspace() => _tab.HandleBackspace();
 
+        public bool HandleEscape() => _tab.HandleEscape();
+
         public void MoveSelection(SelectionDirection direction) => _tab.MoveSelection(direction);
 
         public void ActivateSelection() => _tab.ActivateSelection();
@@ -39,31 +41,16 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
         public Node Draw() => _tab.Draw();
     }
 
-    private readonly Tab[] _tabs;
+    private Tab[] _tabs = [];
     private readonly Theme _theme;
     private readonly IReadOnlyDictionary<DialogKey, Action> _actions;
 
     private int _activeTabIndex;
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex];
 
-    internal MainDialog(
-        ClipboardHistoryService clipboardHistory,
-        HistoryStore history,
-        IHyprctl hyprctl,
-        WallpaperModuleService wallpapers,
-        Action closeDialog,
-        Theme theme)
+    internal CompositeWindow(Theme theme)
     {
         _theme = theme;
-
-        _tabs =
-        [
-            new Tab(new ApplicationLauncherTab(hyprctl, closeDialog, theme)),
-            new Tab(new CalculatorTab()),
-            new Tab(new ClipboardManagerTab(clipboardHistory, closeDialog, theme)),
-            new Tab(new WallpapersTab(wallpapers, closeDialog, theme)),
-            new Tab(new ConfigurationTab(wallpapers, history, theme)),
-        ];
 
         _actions = new Dictionary<DialogKey, Action>
         {
@@ -75,6 +62,12 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
             [DialogKey.Right] = () => ActiveTab.MoveSelection(SelectionDirection.Right),
             [DialogKey.Down] = () => ActiveTab.MoveSelection(SelectionDirection.Down),
         };
+    }
+
+    internal void SetTabs(IReadOnlyList<IMainDialogTab> tabs)
+    {
+        ArgumentOutOfRangeException.ThrowIfZero(tabs.Count);
+        _tabs = [..tabs.Select(tab => new Tab(tab))];
     }
 
     public void OnOpened()
@@ -91,7 +84,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
     {
         if (input.Key == DialogKey.Escape)
         {
-            return DialogInputResult.Close;
+            return ActiveTab.HandleEscape() ? DialogInputResult.None : DialogInputResult.Close;
         }
 
         if (_actions.TryGetValue(input.Key, out var action))
@@ -137,7 +130,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
         tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, Renderer.DeltaTime);
 
-        return new BoxNode(tab.InternalTab is ConfigurationTab ? 46 : null)
+        return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
@@ -149,9 +142,7 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
                 BorderRadius = 8,
                 BorderWidth = index == _activeTabIndex ? _theme.BorderWidth : 0,
             },
-            Children = tab.InternalTab is ConfigurationTab
-                ? [new ImageNode(tab.Icon, 18, 18, _theme.Text)]
-                : [new ImageNode(tab.Icon, 18, 18, _theme.Text), new TextNode(tab.Title, 15, _theme.Text)],
+            Children = [new ImageNode(tab.Icon, 18, 18, _theme.Text), new TextNode(tab.Title, 15, _theme.Text)],
         };
     }
 
@@ -161,14 +152,4 @@ internal sealed class MainDialog : IDialogWindow, IDisposable
         ActiveTab.Activate();
     }
 
-    public void Dispose()
-    {
-        foreach (var tab in _tabs)
-        {
-            if (tab.InternalTab is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
-    }
 }

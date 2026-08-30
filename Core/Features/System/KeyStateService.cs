@@ -8,7 +8,6 @@ internal sealed class KeyStateService : IDisposable
     private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(2);
     private const string SUPER_DOWN_BIND = "SUPER_L";
     private const string SUPER_UP_BIND = "SUPER + SUPER_L";
-    private const string LAUNCHER_BIND = "SUPER + R";
 
     private readonly CancellationTokenSource _cts = new();
     private readonly IHyprctl _hyprctl;
@@ -16,14 +15,13 @@ internal sealed class KeyStateService : IDisposable
 
     private DateTime _lastLoggedSuperDown;
     private int _isHeld;
-    private int _launcherToggleRequested;
     private bool _disposed;
 
     public bool IsHeld => Volatile.Read(ref _isHeld) != 0;
 
     public bool IsHeldFor(TimeSpan timespan) => IsHeld && DateTime.Now - _lastLoggedSuperDown > timespan;
 
-    public bool ConsumeLauncherToggleRequested() => Interlocked.Exchange(ref _launcherToggleRequested, 0) != 0;
+
 
     public KeyStateService(IHyprctl hyprctl)
     {
@@ -86,13 +84,7 @@ internal sealed class KeyStateService : IDisposable
             new HyprlandBindOptions(Release: true, Transparent: true),
             cancellationToken);
 
-        await _hyprctl.Bind(
-            LAUNCHER_BIND,
-            () => Interlocked.Exchange(ref _launcherToggleRequested, 1),
-            new HyprlandBindOptions(Transparent: true),
-            cancellationToken);
-
-        Log("installed Hyprland Super press/release and launcher binds");
+        Log("installed Hyprland Super press/release binds");
     }
 
     private void SetHeld(bool held)

@@ -14,6 +14,7 @@ internal sealed class CalculatorTab : IMainDialogTab
     private string _expression = "";
     private string _result = "";
 
+    public string Id => "calculator";
     public string Title => "Calculator";
     public SvgAsset Icon => Icons.Calculator;
 

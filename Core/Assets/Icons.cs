@@ -115,6 +115,18 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/settings.svg")]
     public static partial SvgAsset Settings { get; }
 
+    [SvgAsset("assets/icons/lucide/panels-top-left.svg")]
+    public static partial SvgAsset CompositeWindow { get; }
+
+    [SvgAsset("assets/icons/lucide/plus.svg")]
+    public static partial SvgAsset Add { get; }
+
+    [SvgAsset("assets/icons/lucide/save.svg")]
+    public static partial SvgAsset Save { get; }
+
+    [SvgAsset("assets/icons/lucide/trash-2.svg")]
+    public static partial SvgAsset Delete { get; }
+
     [SvgAsset("assets/icons/lucide/power.svg")]
     public static partial SvgAsset Power { get; }
 

@@ -1,6 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
+using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
@@ -14,6 +15,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class NetworkModule(
     NetworkModuleService service,
     DialogService dialogs,
+    TabsService tabs,
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
@@ -102,7 +104,7 @@ internal sealed class NetworkModule(
     private void OpenWifiSettings()
     {
         _node.ClosePopup();
-        dialogs.Open<WifiDialog>();
+        dialogs.Open<CompositeWindow>([tabs.Get<WifiTab>()]);
     }
 
     private BoxNode BuildWifiPowerRow(NetworkSnapshot network)

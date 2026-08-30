@@ -49,7 +49,12 @@ public sealed class StatusBar
             Theme.Default,
             _popupCoordinator);
         var systemStatsModule = new SystemStatsModule(services.SystemStats, Theme.Default, _popupCoordinator);
-        var networkModule = new NetworkModule(services.Network, services.Dialogs, Theme.Default, _popupCoordinator);
+        var networkModule = new NetworkModule(
+            services.Network,
+            services.Dialogs,
+            services.Tabs,
+            Theme.Default,
+            _popupCoordinator);
         var audioModule = new AudioModule(services.Audio, services.Bluetooth, Theme.Default, _popupCoordinator);
         var displayControlsModule = new DisplayControlsModule(
             services.DisplayControls,
@@ -59,7 +64,7 @@ public sealed class StatusBar
         var batteryModule = new BatteryModule(services.Battery, Theme.Default, _popupCoordinator);
         var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
         var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);
-        var powerModule = new PowerModule(Theme.Default, _popupCoordinator);
+        var powerModule = new PowerModule(services.Dialogs, Theme.Default, _popupCoordinator);
         var workspacesModule = new WorkspacesModule(
             services.Hyprland,
             services.Hyprctl,
@@ -69,7 +74,13 @@ public sealed class StatusBar
             () => languageModule.IsShown,
             _popupCoordinator);
 
-        _centerModule = new CenterModule(services.Notifications, services.Weather, Theme.Default, _popupCoordinator);
+        _centerModule = new CenterModule(
+            services.Notifications,
+            services.Weather,
+            services.Dialogs,
+            services.Tabs,
+            Theme.Default,
+            _popupCoordinator);
         _leftModules = [workspacesModule, musicModule];
         _rightModules =
         [

@@ -25,6 +25,7 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
     private int _selectedIndex;
     private bool _isLoading;
 
+    public string Id => "wallpapers";
     public string Title => "Wallpapers";
     public SvgAsset Icon => Icons.Wallpaper;
 

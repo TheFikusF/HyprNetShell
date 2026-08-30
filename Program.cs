@@ -42,7 +42,7 @@ try
     var views = new Dictionary<ulong, StatusBar>();
     ulong? focusedOutputId = null;
     ulong? dialogOwnerId = null;
-    var launcherTogglePending = false;
+
 
     try
     {
@@ -106,21 +106,10 @@ try
             var fallbackOutputId = layer.Outputs.Count > 0 ? layer.Outputs[0].Id : (ulong?)null;
             var inputOwnerId = compositorFocusedOutputId ?? pointerOutputId ?? focusedOutputId ?? fallbackOutputId;
 
+            dialogs.ProcessPendingRequests();
             if (dialogs.IsVisible && dialogOwnerId is null)
             {
                 dialogOwnerId = inputOwnerId;
-            }
-
-            launcherTogglePending |= services.ConsumeLauncherToggleRequested();
-            if (launcherTogglePending && inputOwnerId is ulong toggleTargetId)
-            {
-                if (!dialogs.IsOpen)
-                {
-                    dialogOwnerId = toggleTargetId;
-                }
-
-                dialogs.ToggleMainDialog();
-                launcherTogglePending = false;
             }
 
             if (dialogs.IsOpen && dialogOwnerId is ulong currentOwnerId)

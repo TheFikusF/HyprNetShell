@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Bar.Dialogs;
+using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -23,6 +25,8 @@ internal sealed class CenterModule : IDrawableModule
     private readonly CalendarWidget _calendar;
     private readonly WorldClocksWidget _worldClocks;
     private readonly WeatherWidget _weather;
+    private readonly DialogService _dialogs;
+    private readonly TabsService _tabs;
     private readonly NotificationsWidget _notificationsWidget;
 
     private float _clockRotation;
@@ -33,6 +37,8 @@ internal sealed class CenterModule : IDrawableModule
     public CenterModule(
         NotificationService notificationService,
         WeatherWidget weather,
+        DialogService dialogs,
+        TabsService tabs,
         Theme theme,
         PopupCoordinator popupCoordinator)
     {
@@ -45,6 +51,8 @@ internal sealed class CenterModule : IDrawableModule
         _calendar = new CalendarWidget(theme);
         _worldClocks = new WorldClocksWidget(theme);
         _weather = weather;
+        _dialogs = dialogs;
+        _tabs = tabs;
         _notificationsWidget = new NotificationsWidget(notificationService, theme);
     }
 
@@ -219,12 +227,18 @@ internal sealed class CenterModule : IDrawableModule
         [
             new BoxNode(new Style { Spacing = 12 }, verticalAlignment: ItemsAlignment.Stretch)
             {
-                _calendar.Draw(now), _worldClocks.Draw(now), _weather.Draw()
+                _calendar.Draw(now), _worldClocks.Draw(now), _weather.Draw(OpenWeather)
             },
             ModulesCommon.BuildDivider(_theme.Border, height: 12),
             _notificationsWidget.Draw(snapshot),
         ],
     };
+
+    private void OpenWeather()
+    {
+        _node.ClosePopup();
+        _dialogs.Open<CompositeWindow>([_tabs.Get<WeatherTab>()]);
+    }
 
     private static double GradientOffset() => (Environment.TickCount64 % 4600 / 4600.0) * Math.PI * 2;
 

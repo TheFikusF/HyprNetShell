@@ -37,6 +37,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
 
     private bool _launching;
 
+    public string Id => "applications";
     public string Title => "Applications";
     public SvgAsset Icon => Icons.Application;
 

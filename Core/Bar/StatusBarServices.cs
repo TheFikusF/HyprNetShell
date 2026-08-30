@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Bar.Dialogs;
+using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
@@ -45,6 +46,9 @@ public sealed class StatusBarServices : IDisposable
     private bool _disposed;
 
     internal HistoryStore History { get; }
+    internal TabsService Tabs { get; }
+    internal CompositeWindowConfiguration CompositeWindowConfiguration { get; }
+    internal CompositeWindowService CompositeWindows { get; }
     internal IHyprctl Hyprctl { get; }
     internal HyprlandService Hyprland { get; }
     internal KeyStateService SuperKey { get; }
@@ -85,7 +89,29 @@ public sealed class StatusBarServices : IDisposable
         ClipboardHistory = new ClipboardHistoryService(History);
         Tray = new SniTrayService();
 
-        Dialogs = new DialogService(this, Theme.Default);
+        Dialogs = new DialogService();
+        Tabs = new TabsService(
+            ClipboardHistory,
+            Hyprctl,
+            Network,
+            Wallpapers,
+            Weather,
+            Dialogs.Close,
+            Theme.Default);
+        CompositeWindowConfiguration = new CompositeWindowConfiguration(Tabs.Tabs);
+        Dialogs.Register(new CompositeWindow(Theme.Default));
+        CompositeWindows = new CompositeWindowService(
+            CompositeWindowConfiguration,
+            Tabs,
+            Dialogs,
+            Hyprctl);
+
+        Dialogs.Register(new SettingsDialog(
+            this,
+            CompositeWindowConfiguration,
+            Tabs,
+            tabs => Dialogs.Open<CompositeWindow>(tabs),
+            Theme.Default));
 
         _scheduledServices =
         [
@@ -120,11 +146,7 @@ public sealed class StatusBarServices : IDisposable
         }
     }
 
-    public bool ConsumeLauncherToggleRequested()
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        return SuperKey.ConsumeLauncherToggleRequested();
-    }
+
 
     private async Task RefreshStateAsync(
         CancellationToken cancellationToken)
@@ -172,7 +194,9 @@ public sealed class StatusBarServices : IDisposable
             AppLogger.Warning("StatusBar", "Bar service refresh did not stop cleanly", exception);
         }
 
+        CompositeWindows.Dispose();
         Dialogs.Dispose();
+        Tabs.Dispose();
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();

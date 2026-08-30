@@ -10,9 +10,9 @@ using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 using QRCoder;
 
-namespace HyprNetShell.Core.Bar.Dialogs;
+namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WifiDialog(NetworkModuleService service, Theme theme) : IDialogWindow, IDisposable
+internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMainDialogTab, IDisposable
 {
     private const int VisibleNetworkCount = 7;
     private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(5);
@@ -37,7 +37,11 @@ internal sealed class WifiDialog(NetworkModuleService service, Theme theme) : ID
     private bool? _wifiEnabledOverride;
     private bool _disposed;
 
-    public void OnOpened()
+    public string Id => "wifi";
+    public string Title => "Wi-Fi";
+    public SvgAsset Icon => Icons.WifiStrength[^1];
+
+    public void Activate()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         lock (_stateLock)
@@ -52,76 +56,95 @@ internal sealed class WifiDialog(NetworkModuleService service, Theme theme) : ID
         ScheduleScan(force: true);
     }
 
-    public void OnClosed()
+    public void HandleTextInput(string text)
     {
         lock (_stateLock)
         {
-            _passwordNetwork = null;
-            _shareNetwork = null;
-            _qrImage = null;
-            _password = "";
+            if (_passwordNetwork is not null)
+            {
+                _password += text;
+            }
         }
     }
 
-    public DialogInputResult HandleInput(DialogInput input)
+    public void HandleBackspace()
     {
-        WifiNetworkSnapshot? passwordNetwork;
-        WifiNetworkSnapshot? shareNetwork;
         lock (_stateLock)
         {
-            passwordNetwork = _passwordNetwork;
-            shareNetwork = _shareNetwork;
-        }
-
-        if (shareNetwork is not null)
-        {
-            if (input.Key == DialogKey.Escape)
+            if (_passwordNetwork is not null)
             {
-                CancelShare();
+                _password = MainDialogTabUi.RemoveLastTextElement(_password);
             }
-            return DialogInputResult.None;
+        }
+    }
+
+    public bool HandleEscape()
+    {
+        bool cancelShare;
+        bool cancelPassword;
+        lock (_stateLock)
+        {
+            cancelShare = _shareNetwork is not null;
+            cancelPassword = _passwordNetwork is not null;
         }
 
-        if (passwordNetwork is not null)
+        if (cancelShare)
         {
-            HandlePasswordInput(input);
-            return DialogInputResult.None;
+            CancelShare();
+            return true;
         }
 
-        if (input.Key == DialogKey.Escape)
+        if (cancelPassword)
         {
-            return DialogInputResult.Close;
+            CancelPassword();
+            return true;
         }
 
-        var direction = input.Key switch
+        return false;
+    }
+
+    public void MoveSelection(SelectionDirection direction)
+    {
+        if (direction == SelectionDirection.Up)
         {
-            DialogKey.Up => -1,
-            DialogKey.Down => 1,
-            _ when input.ScrollDelta > 0 => 1,
-            _ when input.ScrollDelta < 0 => -1,
-            _ => 0,
-        };
-        if (direction != 0)
-        {
-            MoveSelection(direction);
+            MoveSelection(-1);
         }
-        else if (input.Key == DialogKey.Enter)
+        else if (direction == SelectionDirection.Down)
         {
-            WifiNetworkSnapshot? selected;
-            lock (_stateLock)
+            MoveSelection(1);
+        }
+    }
+
+    public void ActivateSelection()
+    {
+        WifiNetworkSnapshot? selected;
+        lock (_stateLock)
+        {
+            if (_shareNetwork is not null)
+            {
+                return;
+            }
+
+            if (_passwordNetwork is not null)
+            {
+                selected = null;
+            }
+            else
             {
                 selected = _selectedIndex >= 0 && _selectedIndex < _networks.Count
                     ? _networks[_selectedIndex]
                     : null;
             }
-
-            if (selected is not null)
-            {
-                BeginConnect(selected);
-            }
         }
 
-        return DialogInputResult.None;
+        if (selected is not null)
+        {
+            BeginConnect(selected);
+        }
+        else
+        {
+            ConnectWithPassword();
+        }
     }
 
     public Node Draw()
@@ -153,12 +176,12 @@ internal sealed class WifiDialog(NetworkModuleService service, Theme theme) : ID
             busy = _operationTask is { IsCompleted: false } || _shareTask is { IsCompleted: false };
         }
 
-        return new BoxNode(720)
+        return new BoxNode()
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.PopupStyle(theme) with { Padding = 24, Spacing = 12 },
+            Style = new Style { Spacing = 12 },
             Children = shareNetwork is not null
                 ? [BuildSharePrompt(shareNetwork, qrImage), BuildStatus(status)]
                 : passwordNetwork is not null
@@ -404,37 +427,7 @@ internal sealed class WifiDialog(NetworkModuleService service, Theme theme) : ID
         _ => 3,
     }], 18, 18, theme.Text);
 
-    private void HandlePasswordInput(DialogInput input)
-    {
-        if (input.Key == DialogKey.Escape)
-        {
-            CancelPassword();
-            return;
-        }
 
-        if (input.Key == DialogKey.Backspace)
-        {
-            lock (_stateLock)
-            {
-                _password = MainDialogTabUi.RemoveLastTextElement(_password);
-            }
-            return;
-        }
-
-        if (input.Key == DialogKey.Enter)
-        {
-            ConnectWithPassword();
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(input.Text))
-        {
-            lock (_stateLock)
-            {
-                _password += input.Text;
-            }
-        }
-    }
 
     private void MoveSelection(int direction)
     {
