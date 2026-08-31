@@ -139,7 +139,7 @@ try
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.BeginRender);
 
                 Layout.Input = output.Input;
-                Layout.BeginInputRegionFrame();
+                Layout.BeginInputRegionFrame(output.Id);
                 PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.DrawBar);
                 views[output.Id].Draw();
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawBar);
@@ -151,6 +151,8 @@ try
                     dialogLayout.AddNode(dialogs.Draw());
                 }
                 PerformanceProfiler.End(performanceProfiler, PerformancePhase.DrawDialog);
+
+                Layout.DrawTopLayer();
 
                 PerformanceProfiler.Begin(performanceProfiler, PerformancePhase.SetInputRegions);
                 layer.SetInputRegions(output.Id, Layout.GetInputRegions());

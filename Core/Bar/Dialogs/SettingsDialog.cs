@@ -50,7 +50,9 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
     {
         if (input.Key == DialogKey.Escape)
         {
-            return DialogInputResult.Close;
+            return ActiveTab.HandleEscape()
+                ? DialogInputResult.None
+                : DialogInputResult.Close;
         }
 
         switch (input.Key)

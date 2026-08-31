@@ -1,40 +1,27 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.Hyprland;
-using HyprNetShell.Core.Logging;
+
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
-using FuzzySharp;
 using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab
+internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab, IDisposable
 {
-    private class ButtonState : ModulesCommon.BoxState
-    {
-        public int ActionIndex { get; set; }
-        public Dictionary<int, ModulesCommon.BoxState> Actions { get; } = [];
-    }
 
-    private enum Column
-    {
-        Default,
-        Actions
-    }
 
     private const int FUZZY_SCORE_CUTOFF = 35;
-    private readonly AppIconResolver _icons = new();
-    private readonly Dictionary<int, ButtonState> _buttonsState = [];
+    private readonly DesktopApplicationCatalog _catalog = new();
+    private readonly ApplicationResultInteraction _applicationResults = new(theme);
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<DesktopApplication> _filteredApplications = [];
     private string _query = "";
     private int _firstIndex;
 
     private int _selectedIndex;
-    private Column _selectedColumn;
-
     private bool _launching;
 
     public string Id => "applications";
@@ -43,11 +30,8 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
 
     public void Activate()
     {
-        if (_applications.Count == 0)
-        {
-            _applications = LoadApplications();
-        }
-
+        _catalog.RefreshSoon();
+        UpdateApplications();
         _firstIndex = 0;
         _selectedIndex = 0;
         ApplyFilter();
@@ -87,28 +71,10 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
             return;
         }
 
-        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
-        var desktopEntry = _filteredApplications[_selectedIndex];
-        if (desktopEntry.Actions.Count == 0)
-        {
-            state.ActionIndex = 0;
-            _selectedColumn = Column.Default;
-            return;
-        }
-
-        if (_selectedColumn == Column.Actions)
-        {
-            state.ActionIndex += direction == SelectionDirection.Right ? 1 : -1;
-        }
-
-        (state.ActionIndex, _selectedColumn) = direction switch
-        {
-            SelectionDirection.Right when _selectedColumn is Column.Actions && state.ActionIndex >= desktopEntry.Actions.Count => (0, Column.Default),
-            SelectionDirection.Left when _selectedColumn is Column.Actions && state.ActionIndex < 0 => (0, Column.Default),
-            SelectionDirection.Left when _selectedColumn is Column.Default => (desktopEntry.Actions.Count - 1, Column.Actions),
-            SelectionDirection.Right when _selectedColumn is Column.Default => (0, Column.Actions),
-            _ => (state.ActionIndex, _selectedColumn),
-        };
+        _applicationResults.MoveHorizontal(
+            _selectedIndex,
+            _filteredApplications[_selectedIndex],
+            direction);
     }
 
     public void ActivateSelection()
@@ -119,35 +85,25 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         }
 
         var application = _filteredApplications[_selectedIndex];
-        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
-        if (_selectedColumn == Column.Actions &&
-            (state.ActionIndex < 0 || state.ActionIndex >= application.Actions.Count))
-        {
-            _selectedColumn = Column.Default;
-            state.ActionIndex = 0;
-            return;
-        }
-
+        var action = _applicationResults.SelectedAction(_selectedIndex, application);
         _launching = true;
-        _ = _selectedColumn == Column.Default 
-            ? LaunchAsync(application) 
-            : LaunchActionAsync(application, application.Actions[state.ActionIndex]);
+        _ = LaunchAsync(application, action);
     }
 
-    private async Task LaunchAsync(DesktopApplication application)
+    private async Task LaunchAsync(DesktopApplication application, DesktopAction? action)
     {
         try
         {
-            if (await hyprctl.LaunchDesktopEntryAsync(application.DesktopFile))
+            if (await DesktopApplicationLaunch.TryLaunchAsync(
+                    hyprctl,
+                    application,
+                    action,
+                    "ApplicationLauncher"))
             {
                 _query = "";
                 ApplyFilter();
                 closeDialog();
             }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error("ApplicationLauncher", $"Could not launch desktop entry {application.DesktopFile}", exception);
         }
         finally
         {
@@ -155,90 +111,89 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
         }
     }
 
-    private async Task LaunchActionAsync(DesktopApplication application, DesktopAction action)
+    public Node Draw()
     {
-        try
+        UpdateApplications();
+        return new BoxNode(new Style { Spacing = 8 })
         {
-            if (await hyprctl.LaunchDesktopActionAsync(application.DesktopFile, action.Id))
-            {
-                _query = "";
-                ApplyFilter();
-                closeDialog();
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error(
-                "ApplicationLauncher",
-                $"Could not launch desktop action {action.Id} from {application.DesktopFile}",
-                exception);
-        }
-        finally
-        {
-            _launching = false;
-        }
-    }
-
-    public Node Draw() => new BoxNode(new Style { Spacing = 8 })
-    {
-        Direction = Direction.Vertical,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        Children =
-        [
-            MainDialogTabUi.BuildSectionHeader(
-                "Applications",
-                MainDialogTabUi.ResultCount(
-                    _selectedIndex,
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Children =
+            [
+                MainDialogTabUi.BuildSectionHeader(
+                    "Applications",
+                    MainDialogTabUi.ResultCount(
+                        _selectedIndex,
+                        _filteredApplications.Count,
+                        _applications.Count == 0 ? "Loading applications..." : "No matching applications")),
+                MainDialogTabUi.BuildInput(_query, "Type to search..."),
+                BoundedListUi.BuildScrollableResults(
+                    new BoxNode
+                    {
+                        Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
+                        Style = new Style { Spacing = 8 },
+                        Children = _filteredApplications
+                            .VisibleItems(_firstIndex)
+                            .Select(item => BuildRow(item.Item, item.Index))
+                            .ToArray(),
+                    },
+                    _firstIndex,
                     _filteredApplications.Count,
-                    "No matching applications")),
-            MainDialogTabUi.BuildInput(_query, "Type to search..."),
-            BoundedListUi.BuildScrollableResults(
-                new BoxNode
-                {
-                    Direction = Direction.Vertical,
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style { Spacing = 8 },
-                    Children = _filteredApplications
-                        .VisibleItems(_firstIndex)
-                        .Select(item => BuildRow(item.Item, item.Index))
-                        .ToArray(),
-                },
-                _firstIndex,
-                _filteredApplications.Count,
-                BoundedListUi.DefaultVisibleItemCount,
-                theme),
-        ],
-    };
+                    BoundedListUi.DefaultVisibleItemCount,
+                    theme),
+            ],
+        };
+    }
 
-    private BoxNode BuildRow(DesktopApplication app, int index)
+    private BoxNode BuildRow(DesktopApplication application, int index) =>
+        _applicationResults.BuildRow(
+            application,
+            index,
+            index == _selectedIndex,
+            () =>
+            {
+                _selectedIndex = index;
+                ActivateSelection();
+            },
+            _ =>
+            {
+                _selectedIndex = index;
+                ActivateSelection();
+            });
+
+    internal static BoxNode BuildApplicationRow(
+        DesktopApplication application,
+        bool selected,
+        ApplicationSelectionColumn selectedColumn,
+        ApplicationButtonState entryState,
+        AppIconResolver icons,
+        Theme theme,
+        Action activateDefault,
+        Action<int> activateAction)
     {
-        var selected = index == _selectedIndex;
-        var actionSelected = selected && app.Actions.Count > 0 && _selectedColumn == Column.Actions;
-        var entrySelected = selected && !actionSelected;
+        var actionsSelected = selected &&
+                              application.Actions.Count > 0 &&
+                              selectedColumn == ApplicationSelectionColumn.Actions;
+        var entrySelected = selected && !actionsSelected;
+        var iconPath = string.IsNullOrWhiteSpace(application.Icon)
+            ? null
+            : icons.TryResolveIcon(application.Icon);
+        entryState.UpdateColor(entrySelected ? theme.Active : theme.Panel);
 
-        var iconPath = string.IsNullOrWhiteSpace(app.Icon) ? null : _icons.TryResolveIcon(app.Icon);
-        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(entrySelected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style
-            {
-                Spacing = 8
-            },
+            Style = new Style { Spacing = 8 },
             Children =
             [
                 new BoxNode(height: 66)
                 {
                     HorizontalAlignment = ItemsAlignment.Stretch,
                     VerticalAlignment = ItemsAlignment.Center,
-                    OnClick = () =>
-                    {
-                        _selectedIndex = index;
-                        _selectedColumn = Column.Default;
-                        ActivateSelection();
-                    },
-                    IsHovered = state.Hovered,
-                    Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+                    OnClick = activateDefault,
+                    IsHovered = entryState.Hovered,
+                    Style = ModulesCommon.ModuleStyle(theme, entryState.Background) with
                     {
                         BorderRadius = 8,
                         BorderWidth = selected ? theme.BorderWidth : 0,
@@ -257,48 +212,66 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                             Style = new Style { Spacing = 3 },
                             Children =
                             [
-                                new TextNode(app.Name, 18, theme.Text),
-                                new TextNode(app.Comment ?? "", theme.TextSize, theme.Text),
+                                new TextNode(application.Name, 18, theme.Text),
+                                new TextNode(
+                                    application.Comment ?? "",
+                                    theme.TextSize,
+                                    entrySelected ? theme.Text : theme.Muted),
                             ],
                         },
                     ],
                 },
-                ..app.Actions.Select((x, i) => BuildAction(actionSelected, i, state, selected, x))
-            ]
+                ..application.Actions.Select((action, actionIndex) => BuildApplicationAction(
+                    action,
+                    actionIndex,
+                    actionsSelected,
+                    selected,
+                    entryState,
+                    theme,
+                    () => activateAction(actionIndex))),
+            ],
         };
     }
 
-    private BoxNode BuildAction(bool actionsSelected, int i, ButtonState entryState, bool selected, DesktopAction x)
+    private static BoxNode BuildApplicationAction(
+        DesktopAction action,
+        int actionIndex,
+        bool actionsSelected,
+        bool entrySelected,
+        ApplicationButtonState entryState,
+        Theme theme,
+        Action activate)
     {
-        var actionSelected = actionsSelected && i == entryState.ActionIndex;
-        var state = entryState.Actions.GetState(i, theme.Panel).UpdateColor(actionSelected ? theme.Active : theme.Panel);
-        return new BoxNode(actionSelected ? null : 32, 66)
+        var selected = actionsSelected && actionIndex == entryState.ActionIndex;
+        var state = entryState.Actions
+            .GetState(actionIndex, theme.Panel)
+            .UpdateColor(selected ? theme.Active : theme.Panel);
+        return new BoxNode(selected ? null : 32, 66)
         {
-            // OnClick = () =>
-            // {
-            //     _selectedIndex = index;
-            //     ActivateSelection();
-            // },
+            OnClick = activate,
             IsHovered = state.Hovered,
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
-                Padding = actionSelected ? new Insets(16, 10) : new Insets(4, 10),
+                BorderWidth = entrySelected ? theme.BorderWidth : 0,
+                Padding = selected ? new Insets(16, 10) : new Insets(4, 10),
                 Spacing = 8,
             },
             Children =
             [
                 new BoxNode(16, 16)
                 {
-                    Direction = Direction.Horizontal,
                     HorizontalAlignment = ItemsAlignment.Center,
                     VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { BackgroundColor = Color.Black, BorderRadius = new BorderRadius(theme.BorderRadius) },
-                    Children = { new TextNode((i + 1).ToString(), 14, theme.Text) },
+                    Style = new Style
+                    {
+                        BackgroundColor = Color.Black,
+                        BorderRadius = new BorderRadius(theme.BorderRadius),
+                    },
+                    Children = [new TextNode((actionIndex + 1).ToString(), 14, theme.Text)],
                 },
-                actionSelected ? new TextNode(x.Name, theme.TextSize, theme.Text) : new SpacerNode(),
-            ]
+                selected ? new TextNode(action.Name, theme.TextSize, theme.Text) : new SpacerNode(),
+            ],
         };
     }
 
@@ -308,8 +281,9 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
             ? _applications
             : _applications
                 .Select(app => (App: app,
-                    Score: PrimitivesMath.Lerp(Fuzz.WeightedRatio(_query, app.Name),
-                        Fuzz.WeightedRatio(_query, app.Comment ?? ""), 0.15f)))
+                    Score: Math.Max(
+                        FuzzySearch.Score(_query, app.Name),
+                        FuzzySearch.Score(_query, app.Comment ?? "") - 12)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.App.Name, StringComparer.CurrentCultureIgnoreCase)
@@ -317,79 +291,26 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                 .ToArray();
         _firstIndex = 0;
         _selectedIndex = 0;
-        _selectedColumn = Column.Default;
+        _applicationResults.Reset();
     }
 
-    private void NormalizeActionSelection()
+    private void NormalizeActionSelection() => _applicationResults.Normalize(
+        _selectedIndex,
+        _selectedIndex >= 0 && _selectedIndex < _filteredApplications.Count
+            ? _filteredApplications[_selectedIndex]
+            : null);
+
+    private void UpdateApplications()
     {
-        if (_selectedIndex < 0 || _selectedIndex >= _filteredApplications.Count)
+        var applications = _catalog.Snapshot;
+        if (ReferenceEquals(applications, _applications))
         {
-            _selectedColumn = Column.Default;
             return;
         }
 
-        var state = _buttonsState.GetState(_selectedIndex, theme.Panel);
-        var actionCount = _filteredApplications[_selectedIndex].Actions.Count;
-        if (actionCount == 0)
-        {
-            state.ActionIndex = 0;
-            _selectedColumn = Column.Default;
-        }
-        else if (state.ActionIndex < 0 || state.ActionIndex >= actionCount)
-        {
-            state.ActionIndex = 0;
-        }
+        _applications = applications;
+        ApplyFilter();
     }
 
-    private static DesktopApplication[] LoadApplications()
-    {
-        var applications = new Dictionary<string, DesktopApplication>(StringComparer.OrdinalIgnoreCase);
-        foreach (var directory in ApplicationDirectories().Where(Directory.Exists))
-        {
-            foreach (var desktopFile in SafeDesktopFiles(directory))
-            {
-                var app = DesktopApplicationParser.Parse(desktopFile);
-                if (app is not null)
-                {
-                    applications.TryAdd(app.DesktopId, app);
-                }
-            }
-        }
-
-        return applications.Values.OrderBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
-    }
-
-    private static IEnumerable<string> ApplicationDirectories()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-        yield return !string.IsNullOrWhiteSpace(dataHome)
-            ? Path.Combine(dataHome, "applications")
-            : Path.Combine(home, ".local/share/applications");
-
-        var dataDirectories = Environment.GetEnvironmentVariable("XDG_DATA_DIRS");
-        foreach (var directory in string.IsNullOrWhiteSpace(dataDirectories)
-                     ? new[] { "/usr/local/share", "/usr/share" }
-                     : dataDirectories.Split(':',
-                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            yield return Path.Combine(directory, "applications");
-        }
-    }
-
-    private static IEnumerable<string> SafeDesktopFiles(string directory)
-    {
-        try
-        {
-            return Directory.EnumerateFiles(directory, "*.desktop", new EnumerationOptions
-            {
-                IgnoreInaccessible = true,
-                RecurseSubdirectories = true,
-            }).ToArray();
-        }
-        catch
-        {
-            return [];
-        }
-    }
+    public void Dispose() => _catalog.Dispose();
 }

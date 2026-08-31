@@ -96,7 +96,7 @@ internal sealed class LanguageModule : IDrawableModule
         _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, targetIndex);
     }
 
-    private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 30)
+    private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 50)
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,

@@ -10,6 +10,11 @@ public class Layout : IDisposable
     internal static IRenderApi Renderer { get; private set; } = null!;
     public static LayoutInput Input { get; set; } = LayoutInput.None;
     private static readonly List<Rect> InputRegions = [];
+    private static readonly List<Action<IRenderApi>> TopLayerDraws = [];
+    private static readonly List<Rect> ActiveTopLayerInputRegions = [];
+    private static readonly Dictionary<ulong, List<Rect>> NextTopLayerInputRegions = [];
+    private static ulong _currentOutputId;
+    private static bool _drawingTopLayer;
     private static bool _diagnosticsEnabled;
     private static long _layoutsCreated;
     private static long _layoutsDrawn;
@@ -116,10 +121,59 @@ public class Layout : IDisposable
         }
     }
 
-    public static void BeginInputRegionFrame()
+    public static void BeginInputRegionFrame(ulong outputId)
     {
         InputRegions.Clear();
+        TopLayerDraws.Clear();
+        ActiveTopLayerInputRegions.Clear();
+        _currentOutputId = outputId;
+        if (NextTopLayerInputRegions.TryGetValue(outputId, out var previousRegions))
+        {
+            ActiveTopLayerInputRegions.AddRange(previousRegions);
+        }
+        NextTopLayerInputRegions[outputId] = [];
+        _drawingTopLayer = false;
     }
+
+    public static void DrawTopLayer()
+    {
+        _drawingTopLayer = true;
+        try
+        {
+            for (var index = 0; index < TopLayerDraws.Count; index++)
+            {
+                TopLayerDraws[index](Renderer);
+            }
+        }
+        finally
+        {
+            _drawingTopLayer = false;
+            TopLayerDraws.Clear();
+        }
+    }
+
+    internal static void DrawOnTop(Action<IRenderApi> draw) => TopLayerDraws.Add(draw);
+
+    internal static void RegisterTopLayerInputRegion(Rect rect)
+    {
+        if (!ActiveTopLayerInputRegions.Contains(rect))
+        {
+            ActiveTopLayerInputRegions.Add(rect);
+        }
+        var nextRegions = NextTopLayerInputRegions[_currentOutputId];
+        if (!nextRegions.Contains(rect))
+        {
+            nextRegions.Add(rect);
+        }
+    }
+
+    internal static void UnregisterNextTopLayerInputRegion(Rect rect) =>
+        NextTopLayerInputRegions[_currentOutputId].Remove(rect);
+
+    internal static bool IsNormalLayerClickBlocked =>
+        !_drawingTopLayer &&
+        Input.PointerPressed &&
+        ActiveTopLayerInputRegions.Any(Input.Contains);
 
     public static IReadOnlyList<Rect> GetInputRegions() => InputRegions;
 

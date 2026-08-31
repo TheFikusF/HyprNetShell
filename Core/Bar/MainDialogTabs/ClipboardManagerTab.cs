@@ -4,7 +4,7 @@ using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
-using FuzzySharp;
+
 using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
@@ -32,6 +32,8 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     private int _firstIndex;
     private int _selectedIndex;
     private int _loadedVersion = -1;
+    private HistoryDateRange _dateRange;
+    private DropdownNode? _dateDropdown;
 
     public string Id => "clipboard";
     public string Title => "Clipboard";
@@ -97,7 +99,17 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                         _selectedIndex,
                         _filteredEntries.Count,
                         "Clipboard history is empty")),
-                MainDialogTabUi.BuildInput(_query, "Search clipboard history..."),
+                new BoxNode(height: 46)
+                {
+                    HorizontalAlignment = ItemsAlignment.Stretch,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    Style = new Style { Spacing = 8 },
+                    Children =
+                    [
+                        MainDialogTabUi.BuildInput(_query, "Search clipboard history..."),
+                        BuildDateDropdown(),
+                    ],
+                },
                 BoundedListUi.BuildScrollableResults(
                     new BoxNode
                     {
@@ -172,7 +184,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
         };
     }
 
-    private Node BuildPinButton(
+    private BoxNode BuildPinButton(
         ClipboardHistoryEntry entry,
         bool active,
         ActionButtonState state)
@@ -213,7 +225,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
         };
     }
 
-    private Node BuildDeleteButton(
+    private BoxNode BuildDeleteButton(
         ClipboardHistoryEntry entry,
         bool active,
         ActionButtonState state)
@@ -254,6 +266,33 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
         };
     }
 
+    private DropdownNode BuildDateDropdown()
+    {
+        _dateDropdown ??= new DropdownNode(
+            160,
+            HistoryDateFilter.Labels,
+            (int)_dateRange,
+            Icons.ChevronDown,
+            Icons.Check,
+            selected =>
+            {
+                _dateRange = (HistoryDateRange)selected;
+                ApplyFilter();
+            })
+        {
+            FontSize = theme.TextSize,
+            BackgroundColor = theme.Panel,
+            HoverColor = Color.Lighten(theme.Panel, 0.18f),
+            SelectedColor = theme.Active,
+            BorderColor = theme.Border,
+            BorderWidth = theme.BorderWidth,
+            BorderRadius = 8,
+            TextColor = theme.Text,
+        };
+        _dateDropdown.SelectedIndex = (int)_dateRange;
+        return _dateDropdown;
+    }
+
     private void RefreshEntries()
     {
         int version;
@@ -269,10 +308,12 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
 
     private void ApplyFilter()
     {
+        var dateFilteredEntries = _entries
+            .Where(entry => HistoryDateFilter.Includes(_dateRange, entry.CapturedAt));
         _filteredEntries = string.IsNullOrWhiteSpace(_query)
-            ? _entries
-            : _entries
-                .Select(entry => (Entry: entry, Score: Fuzz.WeightedRatio(_query, entry.Preview)))
+            ? dateFilteredEntries.ToArray()
+            : dateFilteredEntries
+                .Select(entry => (Entry: entry, Score: FuzzySearch.Score(_query, entry.Preview)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Entry.IsPinned)
                 .ThenByDescending(result => result.Score)

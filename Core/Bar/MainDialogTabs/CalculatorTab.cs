@@ -25,7 +25,7 @@ internal sealed class CalculatorTab : IMainDialogTab
     public void HandleTextInput(string text)
     {
         _expression += new string(text.Where(IsCalculatorCharacter).ToArray());
-        _result = ExpressionParser.TryEvaluate(_expression, out var value)
+        _result = ExpressionEvaluator.TryEvaluate(_expression, out var value)
             ? value.ToString("G15", CultureInfo.InvariantCulture)
             : "Invalid expression";
     }
@@ -35,7 +35,7 @@ internal sealed class CalculatorTab : IMainDialogTab
         if (_expression.Length > 0)
         {
             _expression = MainDialogTabUi.RemoveLastTextElement(_expression);
-            _result = ExpressionParser.TryEvaluate(_expression, out var value)
+            _result = ExpressionEvaluator.TryEvaluate(_expression, out var value)
                 ? value.ToString("G15", CultureInfo.InvariantCulture)
                 : "Invalid expression";
         }
@@ -47,7 +47,7 @@ internal sealed class CalculatorTab : IMainDialogTab
 
     public void ActivateSelection()
     {
-        if (!ExpressionParser.TryEvaluate(_expression, out var value))
+        if (!ExpressionEvaluator.TryEvaluate(_expression, out var value))
         {
             _result = "Invalid expression";
             return;
@@ -132,93 +132,4 @@ internal sealed class CalculatorTab : IMainDialogTab
         }
     }
 
-    private sealed class ExpressionParser(string expression)
-    {
-        private readonly string _expression = expression;
-        private int _position;
-
-        public static bool TryEvaluate(string expression, out double value)
-        {
-            try
-            {
-                var parser = new ExpressionParser(expression.Replace(',', '.'));
-                value = parser.ParseExpression();
-                parser.SkipWhitespace();
-                return parser._position == parser._expression.Length && double.IsFinite(value);
-            }
-            catch
-            {
-                value = 0;
-                return false;
-            }
-        }
-
-        private double ParseExpression()
-        {
-            var value = ParseTerm();
-            while (true)
-            {
-                SkipWhitespace();
-                if (Take('+')) value += ParseTerm();
-                else if (Take('-')) value -= ParseTerm();
-                else return value;
-            }
-        }
-
-        private double ParseTerm()
-        {
-            var value = ParseFactor();
-            while (true)
-            {
-                SkipWhitespace();
-                if (Take('*')) value *= ParseFactor();
-                else if (Take('/')) value /= ParseFactor();
-                else return value;
-            }
-        }
-
-        private double ParseFactor()
-        {
-            SkipWhitespace();
-            if (Take('+')) return ParseFactor();
-            if (Take('-')) return -ParseFactor();
-            if (Take('('))
-            {
-                var value = ParseExpression();
-                SkipWhitespace();
-                if (!Take(')')) throw new FormatException();
-                return value;
-            }
-
-            var start = _position;
-            while (_position < _expression.Length &&
-                   (char.IsDigit(_expression[_position]) || _expression[_position] == '.'))
-            {
-                _position++;
-            }
-
-            if (start == _position || !double.TryParse(
-                    _expression[start.._position],
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var number))
-            {
-                throw new FormatException();
-            }
-
-            return number;
-        }
-
-        private bool Take(char character)
-        {
-            if (_position >= _expression.Length || _expression[_position] != character) return false;
-            _position++;
-            return true;
-        }
-
-        private void SkipWhitespace()
-        {
-            while (_position < _expression.Length && char.IsWhiteSpace(_expression[_position])) _position++;
-        }
-    }
 }

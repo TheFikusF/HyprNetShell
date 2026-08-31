@@ -153,7 +153,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     {
         Layout.RecordBoxDraw();
         var hovered = Layout.Input.Contains(new Rect(x, y, Width, Height));
-        var clicked = hovered && Layout.Input.PointerPressed;
+        var clicked = hovered && Layout.Input.PointerPressed && !Layout.IsNormalLayerClickBlocked;
 
 #if DEBUG_HOVERS
         if (hovered)

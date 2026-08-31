@@ -27,7 +27,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     private string _id = "";
     private string _name = "";
     private string _hotkey = "";
-    private HashSet<string> _tabs = new(StringComparer.Ordinal);
+    private List<string> _tabs = [];
     private EditedField _editedField;
     private string _message = "";
 
@@ -78,6 +78,17 @@ internal sealed class CompositeWindowsConfigurationTab(
         }
     }
 
+    public bool HandleEscape()
+    {
+        if (_editedField != EditedField.None)
+        {
+            _editedField = EditedField.None;
+            return true;
+        }
+
+        return false;
+    }
+
     public void MoveSelection(SelectionDirection direction)
     {
         if (_editedField != EditedField.None || configuration.Windows.Count == 0)
@@ -110,7 +121,7 @@ internal sealed class CompositeWindowsConfigurationTab(
             {
                 Direction = Direction.Vertical,
                 HorizontalAlignment = ItemsAlignment.Stretch,
-                Style = new Style { Spacing = 10 },
+                Style = new Style { Spacing = 12 },
                 Children =
                 [
                     MainDialogTabUi.BuildSectionHeader(
@@ -118,12 +129,8 @@ internal sealed class CompositeWindowsConfigurationTab(
                         "Choose its tabs and an optional Hyprland hotkey"),
                     BuildInput("Name", _name, "Window name", EditedField.Name),
                     BuildInput("Hotkey", _hotkey, "Example: SUPER + SPACE", EditedField.Hotkey),
-                    new TextNode("Tabs", 15, theme.Text),
-                    new BoxNode
-                    {
-                        Style = new Style { Spacing = 8 },
-                        Children = [..tabs.Tabs.Select(BuildTabToggle)],
-                    },
+                    new TextNode("Tabs", theme.TextSize, theme.Text),
+                    BuildTabGrid(),
                     new TextNode(
                         _message.Length == 0 ? "Changes are applied after Save." : _message,
                         theme.TextSize,
@@ -134,27 +141,22 @@ internal sealed class CompositeWindowsConfigurationTab(
         ],
     };
 
-    private Node BuildWindowList()
+    private BoxNode BuildWindowList()
     {
-        var rows = configuration.Windows.Select((window, index) => BuildWindowRow(window, index)).ToList();
-        rows.Add(BuildButton("New window", Icons.Add, "new", StartNew));
         return new BoxNode(245)
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
-            Children = rows,
+            Style = Style.Spacer,
+            Children = [.. configuration.Windows.Select(BuildWindowRow),
+                BuildButton("New window", Icons.Add, "new", StartNew)],
         };
     }
 
-    private Node BuildWindowRow(CompositeWindowDefinition window, int index)
+    private BoxNode BuildWindowRow(CompositeWindowDefinition window, int index)
     {
-        var state = State("window-" + window.Id);
         var selected = !_isNew && index == _selectedIndex;
-        var normal = selected ? theme.Active : theme.Panel;
-        var target = state.Hovered ? Color.Lighten(normal, 0.12f) : normal;
-        state.Background = Color.LerpSmooth(state.Background, target, 18, Renderer.DeltaTime);
-
+        var state = _buttonStates.GetState("window-" + window.Id, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -169,15 +171,22 @@ internal sealed class CompositeWindowsConfigurationTab(
             },
             Children =
             [
-                new TextNode(window.Name, 15, theme.Text),
-                new TextNode(window.Hotkey.Length == 0 ? "No hotkey" : window.Hotkey, 12, theme.Muted),
+                new TextNode(window.Name, theme.TextSize, theme.Text),
+                new TextNode(
+                    window.Hotkey.Length == 0 ? "No hotkey" : window.Hotkey,
+                    12,
+                    selected ? theme.Text : theme.Muted),
             ],
         };
     }
 
-    private Node BuildInput(string label, string value, string placeholder, EditedField field)
+    private BoxNode BuildInput(string label, string value, string placeholder, EditedField field)
     {
         var active = _editedField == field;
+        var caret = active && Math.Sin(Environment.TickCount64 / 200.0) > 0 ? "|" : "";
+        var displayedValue = active
+            ? (value.Length == 0 ? placeholder : value) + caret
+            : value.Length == 0 ? placeholder : value;
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -192,33 +201,139 @@ internal sealed class CompositeWindowsConfigurationTab(
             },
             Children =
             [
-                new TextNode(label, 12, theme.Muted),
-                new TextNode(value.Length == 0 ? placeholder : value, 15, value.Length == 0 ? theme.Muted : theme.Text),
+                new TextNode(label, 12, active ? theme.Text : theme.Muted),
+                new TextNode(displayedValue, theme.TextSize, active || value.Length > 0 ? theme.Text : theme.Muted),
             ],
         };
     }
 
-    private Node BuildTabToggle(IMainDialogTab tab)
+    private BoxNode BuildTabGrid()
     {
-        var selected = _tabs.Contains(tab.Id);
-        return BuildButton(
-            tab.Title,
-            tab.Icon,
-            "tab-" + tab.Id,
-            () =>
-            {
-                if (!_tabs.Add(tab.Id))
-                {
-                    _tabs.Remove(tab.Id);
-                }
-            },
-            selected);
+        var orderedTabs = OrderedTabs().ToArray();
+        var columnLength = (orderedTabs.Length + 1) / 2;
+        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Start)
+        {
+            Children =
+            [
+                ..orderedTabs
+                    .Chunk(columnLength)
+                    .Select(column => new BoxNode
+                    {
+                        Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
+                        Style = Style.Spacer,
+                        Children = [..column.Select(BuildTabToggle)],
+                    }),
+            ],
+        };
     }
 
-    private Node BuildActions() => new BoxNode
+    private IEnumerable<IMainDialogTab> OrderedTabs()
+    {
+        var byId = tabs.Tabs.ToDictionary(tab => tab.Id, StringComparer.Ordinal);
+        foreach (var id in _tabs)
+        {
+            if (byId.Remove(id, out var tab))
+            {
+                yield return tab;
+            }
+        }
+
+        foreach (var tab in tabs.Tabs.Where(tab => byId.ContainsKey(tab.Id)))
+        {
+            yield return tab;
+        }
+    }
+
+    private Node BuildTabToggle(IMainDialogTab tab)
+    {
+        var selectedIndex = _tabs.IndexOf(tab.Id);
+        var selected = selectedIndex >= 0;
+        return new BoxNode
+        {
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            VerticalAlignment = ItemsAlignment.Center,
+            Style = Style.Spacer,
+            Children =
+            [
+                BuildButton(
+                    selected ? $"{selectedIndex + 1}. {tab.Title}" : tab.Title,
+                    tab.Icon,
+                    "tab-" + tab.Id,
+                    () => ToggleTab(tab.Id),
+                    selected),
+                ..BuildMoveButtons(tab.Id, selectedIndex),
+            ],
+        };
+    }
+
+    private IEnumerable<Node> BuildMoveButtons(string tabId, int selectedIndex)
+    {
+        if (selectedIndex < 0)
+        {
+            yield break;
+        }
+
+        yield return BuildMoveButton(tabId, -1, selectedIndex > 0, Icons.ChevronUp);
+        yield return BuildMoveButton(tabId, 1, selectedIndex < _tabs.Count - 1, Icons.ChevronDown);
+    }
+
+    private BoxNode BuildMoveButton(string tabId, int offset, bool enabled, SvgAsset icon)
+    {
+        var state = _buttonStates
+            .GetState($"move-{tabId}-{offset}", theme.Panel)
+            .UpdateColor(theme.Panel);
+        if (!enabled)
+        {
+            state.Hovered.Value = false;
+        }
+
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            IsHovered = enabled ? state.Hovered : null,
+            OnClick = enabled ? () => MoveTab(tabId, offset) : null,
+            Opacity = enabled ? 1.0f : 0.35f,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                Padding = 8,
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children = [new ImageNode(icon, 16, 16, theme.Text)],
+        };
+    }
+
+    private void ToggleTab(string tabId)
+    {
+        var index = _tabs.IndexOf(tabId);
+        if (index >= 0)
+        {
+            _tabs.RemoveAt(index);
+        }
+        else
+        {
+            _tabs.Add(tabId);
+        }
+    }
+
+    private void MoveTab(string tabId, int offset)
+    {
+        var index = _tabs.IndexOf(tabId);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= _tabs.Count)
+        {
+            return;
+        }
+
+        (_tabs[index], _tabs[target]) = (_tabs[target], _tabs[index]);
+    }
+
+    private BoxNode BuildActions() => new()
     {
         HorizontalAlignment = ItemsAlignment.End,
-        Style = new Style { Spacing = 8 },
+        Style = Style.Spacer,
         Children =
         [
             ..(!_isNew
@@ -232,17 +347,14 @@ internal sealed class CompositeWindowsConfigurationTab(
         ],
     };
 
-    private Node BuildButton(
+    private BoxNode BuildButton(
         string label,
         SvgAsset icon,
         string key,
         Action action,
         bool selected = false)
     {
-        var state = State(key);
-        var normal = selected ? theme.Active : theme.Panel;
-        var target = state.Hovered ? Color.Lighten(normal, 0.12f) : normal;
-        state.Background = Color.LerpSmooth(state.Background, target, 18, Renderer.DeltaTime);
+        var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             VerticalAlignment = ItemsAlignment.Center,
@@ -250,12 +362,12 @@ internal sealed class CompositeWindowsConfigurationTab(
             OnClick = action,
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
-                Padding = new Insets(12, 9),
+                Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
-                Spacing = 7,
+                Spacing = 8,
             },
-            Children = [new ImageNode(icon, 16, 16, theme.Text), new TextNode(label, 14, theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, theme.Text), new TextNode(label, theme.TextSize, theme.Text)],
         };
     }
 
@@ -284,7 +396,7 @@ internal sealed class CompositeWindowsConfigurationTab(
         _id = window.Id;
         _name = window.Name;
         _hotkey = window.Hotkey;
-        _tabs = [..window.TabIds];
+        _tabs = [.. window.TabIds];
         _editedField = EditedField.None;
         _message = "";
     }
@@ -292,7 +404,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     private void Save()
     {
         if (!configuration.TryUpsert(
-                new CompositeWindowDefinition(_id, _name, _hotkey, [.._tabs]),
+                new CompositeWindowDefinition(_id, _name, _hotkey, [.. _tabs]),
                 out var error))
         {
             _message = error;
@@ -317,16 +429,4 @@ internal sealed class CompositeWindowsConfigurationTab(
             Select(Math.Min(_selectedIndex, configuration.Windows.Count - 1));
         }
     }
-
-    private ModulesCommon.BoxState State(string key)
-    {
-        if (!_buttonStates.TryGetValue(key, out var state))
-        {
-            state = new ModulesCommon.BoxState();
-            _buttonStates.Add(key, state);
-        }
-
-        return state;
-    }
-
 }

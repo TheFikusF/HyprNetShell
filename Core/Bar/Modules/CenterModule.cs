@@ -227,7 +227,7 @@ internal sealed class CenterModule : IDrawableModule
         [
             new BoxNode(new Style { Spacing = 12 }, verticalAlignment: ItemsAlignment.Stretch)
             {
-                _calendar.Draw(now), _worldClocks.Draw(now), _weather.Draw(OpenWeather)
+                _calendar.Draw(now), _worldClocks.Draw(now, OpenWorldClocks), _weather.Draw(OpenWeather)
             },
             ModulesCommon.BuildDivider(_theme.Border, height: 12),
             _notificationsWidget.Draw(snapshot),
@@ -238,6 +238,12 @@ internal sealed class CenterModule : IDrawableModule
     {
         _node.ClosePopup();
         _dialogs.Open<CompositeWindow>([_tabs.Get<WeatherTab>()]);
+    }
+
+    private void OpenWorldClocks()
+    {
+        _node.ClosePopup();
+        _dialogs.Open<CompositeWindow>([_tabs.Get<WorldClockTab>()]);
     }
 
     private static double GradientOffset() => (Environment.TickCount64 % 4600 / 4600.0) * Math.PI * 2;

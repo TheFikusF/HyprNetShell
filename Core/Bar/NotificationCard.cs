@@ -11,12 +11,22 @@ namespace HyprNetShell.Core.Bar;
 
 internal static class NotificationCard
 {
+    internal sealed class State
+    {
+        public ModulesCommon.BoxState Content { get; } = new();
+        public ModulesCommon.BoxState CloseButton { get; } = new();
+        public Dictionary<string, ModulesCommon.BoxState> ActionButtons { get; } = new();
+        public bool ContentInitialized { get; set; }
+        public bool CloseButtonInitialized { get; set; }
+    }
+
     private static readonly AppIconResolver IconResolver = new();
 
     public static Node Draw(
         NotificationSnapshot notification,
         NotificationService service,
-        Theme theme)
+        Theme theme,
+        State state)
     {
         var iconPath = string.IsNullOrWhiteSpace(notification.IconName)
             ? null
@@ -42,11 +52,11 @@ internal static class NotificationCard
                     Style = new Style { Spacing = 12 },
                     Children =
                     [
-                        BuildContent(notification, iconPath, service, theme),
-                        BuildCloseButton(notification.Id, service, theme),
+                        BuildContent(notification, iconPath, service, theme, state),
+                        BuildCloseButton(notification.Id, service, theme, state),
                     ],
                 },
-                ..BuildActions(notification, service, theme),
+                ..BuildActions(notification, service, theme, state),
             ],
         };
     }
@@ -55,8 +65,16 @@ internal static class NotificationCard
         NotificationSnapshot notification,
         string? iconPath,
         NotificationService service,
-        Theme theme)
+        Theme theme,
+        State state)
     {
+        if (!state.ContentInitialized)
+        {
+            state.Content.Background = theme.Panel with { A = 0.2f };
+            state.ContentInitialized = true;
+        }
+        state.Content.UpdateColor(theme.Panel with { A = 0.2f });
+
         TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
             ? [new TextNode(notification.Title, theme.TextSize, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 3)]
             :
@@ -75,7 +93,14 @@ internal static class NotificationCard
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
             OnClick = () => service.Activate(notification.Id),
-            Style = new Style { Spacing = 12 },
+            IsHovered = state.Content.Hovered,
+            Style = new Style
+            {
+                BackgroundColor = state.Content.Background,
+                BorderRadius = 8,
+                Padding = 4,
+                Spacing = 12,
+            },
             Children =
             [
                 ..BuildIcon(notification.ImageData, notification.StoredImage, iconPath, 32),
@@ -103,25 +128,39 @@ internal static class NotificationCard
         };
     }
 
-    private static Node BuildCloseButton(uint id, NotificationService service, Theme theme) =>
-        new BoxNode(22, 22)
+    private static Node BuildCloseButton(
+        uint id,
+        NotificationService service,
+        Theme theme,
+        State state)
+    {
+        if (!state.CloseButtonInitialized)
+        {
+            state.CloseButton.Background = theme.Muted;
+            state.CloseButtonInitialized = true;
+        }
+        state.CloseButton.UpdateColor(theme.Muted);
+        return new BoxNode(22, 22)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => service.Dismiss(id),
+            IsHovered = state.CloseButton.Hovered,
             Style = new Style
             {
-                BackgroundColor = theme.Muted,
+                BackgroundColor = state.CloseButton.Background,
                 BorderRadius = 6,
                 Padding = 4,
             },
             Children = [new ImageNode(Icons.X, 14, 14, theme.Text)],
         };
+    }
 
     private static IEnumerable<Node> BuildActions(
         NotificationSnapshot notification,
         NotificationService service,
-        Theme theme)
+        Theme theme,
+        State state)
     {
         var actions = notification.Actions
             .Where(action => action.Key != "default")
@@ -138,25 +177,39 @@ internal static class NotificationCard
             Style = new Style { Spacing = 6 },
             Children =
             [
-                ..actions.Select(action => new BoxNode
-                {
-                    HorizontalAlignment = ItemsAlignment.Center,
-                    OnClick = () => service.InvokeAction(notification.Id, action.Key),
-                    Style = new Style
-                    {
-                        BackgroundColor = theme.Active,
-                        BorderRadius = 6,
-                        Padding = 8,
-                    },
-                    Children =
-                    [
-                        new TextNode(
-                            action.Label,
-                            12,
-                            theme.Text,
-                            wrapping: TextWrapping.Ellipsis),
-                    ],
-                }),
+                ..actions.Select(action => BuildAction(notification.Id, action, service, theme, state)),
+            ],
+        };
+    }
+
+    private static Node BuildAction(
+        uint notificationId,
+        NotificationActionSnapshot action,
+        NotificationService service,
+        Theme theme,
+        State state)
+    {
+        var buttonState = state.ActionButtons
+            .GetState(action.Key, theme.Active)
+            .UpdateColor(theme.Active);
+        return new BoxNode
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            OnClick = () => service.InvokeAction(notificationId, action.Key),
+            IsHovered = buttonState.Hovered,
+            Style = new Style
+            {
+                BackgroundColor = buttonState.Background,
+                BorderRadius = 6,
+                Padding = 8,
+            },
+            Children =
+            [
+                new TextNode(
+                    action.Label,
+                    12,
+                    theme.Text,
+                    wrapping: TextWrapping.Ellipsis),
             ],
         };
     }

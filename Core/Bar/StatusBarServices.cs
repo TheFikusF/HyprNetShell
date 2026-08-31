@@ -63,6 +63,7 @@ public sealed class StatusBarServices : IDisposable
     internal BatteryModuleService Battery { get; }
     internal SystemStatsModuleService SystemStats { get; }
     internal WeatherService Weather { get; }
+    internal DictionaryService Dictionary { get; }
 
     public DialogService Dialogs { get; }
 
@@ -84,6 +85,7 @@ public sealed class StatusBarServices : IDisposable
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
         Weather = new WeatherService();
+        Dictionary = new DictionaryService();
         Music = new MusicModuleService();
         ClipboardHistory = new ClipboardHistoryService(History);
         Tray = new SniTrayService();
@@ -95,6 +97,7 @@ public sealed class StatusBarServices : IDisposable
             Network,
             Wallpapers,
             Weather,
+            Dictionary,
             Dialogs.Close,
             Theme.Default);
         CompositeWindowConfiguration = new CompositeWindowConfiguration(Tabs.Tabs);

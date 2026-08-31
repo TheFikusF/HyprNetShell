@@ -16,13 +16,17 @@ internal sealed class TabsService : IDisposable
         NetworkModuleService network,
         WallpaperModuleService wallpapers,
         WeatherService weather,
+        DictionaryService dictionary,
         Action closeDialog,
         Theme theme)
     {
         _tabs =
         [
+            new UnifiedSearchTab(hyprctl, closeDialog, theme),
             new ApplicationLauncherTab(hyprctl, closeDialog, theme),
             new CalculatorTab(),
+            new DictionaryTab(dictionary, theme),
+            new WorldClockTab(theme),
             new ClipboardManagerTab(clipboardHistory, closeDialog, theme),
             new WallpapersTab(wallpapers, closeDialog, theme),
             new WifiTab(network, theme),

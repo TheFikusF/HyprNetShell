@@ -44,6 +44,9 @@ internal sealed class Hyprctl : IHyprctl
             $"focus window {windowAddress}",
             cancellationToken);
 
+    public Task<bool> ExitSessionAsync(CancellationToken cancellationToken = default) =>
+        DispatchAsync("hl.dsp.exit()", "exit the Hyprland session", cancellationToken);
+
     public Task<bool> Bind(
         string keys,
         Action callback,

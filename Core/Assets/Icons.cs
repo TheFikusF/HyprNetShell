@@ -100,6 +100,12 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/calculator.svg")]
     public static partial SvgAsset Calculator { get; }
 
+    [SvgAsset("assets/icons/lucide/search.svg")]
+    public static partial SvgAsset Search { get; }
+
+    [SvgAsset("assets/icons/lucide/book-open-text.svg")]
+    public static partial SvgAsset Dictionary { get; }
+
     [SvgAsset("assets/icons/lucide/clipboard.svg")]
     public static partial SvgAsset Clipboard { get; }
 
@@ -138,6 +144,9 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/lock.svg")]
     public static partial SvgAsset Lock { get; }
+
+    [SvgAsset("assets/icons/lucide/log-out.svg")]
+    public static partial SvgAsset LogOut { get; }
 
     [SvgAsset("assets/icons/lucide/copy.svg")]
     public static partial SvgAsset Copy { get; }
@@ -196,6 +205,12 @@ public static partial class Icons
 
     [SvgAsset("assets/icons/lucide/chevron-right.svg")]
     public static partial SvgAsset ChevronRight { get; }
+
+    [SvgAsset("assets/icons/lucide/chevron-down.svg")]
+    public static partial SvgAsset ChevronDown { get; }
+
+    [SvgAsset("assets/icons/lucide/chevron-up.svg")]
+    public static partial SvgAsset ChevronUp { get; }
     
     [SvgAsset("assets/icons/lucide/clock.svg")]
     public static partial SvgAsset Clock { get; }

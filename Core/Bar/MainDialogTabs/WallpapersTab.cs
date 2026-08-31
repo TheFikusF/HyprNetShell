@@ -3,7 +3,6 @@ using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
-using FuzzySharp;
 using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
@@ -287,7 +286,7 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
         _filteredWallpapers = string.IsNullOrWhiteSpace(_query)
             ? _wallpapers
             : _wallpapers
-                .Select(wallpaper => (Wallpaper: wallpaper, Score: Fuzz.WeightedRatio(_query, wallpaper.Name)))
+                .Select(wallpaper => (Wallpaper: wallpaper, Score: FuzzySearch.Score(_query, wallpaper.Name)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Wallpaper.Name, StringComparer.CurrentCultureIgnoreCase)

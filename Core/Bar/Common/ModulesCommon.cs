@@ -10,17 +10,15 @@ public static class ModulesCommon
 {
     private static readonly AppIconResolver IconResolver = new();
 
-    public static Color ToBackground(Theme theme, Color color) =>
-        Color.Lerp(theme.Panel, color, 0.125f) with { A = 0.9f };
+    public static Color ToBackground(Theme theme, Color color) => Color.Lerp(theme.Panel, color, 0.125f) with { A = 0.9f };
 
-    public static Node BuildDivider(Color color, int? width = null, int height = 24) =>
-        new BoxNode(width, height)
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Center,
-            Children = [new BoxNode(height: 1) { Style = new Style { BackgroundColor = color } }]
-        };
+    public static Node BuildDivider(Color color, int? width = null, int height = 24) => new BoxNode(width, height)
+    {
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Center,
+        Children = [new BoxNode(height: 1) { Style = new Style { BackgroundColor = color } }]
+    };
 
     public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null,
         Style style = default, int? width = null, int? maxTextWidth = null) =>

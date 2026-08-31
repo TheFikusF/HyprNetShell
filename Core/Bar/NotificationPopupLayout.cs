@@ -10,6 +10,7 @@ internal static class NotificationPopupLayout
 {
     private const int WIDTH = 460;
     private const int MAXIMUM_VISIBLE = 5;
+    private static readonly Dictionary<uint, NotificationCard.State> CardStates = new();
 
     public static Node Draw(
         NotificationsSnapshot snapshot,
@@ -18,6 +19,7 @@ internal static class NotificationPopupLayout
         int screenHeight,
         int barHeight)
     {
+        RemoveExpiredCardStates(snapshot.Items);
         var visible = snapshot.DoNotDisturb
             ? []
             : snapshot.Items
@@ -49,5 +51,22 @@ internal static class NotificationPopupLayout
     }
 
     private static Node BuildToast(NotificationSnapshot notification, NotificationService service, Theme theme)
-        => NotificationCard.Draw(notification, service, theme);
+    {
+        if (!CardStates.TryGetValue(notification.Id, out var state))
+        {
+            state = new NotificationCard.State();
+            CardStates[notification.Id] = state;
+        }
+
+        return NotificationCard.Draw(notification, service, theme, state);
+    }
+
+    private static void RemoveExpiredCardStates(IReadOnlyList<NotificationSnapshot> notifications)
+    {
+        var activeIds = notifications.Select(notification => notification.Id).ToHashSet();
+        foreach (var id in CardStates.Keys.Where(id => !activeIds.Contains(id)).ToArray())
+        {
+            CardStates.Remove(id);
+        }
+    }
 }

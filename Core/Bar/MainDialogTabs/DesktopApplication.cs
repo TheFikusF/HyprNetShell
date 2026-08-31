@@ -119,3 +119,169 @@ internal static class DesktopApplicationParser
         .Replace("\\r", "\r", StringComparison.Ordinal)
         .Replace("\\\\", "\\", StringComparison.Ordinal);
 }
+
+internal sealed class DesktopApplicationCatalog : IDisposable
+{
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+
+    private readonly Lock _stateLock = new();
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly Task _refreshLoop;
+    private IReadOnlyList<DesktopApplication> _applications = [];
+    private CatalogStamp _stamp;
+    private bool _loaded;
+
+    internal DesktopApplicationCatalog()
+    {
+        _refreshLoop = Task.Run(() => RefreshLoopAsync(_lifetime.Token));
+    }
+
+    internal event Action? Changed;
+
+    internal IReadOnlyList<DesktopApplication> Snapshot
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _applications;
+            }
+        }
+    }
+
+    internal void RefreshSoon() => _ = Task.Run(() => RefreshAsync(force: false, _lifetime.Token));
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        await RefreshAsync(force: true, cancellationToken);
+        using var timer = new PeriodicTimer(RefreshInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await RefreshAsync(force: false, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task RefreshAsync(bool force, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var scan = await Task.Run(ScanFiles, cancellationToken);
+            lock (_stateLock)
+            {
+                if (!force && _loaded && scan.Stamp == _stamp)
+                {
+                    return;
+                }
+            }
+
+            var applications = await Task.Run(() => LoadApplications(scan.Files, cancellationToken), cancellationToken);
+            lock (_stateLock)
+            {
+                _applications = applications;
+                _stamp = scan.Stamp;
+                _loaded = true;
+            }
+
+            Changed?.Invoke();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // A transient filesystem error must not clear the last usable application snapshot.
+        }
+    }
+
+    private static DesktopApplication[] LoadApplications(IReadOnlyList<string> files, CancellationToken cancellationToken)
+    {
+        var applications = new Dictionary<string, DesktopApplication>(StringComparer.OrdinalIgnoreCase);
+        foreach (var desktopFile in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var application = DesktopApplicationParser.Parse(desktopFile);
+            if (application is not null)
+            {
+                applications.TryAdd(application.DesktopId, application);
+            }
+        }
+
+        return applications.Values
+            .OrderBy(application => application.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private static CatalogScan ScanFiles()
+    {
+        var files = new List<string>();
+        var hash = new HashCode();
+        foreach (var directory in ApplicationDirectories().Where(Directory.Exists))
+        {
+            foreach (var file in SafeDesktopFiles(directory))
+            {
+                files.Add(file);
+                try
+                {
+                    var info = new FileInfo(file);
+                    hash.Add(file, StringComparer.Ordinal);
+                    hash.Add(info.LastWriteTimeUtc.Ticks);
+                    hash.Add(info.Length);
+                }
+                catch
+                {
+                    hash.Add(file, StringComparer.Ordinal);
+                }
+            }
+        }
+
+        return new CatalogScan(files, new CatalogStamp(files.Count, hash.ToHashCode()));
+    }
+
+    private static IEnumerable<string> ApplicationDirectories()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        yield return !string.IsNullOrWhiteSpace(dataHome)
+            ? Path.Combine(dataHome, "applications")
+            : Path.Combine(home, ".local/share/applications");
+
+        var dataDirectories = Environment.GetEnvironmentVariable("XDG_DATA_DIRS");
+        foreach (var directory in string.IsNullOrWhiteSpace(dataDirectories)
+                     ? new[] { "/usr/local/share", "/usr/share" }
+                     : dataDirectories.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            yield return Path.Combine(directory, "applications");
+        }
+    }
+
+    private static IEnumerable<string> SafeDesktopFiles(string directory)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(directory, "*.desktop", new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = true,
+            }).Order(StringComparer.Ordinal).ToArray();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+
+    private readonly record struct CatalogStamp(int FileCount, int Hash);
+    private sealed record CatalogScan(IReadOnlyList<string> Files, CatalogStamp Stamp);
+}

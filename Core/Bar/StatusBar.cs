@@ -65,7 +65,11 @@ public sealed class StatusBar
         var batteryModule = new BatteryModule(services.Battery, Theme.Default, _popupCoordinator);
         var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
         var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);
-        var powerModule = new PowerModule(services.Dialogs, Theme.Default, _popupCoordinator);
+        var powerModule = new PowerModule(
+            services.Dialogs,
+            services.Hyprctl,
+            Theme.Default,
+            _popupCoordinator);
         var workspacesModule = new WorkspacesModule(
             services.Hyprland,
             services.Hyprctl,

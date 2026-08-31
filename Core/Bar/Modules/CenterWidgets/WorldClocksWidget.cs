@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -7,81 +8,92 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
-internal sealed class WorldClocksWidget(Theme theme)
+internal sealed class WorldClocksWidget
 {
     public const int WIDTH = 220;
 
+    private readonly Theme _theme;
+    private readonly ModulesCommon.BoxState _titleState = new();
+    private readonly WorldClockService _clocks;
     private readonly Dictionary<string, ModulesCommon.BoxState> _dateCopyButtons = new();
 
-    public Node Draw(DateTime now) => new BoxNode(WIDTH)
+    public WorldClocksWidget(Theme theme)
+        : this(theme, WorldClockService.Shared)
     {
-        Direction = Direction.Vertical,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+    }
+
+    public WorldClocksWidget(Theme theme, WorldClockService clocks)
+    {
+        _theme = theme;
+        _clocks = clocks;
+    }
+
+    public Node Draw(DateTime now, Action? openClocks = null)
+    {
+        var state = _titleState.UpdateColor(_theme.Panel);
+        return new BoxNode(WIDTH)
         {
-            BorderRadius = 8,
-            Spacing = 8,
-        },
-        Children =
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            VerticalAlignment = ItemsAlignment.Start,
+            Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
+            {
+                BorderRadius = 8,
+                Spacing = 8,
+            },
+            Children =
         [
-            new BoxNode
+            new BoxNode(height: 34)
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Center,
-                Style = Style.Spacer,
+                OnClick = openClocks,
+                IsHovered = _titleState,
+                Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+                {
+                    Padding = 0,
+                    BorderRadius = 8,
+                    BorderWidth = 0,
+                    Spacing = 8,
+                },
                 Children =
                 [
-                    new ImageNode(Icons.Clock, 22, 22, theme.Text),
-                    new TextNode("World clocks", 22, theme.Text)
+                    new ImageNode(Icons.Clock, 22, 22, _theme.Text),
+                    new TextNode("World clocks", 22, _theme.Text)
                 ]
             },
             BuildRow("Local", now),
-            BuildRow("UTC", DateTime.UtcNow),
-            BuildRow("Kyiv", ConvertUtc("Europe/Kyiv")),
-            BuildRow("Tel-Aviv", ConvertUtc("Asia/Tel_Aviv")),
-            BuildRow("New York", ConvertUtc("America/New_York")),
-            BuildRow("San Francisco", ConvertUtc("America/Los_Angeles")),
-            BuildRow("Tokyo", ConvertUtc("Asia/Tokyo")),
+            .. _clocks.SelectedClocks.Select(clock =>
+                BuildRow(clock.DisplayName, WorldClockService.GetTime(clock, now.ToUniversalTime()))),
         ],
-    };
+        };
+    }
 
     private BoxNode BuildRow(string label, DateTime time)
     {
-        var state = _dateCopyButtons.GetState(label, theme.Panel).UpdateColor(theme.Panel);
+        var state = _dateCopyButtons.GetState(label, _theme.Panel).UpdateColor(_theme.Panel);
         return new BoxNode(Style.Empty, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
-            new TextNode(label, theme.TextSize, theme.Text),
+            new TextNode(label, _theme.TextSize, _theme.Text),
             new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
             {
-                new TextNode(time.ToString("HH:mm"), theme.TextSize, theme.Text),
+                new TextNode(time.ToString("HH:mm"), _theme.TextSize, _theme.Text),
                 new BoxNode
                 {
                     IsHovered = state.Hovered,
                     HorizontalAlignment = ItemsAlignment.Center,
                     VerticalAlignment = ItemsAlignment.Center,
                     OnClick = () => Utils.CopyToClipboard($"{label} - {time:HH:mm}"),
-                    Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+                    Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
                     {
                         Padding = 4,
                         BorderRadius = 8,
                         BorderWidth = 0,
                     },
-                    Children = [new ImageNode(Icons.Copy, 14, 14, theme.Text)]
+                    Children = [new ImageNode(Icons.Copy, 14, 14, _theme.Text)]
                 }
             }
         };
     }
 
-    private static DateTime ConvertUtc(string timeZoneId)
-    {
-        try
-        {
-            return TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow, timeZoneId);
-        }
-        catch
-        {
-            return DateTime.UtcNow;
-        }
-    }
 }
