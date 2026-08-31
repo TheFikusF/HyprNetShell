@@ -1,4 +1,3 @@
-using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 
@@ -16,7 +15,7 @@ internal sealed class TabsService : IDisposable
         IHyprctl hyprctl,
         NetworkModuleService network,
         WallpaperModuleService wallpapers,
-        WeatherWidget weather,
+        WeatherService weather,
         Action closeDialog,
         Theme theme)
     {

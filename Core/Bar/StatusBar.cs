@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Modules;
+using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -74,9 +75,10 @@ public sealed class StatusBar
             () => languageModule.IsShown,
             _popupCoordinator);
 
+        var weatherWidget = new WeatherWidget(services.Weather, Theme.Default);
         _centerModule = new CenterModule(
             services.Notifications,
-            services.Weather,
+            weatherWidget,
             services.Dialogs,
             services.Tabs,
             Theme.Default,

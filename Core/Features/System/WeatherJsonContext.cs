@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
+namespace HyprNetShell.Core.Features.System;
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(WeatherResponse))]

@@ -8,7 +8,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class LanguageModule : IDrawableModule
 {
-    private const int WIDTH = 100;
+    private const int WIDTH = 80;
 
     private static readonly TimeSpan ChangePopupDuration = TimeSpan.FromSeconds(2);
 

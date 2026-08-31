@@ -23,7 +23,7 @@ public static class ModulesCommon
         };
 
     public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null,
-        Style style = default, int? width = null) =>
+        Style style = default, int? width = null, int? maxTextWidth = null) =>
         new BoxNode(width)
         {
             VerticalAlignment = ItemsAlignment.Center,
@@ -32,7 +32,8 @@ public static class ModulesCommon
             Children =
             [
                 new ImageNode(icon, 18, 18, color ?? theme.Text),
-                new TextNode(text, theme.TextSize, color ?? theme.Text),
+                new TextNode(text, theme.TextSize, color ?? theme.Text, maxTextWidth,
+                    maxTextWidth.HasValue ? TextWrapping.Ellipsis : TextWrapping.NoWrap),
             ],
         };
 

@@ -307,7 +307,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
                         Style = new Style { Spacing = 2 },
                         Children =
                         [
-                            new TextNode(MainDialogTabUi.Trim(network.Ssid, 32), 15, theme.Text),
+                            new TextNode(network.Ssid, theme.TextSize, theme.Text, maxWidth: 310),
                             new TextNode(network.SavedConnectionName is null ? security : $"{security} · Saved", 12, theme.Muted),
                         ],
                     },
@@ -332,8 +332,8 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         Style = new Style { Spacing = 14 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.QrCode, $"Share {MainDialogTabUi.Trim(network.Ssid, 36)}"),
-            new TextNode("Scan to connect to this Wi-Fi network", 14, theme.Muted),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.QrCode, $"Share {network.Ssid}", maxTextWidth: 360),
+            new TextNode("Scan to connect to this Wi-Fi network", theme.TextSize, theme.Muted),
             qrImage is null
                 ? BuildMessage("Reading network credentials...")
                 : new BoxNode
@@ -345,15 +345,15 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         ],
     };
 
-    private Node BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new BoxNode
+    private BoxNode BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new ()
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 14 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Lock, $"Connect to {MainDialogTabUi.Trim(network.Ssid, 36)}"),
-            new TextNode("Enter the network password", 14, theme.Muted),
+            ModulesCommon.BuildTextWithIcon(theme, Icons.Lock, $"Connect to {network.Ssid}", maxTextWidth: 360),
+            new TextNode("Enter the network password", theme.TextSize, theme.Muted),
             MainDialogTabUi.BuildInput(new string('•', password.Length), "Password"),
             new BoxNode
             {
@@ -369,10 +369,10 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         ],
     };
 
-    private Node BuildButton(string text, string key, Action? action)
+    private BoxNode BuildButton(string text, string key, Action? action)
     {
         var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(theme.Panel);
-        return new BoxNode
+        return new ()
         {
             IsHovered = state.Hovered,
             OnClick = action,
@@ -388,10 +388,10 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         };
     }
 
-    private Node BuildIconButton(SvgAsset icon, string key, Action? action)
+    private BoxNode BuildIconButton(SvgAsset icon, string key, Action? action)
     {
         var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(theme.Panel);
-        return new BoxNode(34, 34)
+        return new (34, 34)
         {
             IsHovered = state.Hovered,
             OnClick = action,
@@ -409,17 +409,17 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
 
     private Node BuildStatus(string? status) => string.IsNullOrWhiteSpace(status)
         ? new SpacerNode()
-        : new TextNode(status, 13, theme.Muted);
+        : new TextNode(status, theme.TextSize, theme.Muted);
 
-    private Node BuildMessage(string message) => new BoxNode(height: 52)
+    private BoxNode BuildMessage(string message) => new (height: 52)
     {
         VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Center,
         Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8, BorderWidth = 0 },
-        Children = [new TextNode(message, 14, theme.Muted)],
+        Children = [new TextNode(message, theme.TextSize, theme.Muted)],
     };
 
-    private Node WifiIcon(int? signal) => new ImageNode(Icons.WifiStrength[signal switch
+    private ImageNode WifiIcon(int? signal) => new (Icons.WifiStrength[signal switch
     {
         null or <= 25 => 0,
         <= 50 => 1,

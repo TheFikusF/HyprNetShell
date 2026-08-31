@@ -12,14 +12,15 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog, Theme theme)
     : IMainDialogTab
 {
-    private sealed class PinButtonState : ModulesCommon.BoxState
+    private sealed class ActionButtonState : ModulesCommon.BoxState
     {
         public float IconOpacity { get; set; }
     }
 
     private sealed class ClipboardButtonState : ModulesCommon.BoxState
     {
-        public PinButtonState Pin { get; } = new();
+        public ActionButtonState Pin { get; } = new();
+        public ActionButtonState Delete { get; } = new();
     }
 
     private const int FUZZY_SCORE_CUTOFF = 35;
@@ -129,7 +130,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
             {
-                if (state.Pin.Hovered.Value)
+                if (state.Pin.Hovered.Value || state.Delete.Hovered.Value)
                 {
                     return;
                 }
@@ -162,7 +163,11 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                             maxLines: 5),
                     ],
                 },
-                BuildPinButton(entry, selected || state.Hovered.Value, state.Pin),
+                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                {
+                    BuildPinButton(entry, selected || state.Hovered.Value, state.Pin),
+                    BuildDeleteButton(entry, selected || state.Hovered.Value, state.Delete),
+                },
             ],
         };
     }
@@ -170,7 +175,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     private Node BuildPinButton(
         ClipboardHistoryEntry entry,
         bool active,
-        PinButtonState state)
+        ActionButtonState state)
     {
         var transparent = Color.White with { A = 0.0f };
         var hover = Color.White with { A = 0.3f };
@@ -201,6 +206,47 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
             Children =
             [
                 new ImageNode(entry.IsPinned && active ? Icons.PinOff : Icons.Pin, 18, 18, theme.Text)
+                {
+                    Opacity = state.IconOpacity,
+                },
+            ],
+        };
+    }
+
+    private Node BuildDeleteButton(
+        ClipboardHistoryEntry entry,
+        bool active,
+        ActionButtonState state)
+    {
+        var transparent = Color.White with { A = 0.0f };
+        var hover = Color.White with { A = 0.3f };
+        state.Background = Color.LerpSmooth(
+            state.Background,
+            state.Hovered.Value ? hover : transparent,
+            18.0f,
+            Renderer.DeltaTime);
+        state.IconOpacity = PrimitivesMath.LerpSmooth(
+            state.IconOpacity,
+            active ? 1.0f : 0.0f,
+            18.0f,
+            Renderer.DeltaTime);
+
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = () => history.Delete(entry),
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                Padding = 0,
+                BorderRadius = 8,
+                BorderWidth = 0,
+                ShadowColor = null,
+            },
+            Children =
+            [
+                new ImageNode(Icons.Delete, 18, 18, theme.Text)
                 {
                     Opacity = state.IconOpacity,
                 },

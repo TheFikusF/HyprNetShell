@@ -8,17 +8,10 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal static class MainDialogTabUi
 {
-
-
-    public static Node BuildSectionHeader(string title, string status) => new BoxNode
+    public static Node BuildSectionHeader(string title, string status) => new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Spread, ItemsAlignment.Center)
     {
-        HorizontalAlignment = ItemsAlignment.Spread,
-        VerticalAlignment = ItemsAlignment.Center,
-        Children =
-        [
-            new TextNode(title, 22, Theme.Default.Text),
-            new TextNode(status, Theme.Default.TextSize, Theme.Default.Muted),
-        ],
+        new TextNode(title, 22, Theme.Default.Text),
+        new TextNode(status, Theme.Default.TextSize, Theme.Default.Muted),
     };
 
     public static Node BuildInput(string value, string placeholder) => new BoxNode(height: 46)
@@ -36,8 +29,6 @@ internal static class MainDialogTabUi
         ],
     };
 
-
-
     public static string ResultCount(int selectedIndex, int count, string emptyText) =>
         count == 0 ? emptyText : $"{selectedIndex + 1} / {count}";
 
@@ -46,9 +37,5 @@ internal static class MainDialogTabUi
         var indexes = StringInfo.ParseCombiningCharacters(value);
         return indexes.Length <= 1 ? "" : value[..indexes[^1]];
     }
-
-    public static string Trim(string value, int maximumLength) =>
-        value.Length <= maximumLength ? value : value[..(maximumLength - 3)] + "...";
-
 
 }

@@ -34,7 +34,7 @@
   },
   {
     "label": "Run: HyprNetShell",
-    "command": "meson setup Native/build Native && meson compile -C Native/build && dotnet run --project HyprNetShell.csproj",
+    "command": "dotnet run --project HyprNetShell.csproj --no-restore",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true,
     "allow_concurrent_runs": false,

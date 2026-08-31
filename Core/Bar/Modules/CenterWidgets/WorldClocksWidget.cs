@@ -58,11 +58,14 @@ internal sealed class WorldClocksWidget(Theme theme)
                 new BoxNode
                 {
                     IsHovered = state.Hovered,
+                    HorizontalAlignment = ItemsAlignment.Center,
+                    VerticalAlignment = ItemsAlignment.Center,
                     OnClick = () => Utils.CopyToClipboard($"{label} - {time:HH:mm}"),
                     Style = ModulesCommon.ModuleStyle(theme, state.Background) with
                     {
                         Padding = 4,
                         BorderRadius = 8,
+                        BorderWidth = 0,
                     },
                     Children = [new ImageNode(Icons.Copy, 14, 14, theme.Text)]
                 }

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
-using HyprNetShell.Core.Bar.Modules.CenterWidgets;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
@@ -63,7 +62,7 @@ public sealed class StatusBarServices : IDisposable
     internal BluetoothModuleService Bluetooth { get; }
     internal BatteryModuleService Battery { get; }
     internal SystemStatsModuleService SystemStats { get; }
-    internal WeatherWidget Weather { get; }
+    internal WeatherService Weather { get; }
 
     public DialogService Dialogs { get; }
 
@@ -84,7 +83,7 @@ public sealed class StatusBarServices : IDisposable
         Bluetooth = new BluetoothModuleService();
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
-        Weather = new WeatherWidget(Theme.Default);
+        Weather = new WeatherService();
         Music = new MusicModuleService();
         ClipboardHistory = new ClipboardHistoryService(History);
         Tray = new SniTrayService();
@@ -200,6 +199,7 @@ public sealed class StatusBarServices : IDisposable
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();
+        Weather.Dispose();
         Battery.Dispose();
         Bluetooth.Dispose();
         Audio.Dispose();

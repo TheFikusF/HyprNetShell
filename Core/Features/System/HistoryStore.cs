@@ -238,6 +238,15 @@ internal sealed class HistoryStore : IDisposable
         }
     }
 
+    public void DeleteClipboardEntry(string mimeType, string hash) => Execute(
+        "DELETE FROM clipboard_entries WHERE mime_type = $mime_type AND content_hash = $content_hash",
+        command =>
+        {
+            command.Parameters.AddWithValue("$mime_type", mimeType);
+            command.Parameters.AddWithValue("$content_hash", hash);
+        },
+        "Could not delete a clipboard entry");
+
     public void SetClipboardPinned(string mimeType, string hash, bool isPinned) => Execute(
         """
         UPDATE clipboard_entries

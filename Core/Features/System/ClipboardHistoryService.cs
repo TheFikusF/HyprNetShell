@@ -47,6 +47,24 @@ internal sealed class ClipboardHistoryService : IDisposable
         }
     }
 
+    public void Delete(ClipboardHistoryEntry entry)
+    {
+        lock (_gate)
+        {
+            var index = _entries.FindIndex(candidate =>
+                candidate.Hash == entry.Hash &&
+                candidate.MimeType.Equals(entry.MimeType, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                return;
+            }
+
+            _history.DeleteClipboardEntry(_entries[index].MimeType, _entries[index].Hash);
+            _entries.RemoveAt(index);
+            Interlocked.Increment(ref _version);
+        }
+    }
+
     public void TogglePinned(ClipboardHistoryEntry entry)
     {
         lock (_gate)

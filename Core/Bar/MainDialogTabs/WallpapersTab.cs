@@ -247,7 +247,8 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
             Children =
             [
                 new ImageNode(wallpaper.Path, (int)(192 * 0.98f), (int)(108 * 0.98f), loadAsync: true),
-                new TextNode(MainDialogTabUi.Trim(wallpaper.Name, 24), 14.0f, theme.Text),
+                new TextNode(wallpaper.Name, theme.TextSize, theme.Text, maxWidth: 188,
+                    wrapping: TextWrapping.Ellipsis),
             ],
         };
     }

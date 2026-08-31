@@ -88,9 +88,9 @@ internal sealed class CalculatorTab : IMainDialogTab
                         Style = new Style { Spacing = 10 },
                         Children =
                         [
-                            new TextNode(_expression.Length == 0 ? "0" : MainDialogTabUi.Trim(_expression, 64), 24,
+                            new TextNode(_expression.Length == 0 ? "0" : _expression, 24,
                                 Theme.Default.Muted),
-                            new TextNode(_result.Length == 0 ? "=" : "= " + MainDialogTabUi.Trim(_result, 48), 34,
+                            new TextNode(_result.Length == 0 ? "=" : "= " + _result, 34,
                                 Theme.Default.Text),
                             new TextNode("Press Enter to copy", 18,
                                 Theme.Default.Muted),

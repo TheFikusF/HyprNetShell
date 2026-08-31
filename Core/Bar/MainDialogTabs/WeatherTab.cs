@@ -1,6 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
-using HyprNetShell.Core.Bar.Modules.CenterWidgets;
+using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -8,14 +9,19 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WeatherTab(WeatherWidget weather, Theme theme) : IMainDialogTab
+internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDialogTab
 {
     public string Id => "weather";
     public string Title => "Weather";
     public SvgAsset Icon => Icons.CloudSun;
 
+    private readonly ModulesCommon.BoxState _openButtonState = new();
+    private readonly Dictionary<DateOnly, ModulesCommon.BoxState> _dayStates = [];
+    private int _selectedDayIndex;
+
     public void Activate()
     {
+        _selectedDayIndex = 0;
         _ = weather.Snapshot;
     }
 
@@ -29,6 +35,18 @@ internal sealed class WeatherTab(WeatherWidget weather, Theme theme) : IMainDial
 
     public void MoveSelection(SelectionDirection direction)
     {
+        var dayCount = weather.Snapshot.Forecast.Count;
+        if (dayCount == 0)
+        {
+            return;
+        }
+
+        _selectedDayIndex = direction switch
+        {
+            SelectionDirection.Up => Math.Max(0, _selectedDayIndex - 1),
+            SelectionDirection.Down => Math.Min(dayCount - 1, _selectedDayIndex + 1),
+            _ => _selectedDayIndex,
+        };
     }
 
     public void ActivateSelection()
@@ -47,20 +65,20 @@ internal sealed class WeatherTab(WeatherWidget weather, Theme theme) : IMainDial
                 Children =
                 [
                     MainDialogTabUi.BuildSectionHeader("Weather", weather.Location),
-                    new TextNode(
-                        weather.IsRefreshing ? "Loading forecast…" : state.Error ?? "Weather unavailable",
-                        16,
-                        theme.Muted),
+                    new TextNode(weather.IsRefreshing ? "Loading forecast…" : state.Error ?? "Weather unavailable",
+                        18, theme.Muted),
                 ],
             };
         }
 
-        var condition = WeatherWidget.Condition(state.CurrentWeatherCode);
+        _selectedDayIndex = Math.Min(_selectedDayIndex, state.Forecast.Count - 1);
+        var selectedDay = state.Forecast[_selectedDayIndex];
+        var condition = weather.GetCondition(state.CurrentWeatherCode);
         return new BoxNode
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 14 },
+            Style = new Style { Spacing = 16 },
             Children =
             [
                 BuildHeader(state),
@@ -77,111 +95,137 @@ internal sealed class WeatherTab(WeatherWidget weather, Theme theme) : IMainDial
                     Children =
                     [
                         new TextNode($"{condition.Icon}  {condition.Description}", 24, theme.Text),
-                        new TextNode(
-                            state.CurrentTemperature is { } temperature ? $"{Math.Round(temperature):0}°C" : "--°C",
-                            34,
-                            theme.Text),
+                        new TextNode(state.CurrentTemperature is { } temperature ? $"{Math.Round(temperature):0}°C" : "--°C",
+                            34, theme.Text),
                     ],
                 },
-                MainDialogTabUi.BuildSectionHeader("Today", "Hourly temperature and chance of precipitation"),
-                BuildToday(state.Hourly),
+                MainDialogTabUi.BuildSectionHeader(
+                    selectedDay.Date == DateOnly.FromDateTime(DateTime.Today)
+                        ? "Today"
+                        : selectedDay.Date.ToString("dddd, MMMM d"),
+                    "Hourly temperature and chance of precipitation · ↑/↓ to change day"),
+                BuildHourly(state.Hourly, selectedDay.Date),
                 MainDialogTabUi.BuildSectionHeader("7-day forecast", "Daily low, high, and conditions"),
                 BuildDaily(state.Forecast),
-                new TextNode("Forecast: Open-Meteo", 13, theme.Muted),
+                new TextNode("Forecast: Open-Meteo", theme.TextSize, theme.Muted),
             ],
         };
     }
 
-    private Node BuildHeader(WeatherWidget.WeatherState state) => new BoxNode
+    private BoxNode BuildHeader(WeatherSnapshot state)
     {
-        HorizontalAlignment = ItemsAlignment.Spread,
-        VerticalAlignment = ItemsAlignment.Center,
-        Children =
-        [
+        var buttonState = _openButtonState.UpdateColor(theme.Panel);
+        return new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
+        {
             MainDialogTabUi.BuildSectionHeader(
                 $"Weather in {weather.Location}",
                 weather.IsRefreshing ? "Updating…" : $"Updated {state.UpdatedAt:HH:mm}"),
             new BoxNode
             {
                 OnClick = weather.OpenInBrowser,
-                Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+                IsHovered = buttonState,
+                Style = ModulesCommon.ModuleStyle(theme, buttonState) with
                 {
                     BorderRadius = 8,
                     BorderWidth = 0,
                 },
-                Children = [new TextNode("Open forecast", 14, theme.Text)],
+                Children = [new TextNode("Open forecast", theme.TextSize, theme.Text)],
             },
-        ],
-    };
-
-    private Node BuildToday(IReadOnlyList<WeatherWidget.HourlyForecast> hourly)
-    {
-        var visible = hourly.Where(item => item.Time.Hour % 3 == 0).Take(8).ToArray();
-        if (visible.Length == 0)
-        {
-            return new TextNode("Hourly forecast unavailable", 14, theme.Muted);
-        }
-
-        return new BoxNode
-        {
-            HorizontalAlignment = ItemsAlignment.Spread,
-            Style = new Style { Spacing = 8 },
-            Children = [..visible.Select(BuildHour)],
         };
     }
 
-    private Node BuildHour(WeatherWidget.HourlyForecast hour)
+    private Node BuildHourly(IReadOnlyList<HourlyForecast> hourly, DateOnly selectedDate)
     {
-        var condition = WeatherWidget.Condition(hour.WeatherCode);
-        var current = hour.Time.Hour == DateTime.Now.Hour;
-        return new BoxNode(96)
+        var visible = hourly
+            .Where(item => DateOnly.FromDateTime(item.Time) == selectedDate)
+            .Take(8)
+            .ToArray();
+        if (visible.Length == 0)
+        {
+            return new TextNode("Hourly forecast unavailable", theme.TextSize, theme.Muted);
+        }
+
+        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Stretch)
+        {
+            Children = [.. visible.Select(BuildHour)],
+        };
+    }
+
+    private BoxNode BuildHour(HourlyForecast hour)
+    {
+        var condition = weather.GetCondition(hour.WeatherCode);
+        var current = hour.Time.Date == DateTime.Today && hour.Time.Hour >= DateTime.Now.Hour && hour.Time.Hour <= (DateTime.Now.Hour + 2);
+        return new ()
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(theme, current ? theme.Active : theme.Panel) with
             {
-                Padding = 10,
+                Padding = 8 + (current ? 0 : (int)theme.BorderWidth),
                 BorderRadius = 8,
                 BorderWidth = current ? theme.BorderWidth : 0,
                 Spacing = 5,
             },
             Children =
             [
-                new TextNode(hour.Time.ToString("HH:mm"), 13, theme.Muted),
-                new TextNode(condition.Icon, 20, theme.Text),
-                new TextNode($"{Math.Round(hour.Temperature):0}°", 17, theme.Text),
-                new TextNode($"Rain {hour.PrecipitationProbability}%", 11, theme.Muted),
+                new TextNode(hour.Time.ToString("HH:mm"), theme.TextSize, current ? theme.Text : theme.Muted),
+                new TextNode(condition.Icon, 24, theme.Text),
+                new TextNode($"{Math.Round(hour.Temperature):0}°", 18, theme.Text),
+                new TextNode($"Rain {hour.PrecipitationProbability}%", theme.TextSize, current ? theme.Text : theme.Muted),
             ],
         };
     }
 
-    private Node BuildDaily(IReadOnlyList<WeatherWidget.ForecastDay> forecast) => new BoxNode
+    private BoxNode BuildDaily(IReadOnlyList<ForecastDay> forecast)
     {
-        Direction = Direction.Vertical,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = new Style { Spacing = 7 },
-        Children = [..forecast.Select(BuildDay)],
-    };
+        var overallMinimum = forecast.Min(day => day.Minimum);
+        var overallMaximum = forecast.Max(day => day.Maximum);
+        return new()
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = Style.Spacer,
+            Children = [.. forecast.Select((day, index) => BuildDay(day, index, overallMinimum, overallMaximum))],
+        };
+    }
 
-    private Node BuildDay(WeatherWidget.ForecastDay day)
+    private BoxNode BuildDay(ForecastDay day, int index, double overallMinimum, double overallMaximum)
     {
-        var condition = WeatherWidget.Condition(day.WeatherCode);
+        var condition = weather.GetCondition(day.WeatherCode);
         var today = day.Date == DateOnly.FromDateTime(DateTime.Today);
+        var selected = index == _selectedDayIndex;
+        var state = _dayStates.GetState(day.Date, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, today ? theme.Active : theme.Panel) with
+            OnClick = () => _selectedDayIndex = index,
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 Padding = new Insets(14, 9),
                 BorderRadius = 8,
-                BorderWidth = today ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.BorderWidth : 0,
             },
             Children =
             [
-                new TextNode(today ? "Today" : day.Date.ToString("dddd"), 15, theme.Text),
-                new TextNode($"{condition.Icon}  {condition.Description}", 14, theme.Text),
-                new TextNode($"{Math.Round(day.Minimum):0}° / {Math.Round(day.Maximum):0}°", 15, theme.Text),
+                new TextNode(
+                    $"{(selected ? ">" : " ")} {(today ? "Today" : day.Date.ToString("dddd"))}",
+                    theme.TextSize,
+                    theme.Text),
+                new TextNode($"{condition.Icon}  {condition.Description}", theme.TextSize, theme.Text),
+                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                {
+                    new TextNode($"{Math.Round(day.Minimum):0}°", theme.TextSize, theme.Text),
+                    new WeatherTemperatureRangeNode(
+                        day.Minimum,
+                        day.Maximum,
+                        overallMinimum,
+                        overallMaximum,
+                        theme),
+                    new TextNode($"{Math.Round(day.Maximum):0}°", theme.TextSize, theme.Text),
+                }
             ],
         };
     }
