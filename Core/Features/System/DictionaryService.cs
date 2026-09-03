@@ -17,6 +17,8 @@ internal sealed class DictionaryService
         },
     };
 
+    internal string TranslationLanguage { get; }
+
     internal DictionaryService()
     {
         var configuredLanguage = Environment.GetEnvironmentVariable("HYPRNETSHELL_TRANSLATION_LANGUAGE")?.Trim();
@@ -28,8 +30,6 @@ internal sealed class DictionaryService
             TranslationLanguage = "es";
         }
     }
-
-    internal string TranslationLanguage { get; }
 
     internal async Task<DictionaryLookupResult> LookupAsync(
         string query,
@@ -86,7 +86,7 @@ internal sealed class DictionaryService
         string query,
         CancellationToken cancellationToken)
     {
-        var uri = new Uri($"https://api.dictionaryapi.dev/api/v2/entries/en/{Uri.EscapeDataString(query)}");
+        var uri = new Uri($"https://freedictionaryapi.com/api/v1/entries/en/{Uri.EscapeDataString(query)}");
         using var response = await GetAsync(uri, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -95,29 +95,31 @@ internal sealed class DictionaryService
 
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var entries = await JsonSerializer.DeserializeAsync(
-                          stream,
-                          DictionaryJsonContext.Default.StandardDictionaryEntryArray,
-                          cancellationToken)
-                      ?? [];
+        var result = await JsonSerializer.DeserializeAsync(
+                         stream,
+                         DictionaryJsonContext.Default.FreeDictionaryResponse,
+                         cancellationToken)
+                     ?? new FreeDictionaryResponse();
 
-        return entries
-            .SelectMany(entry => entry.Meanings.SelectMany(meaning => meaning.Definitions.Select(definition => new
+        return result.Entries
+            .SelectMany(entry => FlattenSenses(entry.Senses).Select(sense => new
             {
-                entry.Word,
-                entry.Phonetic,
-                meaning.PartOfSpeech,
-                definition.Definition,
-                definition.Example,
-            })))
+                PartOfSpeech = entry.PartOfSpeech,
+                Phonetic = entry.Pronunciations
+                    .FirstOrDefault(pronunciation => pronunciation.Type == "ipa")?.Text
+                    ?? entry.Pronunciations.FirstOrDefault()?.Text,
+                sense.Definition,
+                Example = sense.Examples.FirstOrDefault(),
+            }))
             .Where(item => !string.IsNullOrWhiteSpace(item.Definition))
             .Take(6)
             .Select(item => new DictionaryResultItem(
-                "Dictionary",
-                BuildHeading(item.Word ?? query, item.PartOfSpeech, item.Phonetic),
+                "FreeDictionaryAPI.com",
+                BuildHeading(result.Word ?? query, item.PartOfSpeech, item.Phonetic),
                 item.Definition!,
                 item.Example,
-                "Free Dictionary API"))
+                "Wiktionary · CC BY-SA 4.0",
+                result.Source?.Url))
             .ToArray();
     }
 
@@ -185,6 +187,18 @@ internal sealed class DictionaryService
     {
         var response = await Http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         return response;
+    }
+
+    private static IEnumerable<FreeDictionarySense> FlattenSenses(IEnumerable<FreeDictionarySense> senses)
+    {
+        foreach (var sense in senses)
+        {
+            yield return sense;
+            foreach (var subsense in FlattenSenses(sense.Subsenses))
+            {
+                yield return subsense;
+            }
+        }
     }
 
     private static string BuildHeading(string word, string? partOfSpeech, string? phonetic)

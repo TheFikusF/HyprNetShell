@@ -2,6 +2,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
+using HyprNetShell.Core.Platform;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -11,15 +12,22 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) : IMainDialogTab, IDisposable
 {
+    private sealed class ResultState : ModulesCommon.BoxState
+    {
+        public ModulesCommon.BoxState Copy { get; } = new();
+    }
+
     private const int VisibleResultCount = 5;
     private const int MaximumQueryLength = 160;
+    private const int SearchSelectionIndex = -1;
 
     private readonly Lock _stateLock = new();
-    private readonly Dictionary<int, ModulesCommon.BoxState> _resultStates = [];
+    private readonly Dictionary<int, ResultState> _resultStates = [];
+    private readonly ModulesCommon.BoxState _searchState = new();
     private DictionaryLookupResult _result = DictionaryLookupResult.Empty;
     private CancellationTokenSource? _lookupCancellation;
     private string _query = "";
-    private int _selectedIndex;
+    private int _selectedIndex = SearchSelectionIndex;
     private int _firstIndex;
     private bool _isLookingUp;
     private bool _disposed;
@@ -32,7 +40,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
     {
         lock (_stateLock)
         {
-            _selectedIndex = 0;
+            _selectedIndex = SearchSelectionIndex;
             _firstIndex = 0;
         }
     }
@@ -80,35 +88,78 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
 
         lock (_stateLock)
         {
-            BoundedListUi.MoveSelection(
-                ref _selectedIndex,
-                ref _firstIndex,
-                direction == SelectionDirection.Up ? -1 : 1,
-                _result.Items.Count,
-                VisibleResultCount);
+            var itemCount = _result.Items.Count;
+            if (itemCount == 0)
+            {
+                _selectedIndex = SearchSelectionIndex;
+                return;
+            }
+
+            if (direction == SelectionDirection.Up)
+            {
+                _selectedIndex = _selectedIndex switch
+                {
+                    SearchSelectionIndex => itemCount - 1,
+                    0 => SearchSelectionIndex,
+                    _ => _selectedIndex - 1,
+                };
+            }
+            else
+            {
+                _selectedIndex = _selectedIndex switch
+                {
+                    SearchSelectionIndex => 0,
+                    _ when _selectedIndex == itemCount - 1 => SearchSelectionIndex,
+                    _ => _selectedIndex + 1,
+                };
+            }
+
+            if (_selectedIndex >= 0)
+            {
+                BoundedListUi.Normalize(
+                    ref _selectedIndex,
+                    ref _firstIndex,
+                    itemCount,
+                    VisibleResultCount);
+            }
         }
     }
 
     public void ActivateSelection()
     {
-        CancellationTokenSource cancellation;
-        string query;
+        CancellationTokenSource? cancellation = null;
+        string? query = null;
+        string? textToCopy = null;
         lock (_stateLock)
         {
-            if (_disposed || _isLookingUp || string.IsNullOrWhiteSpace(_query))
+            if (_disposed)
             {
                 return;
             }
 
-            _lookupCancellation?.Cancel();
-            _lookupCancellation?.Dispose();
-            cancellation = new CancellationTokenSource();
-            _lookupCancellation = cancellation;
-            _isLookingUp = true;
-            query = _query;
+            if (_selectedIndex >= 0 && _selectedIndex < _result.Items.Count)
+            {
+                textToCopy = GetTextToCopy(_result.Items[_selectedIndex]);
+            }
+            else if (!_isLookingUp && !string.IsNullOrWhiteSpace(_query))
+            {
+                _lookupCancellation?.Cancel();
+                _lookupCancellation?.Dispose();
+                cancellation = new CancellationTokenSource();
+                _lookupCancellation = cancellation;
+                _isLookingUp = true;
+                query = _query;
+            }
         }
 
-        _ = LookupAsync(query, cancellation);
+        if (textToCopy is not null)
+        {
+            Utils.CopyToClipboard(textToCopy);
+        }
+        else if (cancellation is not null)
+        {
+            _ = LookupAsync(query!, cancellation);
+        }
     }
 
     public Node Draw()
@@ -132,7 +183,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
+            Style = Style.Spacer,
             Children = result.Items.Count == 0
                 ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, theme.Text.MutedColor)]
                 : result.Items
@@ -144,7 +195,17 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         var children = new List<Node>
         {
             MainDialogTabUi.BuildSectionHeader("Dictionary", status),
-            MainDialogTabUi.BuildInput(query, "Type an English word or phrase, then press Enter..."),
+            new BoxNode(height: 46)
+            {
+                HorizontalAlignment = ItemsAlignment.Stretch,
+                VerticalAlignment = ItemsAlignment.Center,
+                Style = Style.Spacer,
+                Children =
+                [
+                    MainDialogTabUi.BuildInput(query, "Type an English word or phrase..."),
+                    BuildSearchButton(selectedIndex == SearchSelectionIndex, isLookingUp),
+                ],
+            },
             BoundedListUi.BuildScrollableResults(
                 content,
                 firstIndex,
@@ -157,7 +218,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
             children.Add(new TextNode(string.Join(" · ", result.Errors), theme.Text, theme.Warning));
         }
 
-        return new BoxNode(new Style { Spacing = 8 })
+        return new BoxNode(Style.Spacer)
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -178,7 +239,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
                 }
 
                 _result = result;
-                _selectedIndex = 0;
+                _selectedIndex = result.Items.Count == 0 ? SearchSelectionIndex : 0;
                 _firstIndex = 0;
                 _resultStates.Clear();
             }
@@ -217,34 +278,108 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         var selected = index == selectedIndex;
         var state = _resultStates.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
         var details = item.Example is { Length: > 0 }
-            ? $"Example: {Truncate(item.Example, 100)}"
-            : item.Attribution;
+            ? $"Example: {item.Example}"
+            : item.Attribution ?? "";
 
-        return new BoxNode(height: 90)
+        return new BoxNode
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
-            OnClick = () => Select(index),
+            OnClick = () =>
+            {
+                if (!state.Copy.Hovered.Value)
+                {
+                    Select(index);
+                }
+            },
             IsHovered = state.Hovered,
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
                 BorderWidth = selected ? theme.Border.Width : 0,
-                Padding = new Insets(14, 8),
-                Spacing = 5,
+                Padding = new Insets(8, 8, 8, 16),
+                Spacing = 4,
             },
             Children =
             [
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
-                    new TextNode(Truncate(item.Heading, 70), 17, theme.Text),
-                    new TextNode(item.Source, theme.Text, theme.Text.MutedColor),
+                    new TextNode(item.Heading, theme.Text.HeaderSize, theme.Text,
+                        maxWidth: 600, wrapping: TextWrapping.Wrap),
+                    new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                    {
+                        new TextNode(item.Source, theme.Text, theme.Text.MutedColor),
+                        BuildCopyButton(item, state.Copy),
+                    },
                 },
-                new TextNode(Truncate(item.Definition, 145), theme.Text, theme.Text),
-                new TextNode(Truncate(details, 120), theme.Text, theme.Text.MutedColor),
+                new TextNode(item.Definition, theme.Text, theme.Text,
+                    maxWidth: 820, wrapping: TextWrapping.Wrap),
+                new TextNode(details, theme.Text, theme.Text.MutedColor,
+                    maxWidth: 820, wrapping: TextWrapping.Wrap),
             ],
         };
+    }
+
+    private BoxNode BuildSearchButton(bool selected, bool isLookingUp)
+    {
+        _searchState.UpdateColor(selected ? theme.Active : theme.Panel);
+        return new BoxNode(46, 46)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            IsHovered = _searchState.Hovered,
+            OnClick = isLookingUp ? null : SelectSearchAndActivate,
+            Style = ModulesCommon.ModuleStyle(theme, _searchState.Background) with
+            {
+                BorderRadius = 8,
+                BorderWidth = selected ? theme.Border.Width : 0,
+                Padding = 0,
+            },
+            Children = [new ImageNode(Icons.Search, 18, 18, isLookingUp ? theme.Text.MutedColor : theme.Text)],
+        };
+    }
+
+    private BoxNode BuildCopyButton(DictionaryResultItem item, ModulesCommon.BoxState state)
+    {
+        var details = item.Example is { Length: > 0 }
+            ? $"\nExample: {item.Example}"
+            : "";
+        state.UpdateColor(theme.Panel);
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            IsHovered = state.Hovered,
+            OnClick = () => Utils.CopyToClipboard(GetTextToCopy(item)),
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Padding = 0,
+                ShadowColor = null,
+            },
+            Children = [new ImageNode(Icons.Copy, 16, 16, theme.Text)],
+        };
+    }
+
+    private static string GetTextToCopy(DictionaryResultItem item)
+    {
+        var details = item.Example is { Length: > 0 }
+            ? $"\nExample: {item.Example}"
+            : "";
+
+        return $"{item.Heading}\nDefinition: {item.Definition}{details}\nSource: {item.Source}";
+    }
+
+    private void SelectSearchAndActivate()
+    {
+        lock (_stateLock)
+        {
+            _selectedIndex = SearchSelectionIndex;
+        }
+
+        ActivateSelection();
     }
 
     private void Select(int index)
@@ -266,7 +401,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         _lookupCancellation = null;
         _isLookingUp = false;
         _result = DictionaryLookupResult.Empty;
-        _selectedIndex = 0;
+        _selectedIndex = SearchSelectionIndex;
         _firstIndex = 0;
         _resultStates.Clear();
     }
@@ -300,16 +435,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
                     ? "Press Enter to search."
                     : "No provider returned a result.";
 
-    private static string Truncate(string? value, int maximumLength)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "";
-        }
 
-        var normalized = string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        return normalized.Length <= maximumLength ? normalized : normalized[..(maximumLength - 1)] + "…";
-    }
 
     public void Dispose()
     {

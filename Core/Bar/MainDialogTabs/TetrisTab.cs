@@ -118,7 +118,7 @@ internal sealed class TetrisTab : IMainDialogTab
                                 Padding = 8,
                                 Spacing = 4,
                             },
-                            Children = [new TetrisBoardNode(_game, _theme)]
+                            Children = [new TetrisBoardNode(_game)]
                         },
                         BuildSidebar(),
                     ],
@@ -146,7 +146,7 @@ internal sealed class TetrisTab : IMainDialogTab
                 ],
             },
             new TextNode("Controls", _theme.Text.HeaderSize, _theme.Text),
-            new TextNode("A/D or ←/→ move   S or ↓ soft drop\nW or ↑ rotate   Q rotate CCW\nSpace/Enter hard drop   Shift hold\nP pause   R restart", 14,
+            new TextNode("A/D or horizontal arrows move\nS or down arrow soft drop\nW or up arrow rotate   Q rotate CCW\nSpace/Enter hard drop   Shift hold\nP pause   R restart", 14,
                 _theme.Text.MutedColor, 320, TextWrapping.Wrap),
         ],
     };
@@ -187,7 +187,7 @@ internal sealed class TetrisTab : IMainDialogTab
         ],
     };
 
-    private sealed class TetrisBoardNode(TetrisGame game, Theme theme) : Node
+    private sealed class TetrisBoardNode(TetrisGame game) : Node
     {
         private const int CellSize = 18;
 
@@ -197,9 +197,6 @@ internal sealed class TetrisTab : IMainDialogTab
         public override void Draw(IRenderApi renderer, int x, int y)
         {
             UpdateInteractionState(x, y);
-            // renderer.FillRoundedRect(new Rect(x, y, Width, Height), 5, theme.Border.Color);
-            // renderer.FillRect(new Rect(x, y, Width, Height),
-            //     Color.FromRgb(10, 12, 17, 0.96f));
 
             for (var row = 0; row < TetrisGame.BoardHeight; row++)
             {
