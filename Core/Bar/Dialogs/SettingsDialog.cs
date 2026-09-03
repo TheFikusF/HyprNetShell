@@ -48,6 +48,11 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
 
     public DialogInputResult HandleInput(DialogInput input)
     {
+        if (ActiveTab.HandleKey(input.Key))
+        {
+            return DialogInputResult.None;
+        }
+
         if (input.Key == DialogKey.Escape)
         {
             return ActiveTab.HandleEscape()

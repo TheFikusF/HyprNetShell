@@ -28,6 +28,7 @@ internal sealed class TabsService : IDisposable
             new CalculatorTab(theme),
             new DictionaryTab(dictionary, theme),
             new WorldClockTab(theme),
+            new TetrisTab(theme),
             new ClipboardManagerTab(clipboardHistory, closeDialog, theme),
             new WallpapersTab(wallpapers, closeDialog, theme),
             new WifiTab(network, theme),

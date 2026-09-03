@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 
@@ -18,6 +19,7 @@ internal interface IMainDialogTab
     SvgAsset Icon { get; }
 
     void Activate();
+    bool HandleKey(DialogKey key) => false;
     void HandleTextInput(string text);
     void HandleBackspace();
     bool HandleEscape() => false;

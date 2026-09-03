@@ -28,6 +28,8 @@ internal sealed class CompositeWindow : IDialogWindow
 
         public void Activate() => _tab.Activate();
 
+        public bool HandleKey(DialogKey key) => _tab.HandleKey(key);
+
         public void HandleTextInput(string text) => _tab.HandleTextInput(text);
 
         public void HandleBackspace() => _tab.HandleBackspace();
@@ -82,6 +84,11 @@ internal sealed class CompositeWindow : IDialogWindow
 
     public DialogInputResult HandleInput(DialogInput input)
     {
+        if (ActiveTab.HandleKey(input.Key))
+        {
+            return DialogInputResult.None;
+        }
+
         if (input.Key == DialogKey.Escape)
         {
             return ActiveTab.HandleEscape() ? DialogInputResult.None : DialogInputResult.Close;
