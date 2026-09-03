@@ -50,7 +50,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             Style = ModulesCommon.ModuleStyle(theme, color, false, false) with
             {
                 Spacing = 8,
-                BorderWidth = new Insets(theme.BorderWidth, 0, theme.BorderWidth, 1),
+                BorderWidth = new Insets(theme.Border.Width, 0, theme.Border.Width, 1),
                 ShadowColor = null
             },
             Children = [new ImageNode(Icons.Brightness[brightness switch
@@ -124,13 +124,13 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                         ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, "Screen temperature"),
                         new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                         {
-                            new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K", theme.TextSize, theme.Text),
+                            new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K", theme.Text, theme.Text),
                             BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
                         }
                     ],
                 },
                 automaticTemperatureEnabled
-                    ? new TemperatureCurveNode(service.GetTemperatureCurve(), theme.Muted, Color.Orange, theme.Text, service.SetCurvePoint, _curveDragState)
+                    ? new TemperatureCurveNode(service.GetTemperatureCurve(), theme.Text.MutedColor, Color.Orange, theme.Text, service.SetCurvePoint, _curveDragState)
                     : BuildManualTemperatureSlider(controls),
             ],
         };
@@ -145,7 +145,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         [
             new SwitchNode(enabled, _automaticTemperatureSwitchAnimation)
             {
-                OffTrackColor = theme.Muted,
+                OffTrackColor = theme.Text.MutedColor,
                 OnTrackColor = theme.Active,
                 KnobColor = theme.Text,
             },
@@ -158,7 +158,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         return new SliderNode(340, 14,
             (value - TemperatureCurveMath.MINIMUM_TEMPERATURE) /
             (float)(TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE),
-            theme.Muted, Color.Orange, theme.Text,
+            theme.Text.MutedColor, Color.Orange, theme.Text,
             normalized => SetValue("temperature", TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
                 (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE)),
                 service.SetTemperatureAsync),
@@ -186,10 +186,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                     Children =
                     [
                         ModulesCommon.BuildTextWithIcon(theme, icon, label),
-                        new TextNode(valueText, theme.TextSize, theme.Text),
+                        new TextNode(valueText, theme.Text, theme.Text),
                     ],
                 },
-                new SliderNode(340, 14, normalizedValue, theme.Muted, Color.Orange,
+                new SliderNode(340, 14, normalizedValue, theme.Text.MutedColor, Color.Orange,
                     theme.Text, onValueChanged, GetSliderDragging(key)),
             ],
         };
@@ -200,7 +200,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         BorderWidth = 0,
     })
     {
-        new TextNode(text, theme.TextSize, theme.Muted)
+        new TextNode(text, theme.Text, theme.Text.MutedColor)
     };
 
     private int EffectiveValue(string key, int snapshotValue)

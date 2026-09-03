@@ -154,7 +154,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
                 Padding = new Insets(16, 8),
                 Spacing = 14,
             },
@@ -169,7 +169,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                         entry.Image is not null
                             ? new ImageNode(entry.Image, 46, 46)
                             : new ImageNode(Icons.Copy, 30, 30, theme.Text),
-                        new TextNode(entry.Preview, theme.TextSize, theme.Text,
+                        new TextNode(entry.Preview, theme.Text, theme.Text,
                             maxWidth: PREVIEW_MAX_WIDTH,
                             wrapping: TextWrapping.Wrap,
                             maxLines: 5),
@@ -280,12 +280,12 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                 ApplyFilter();
             })
         {
-            FontSize = theme.TextSize,
+            FontSize = theme.Text,
             BackgroundColor = theme.Panel,
             HoverColor = Color.Lighten(theme.Panel, 0.18f),
             SelectedColor = theme.Active,
             BorderColor = theme.Border,
-            BorderWidth = theme.BorderWidth,
+            BorderWidth = theme.Border.Width,
             BorderRadius = 8,
             TextColor = theme.Text,
         };

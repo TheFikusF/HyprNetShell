@@ -1,5 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Bar.Dialogs;
+using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Helpers;
@@ -12,9 +14,12 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BluetoothModule(
     BluetoothModuleService service,
+    DialogService dialogs,
+    TabsService tabs,
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
+    private readonly ModulesCommon.BoxState _settingsState = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, bool> _connectionOverrides = [];
     private readonly Ref<float> _powerSwitchAnimation = new();
@@ -45,7 +50,7 @@ internal sealed class BluetoothModule(
         return ModulesCommon.BuildTextWithIcon(theme, icon, connectedCount.ToString(),
             style: ModulesCommon.ModuleStyle(theme, bg, false, false) with
             {
-                BorderWidth = new Insets(1, theme.BorderWidth),
+                BorderWidth = new Insets(1, theme.Border.Width),
                 ShadowColor = null
             }, width: 55);
     }
@@ -66,11 +71,11 @@ internal sealed class BluetoothModule(
     private BoxNode BuildPowerRow(BluetoothSnapshot bluetooth)
     {
         var powered = EffectivePowered(bluetooth);
+        _settingsState.UpdateColor(theme.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            OnClick = bluetooth.Available ? () => SetPowered(bluetooth, !powered) : null,
             Style = new Style
             {
                 BorderRadius = 8,
@@ -78,16 +83,46 @@ internal sealed class BluetoothModule(
             },
             Children =
             [
-                new BoxNode(48),
+                new BoxNode(76),
                 ModulesCommon.BuildTextWithIcon(theme, Icons.Bluetooth, "Bluetooth"),
-                new SwitchNode(powered, _powerSwitchAnimation)
+                new BoxNode(Style.Spacer, ItemsAlignment.Center, ItemsAlignment.Center)
                 {
-                    OffTrackColor = theme.Muted,
-                    OnTrackColor = theme.Active,
-                    KnobColor = theme.Text,
+                    new BoxNode
+                    {
+                        HorizontalAlignment = ItemsAlignment.Center,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        IsHovered = _settingsState.Hovered,
+                        OnClick = bluetooth.Available ? OpenBluetoothDevices : null,
+                        Style = ModulesCommon.ModuleStyle(theme, _settingsState.Background) with
+                        {
+                            Padding = 4,
+                            BorderRadius = 8,
+                            BorderWidth = 0,
+                        },
+                        Children = [new ImageNode(Icons.Settings, 20, 20, theme.Text)],
+                    },
+                    new BoxNode
+                    {
+                        OnClick = bluetooth.Available ? () => SetPowered(bluetooth, !powered) : null,
+                        Children =
+                        [
+                            new SwitchNode(powered, _powerSwitchAnimation)
+                            {
+                                OffTrackColor = theme.Text.MutedColor,
+                                OnTrackColor = theme.Active,
+                                KnobColor = theme.Text,
+                            },
+                        ],
+                    },
                 },
             ],
         };
+    }
+
+    private void OpenBluetoothDevices()
+    {
+        _node.ClosePopup();
+        dialogs.Open<CompositeWindow>([tabs.Get<BluetoothTab>()]);
     }
 
     private IEnumerable<Node> BuildDeviceRows(BluetoothSnapshot bluetooth, bool powered)
@@ -130,7 +165,7 @@ internal sealed class BluetoothModule(
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = connected ? theme.BorderWidth : 0,
+                BorderWidth = connected ? theme.Border.Width : 0,
             },
             Children =
             [
@@ -140,8 +175,12 @@ internal sealed class BluetoothModule(
                     VerticalAlignment = ItemsAlignment.Center,
                     Children =
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, DeviceTypeIcon(device.Icon), Trim(device.Name, 30)),
-                        new TextNode(connected ? "Connected" : "Disconnected", theme.TextSize, theme.Text),
+                        ModulesCommon.BuildTextWithIcon(
+                            theme,
+                            BluetoothUi.DeviceIcon(device.Icon),
+                            device.Name,
+                            maxTextWidth: 190),
+                        new TextNode(connected ? "Connected" : "Disconnected", theme.Text, theme.Text),
                     ]
                 },
                 device.BatteryPercentage is { } battery
@@ -152,7 +191,7 @@ internal sealed class BluetoothModule(
                         Style = new Style { Padding = new Insets(8, 0, 0, 0) },
                         Children =
                         [
-                            new TextNode("Battery", theme.TextSize, theme.Text),
+                            new TextNode("Battery", theme.Text, theme.Text),
                             ModulesCommon.BuildTextWithIcon(theme, BatteryModule.BatteryLevelIcon(battery),
                                 $"{battery}%",
                                 battery <= 20 ? Color.Lerp(Color.White, Color.Orange, 0.5f) : theme.Text)
@@ -166,7 +205,7 @@ internal sealed class BluetoothModule(
     private BoxNode BuildPlainRow(string text) => new()
     {
         Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-        Children = [new TextNode(text, theme.TextSize, theme.Muted)],
+        Children = [new TextNode(text, theme.Text, theme.Text.MutedColor)],
     };
 
     private bool EffectiveConnected(BluetoothDeviceSnapshot device)
@@ -219,25 +258,5 @@ internal sealed class BluetoothModule(
         _ = service.SetConnectedAsync(device.Address, connect);
     }
 
-    private static string Trim(string text, int maxLength) =>
-        text.Length <= maxLength ? text : text[..Math.Max(0, maxLength - 3)] + "...";
 
-    private static SvgAsset DeviceTypeIcon(string? icon) => icon?.ToLowerInvariant() switch
-    {
-        "audio-headphones" => Icons.Headphones,
-        "audio-headset" => Icons.Headset,
-        "audio-speakers" or "audio-card" => Icons.Speaker,
-        "audio-input-microphone" => Icons.Microphone,
-        "input-keyboard" => Icons.Keyboard,
-        "input-mouse" => Icons.Mouse,
-        "input-gaming" => Icons.Gamepad,
-        "input-tablet" => Icons.Tablet,
-        "phone" => Icons.Smartphone,
-        "computer" => Icons.Laptop,
-        "multimedia-player" => Icons.Monitor,
-        "watch" => Icons.Watch,
-        "camera-photo" or "camera-video" => Icons.Camera,
-        "printer" or "scanner" => Icons.Printer,
-        _ => Icons.Bluetooth,
-    };
 }

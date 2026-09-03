@@ -134,12 +134,12 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
             {
                 Spacing = 8,
                 BorderRadius = 8,
-                BorderWidth = selected ? _theme.BorderWidth : 0,
+                BorderWidth = selected ? _theme.Border.Width : 0,
             },
             Children =
             [
                 new ImageNode(tab.Content.Icon, 18, 18, _theme.Text),
-                new TextNode(tab.Content.Title, 15, _theme.Text),
+                new TextNode(tab.Content.Title, 14, _theme.Text),
             ],
         };
     }

@@ -134,7 +134,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
             Children = result.Items.Count == 0
-                ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, theme.Muted)]
+                ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, theme.Text.MutedColor)]
                 : result.Items
                     .VisibleItems(firstIndex, VisibleResultCount)
                     .Select(item => BuildResult(item.Item, item.Index, selectedIndex))
@@ -154,7 +154,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         };
         if (result.Errors.Count > 0)
         {
-            children.Add(new TextNode(string.Join(" · ", result.Errors), theme.TextSize, theme.Warning));
+            children.Add(new TextNode(string.Join(" · ", result.Errors), theme.Text, theme.Warning));
         }
 
         return new BoxNode(new Style { Spacing = 8 })
@@ -230,7 +230,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
                 Padding = new Insets(14, 8),
                 Spacing = 5,
             },
@@ -239,10 +239,10 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
                     new TextNode(Truncate(item.Heading, 70), 17, theme.Text),
-                    new TextNode(item.Source, theme.TextSize, theme.Muted),
+                    new TextNode(item.Source, theme.Text, theme.Text.MutedColor),
                 },
-                new TextNode(Truncate(item.Definition, 145), theme.TextSize, theme.Text),
-                new TextNode(Truncate(details, 120), theme.TextSize, theme.Muted),
+                new TextNode(Truncate(item.Definition, 145), theme.Text, theme.Text),
+                new TextNode(Truncate(details, 120), theme.Text, theme.Text.MutedColor),
             ],
         };
     }

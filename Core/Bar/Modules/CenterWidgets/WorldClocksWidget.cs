@@ -74,10 +74,10 @@ internal sealed class WorldClocksWidget
         var state = _dateCopyButtons.GetState(label, _theme.Panel).UpdateColor(_theme.Panel);
         return new BoxNode(Style.Empty, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
-            new TextNode(label, _theme.TextSize, _theme.Text),
+            new TextNode(label, _theme.Text, _theme.Text),
             new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
             {
-                new TextNode(time.ToString("HH:mm"), _theme.TextSize, _theme.Text),
+                new TextNode(time.ToString("HH:mm"), _theme.Text, _theme.Text),
                 new BoxNode
                 {
                     IsHovered = state.Hovered,

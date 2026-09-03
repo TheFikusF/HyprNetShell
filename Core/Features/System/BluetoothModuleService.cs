@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
@@ -324,15 +325,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             return;
         }
 
-        var devices = await Task.WhenAll(ParsePairedDevices(devicesOutput).Select(async device =>
-        {
-            var info = await CommandRunner.TryReadAsync(
-                "bluetoothctl",
-                $"info {device.Address}",
-                TimeSpan.FromMilliseconds(500),
-                cancellationToken);
-            return ParseDeviceInfo(device.Address, device.Name, info);
-        }));
+        var devices = await ReadDevicesAsync(ParseDevices(devicesOutput), cancellationToken);
 
         Snapshot = new BluetoothSnapshot(
             true,
@@ -340,24 +333,246 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             devices.OrderByDescending(device => device.Connected).ThenBy(device => device.Name).ToArray());
     }
 
-    internal async Task SetPoweredAsync(bool powered)
+    internal async Task<IReadOnlyList<BluetoothDeviceSnapshot>> ScanDevicesAsync(CancellationToken cancellationToken)
     {
-        await CommandRunner.TryRunAsync(
+        if (!Snapshot.Available || !Snapshot.Powered)
+        {
+            return [];
+        }
+
+        await RunBluetoothctlAsync(
+            ["--timeout", "6", "scan", "on"],
+            TimeSpan.FromSeconds(8),
+            cancellationToken,
+            refreshSnapshot: false);
+
+        var output = await CommandRunner.TryReadAsync(
             "bluetoothctl",
-            ["power", powered ? "on" : "off"],
-            TimeSpan.FromSeconds(3),
-            CancellationToken.None);
-        QueueEventRefresh();
+            "devices",
+            TimeSpan.FromSeconds(2),
+            cancellationToken);
+        if (output is null)
+        {
+            return Snapshot.Devices;
+        }
+
+        var devices = await ReadDevicesAsync(ParseDevices(output), cancellationToken);
+        return devices
+            .OrderByDescending(device => device.Connected)
+            .ThenByDescending(device => device.Paired)
+            .ThenBy(device => device.Name)
+            .ToArray();
     }
 
-    internal async Task SetConnectedAsync(string address, bool connected)
+    internal Task<BluetoothOperationResult> SetPoweredAsync(
+        bool powered,
+        CancellationToken cancellationToken = default) =>
+        RunBluetoothctlAsync(
+            ["power", powered ? "on" : "off"],
+            TimeSpan.FromSeconds(4),
+            cancellationToken);
+
+    internal async Task<BluetoothOperationResult> SetConnectedAsync(
+        string address,
+        bool connected,
+        CancellationToken cancellationToken = default)
     {
-        await CommandRunner.TryRunAsync(
-            "bluetoothctl",
-            [connected ? "connect" : "disconnect", address],
-            TimeSpan.FromSeconds(8),
-            CancellationToken.None);
-        QueueEventRefresh();
+        if (!connected)
+        {
+            return await RunBluetoothctlAsync(
+                ["disconnect", address],
+                TimeSpan.FromSeconds(10),
+                cancellationToken);
+        }
+
+        var trustResult = await RunBluetoothctlAsync(
+            ["trust", address],
+            TimeSpan.FromSeconds(5),
+            cancellationToken);
+        if (!trustResult.Success)
+        {
+            return trustResult;
+        }
+
+        return await ConnectWithRecoveryAsync(address, cancellationToken);
+    }
+
+    internal async Task<BluetoothOperationResult> PairAsync(string address, CancellationToken cancellationToken)
+    {
+        var pairResult = await RunBluetoothctlAsync(
+            ["--agent", "NoInputNoOutput", "--timeout", "30", "pair", address],
+            TimeSpan.FromSeconds(32),
+            cancellationToken);
+        if (!pairResult.Success)
+        {
+            return pairResult;
+        }
+
+        var trustResult = await RunBluetoothctlAsync(
+            ["trust", address],
+            TimeSpan.FromSeconds(5),
+            cancellationToken);
+        if (!trustResult.Success)
+        {
+            return trustResult;
+        }
+
+        return await ConnectWithRecoveryAsync(address, cancellationToken);
+    }
+
+    internal Task<BluetoothOperationResult> ForgetAsync(string address, CancellationToken cancellationToken) =>
+        RunBluetoothctlAsync(["remove", address], TimeSpan.FromSeconds(8), cancellationToken);
+
+    private async Task<BluetoothOperationResult> ConnectWithRecoveryAsync(
+        string address,
+        CancellationToken cancellationToken)
+    {
+        var result = await RunBluetoothctlAsync(
+            ["connect", address],
+            TimeSpan.FromSeconds(10),
+            cancellationToken);
+        if (result.Success || result.Error?.StartsWith("Connection was refused", StringComparison.Ordinal) != true)
+        {
+            return result;
+        }
+
+        await RunBluetoothctlAsync(
+            ["--timeout", "5", "scan", "on"],
+            TimeSpan.FromSeconds(7),
+            cancellationToken,
+            refreshSnapshot: false);
+        return await RunBluetoothctlAsync(
+            ["connect", address],
+            TimeSpan.FromSeconds(10),
+            cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<BluetoothDeviceSnapshot>> ReadDevicesAsync(
+        IReadOnlyList<(string Address, string Name)> devices,
+        CancellationToken cancellationToken) =>
+        await Task.WhenAll(devices.Select(async device =>
+        {
+            var info = await CommandRunner.TryReadAsync(
+                "bluetoothctl",
+                $"info {device.Address}",
+                TimeSpan.FromSeconds(1),
+                cancellationToken);
+            return ParseDeviceInfo(device.Address, device.Name, info);
+        }));
+
+    private async Task<BluetoothOperationResult> RunBluetoothctlAsync(
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken cancellationToken,
+        bool refreshSnapshot = true)
+    {
+        Process? process = null;
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+            timeoutCts.CancelAfter(timeout);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "bluetoothctl",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return BluetoothOperationResult.Failed("Could not start bluetoothctl");
+            }
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+            await process.WaitForExitAsync(timeoutCts.Token);
+            var output = (await outputTask).Trim();
+            var error = (await errorTask).Trim();
+            var failure = GetCommandFailure(output, error, process.ExitCode);
+            if (failure is not null)
+            {
+                return BluetoothOperationResult.Failed(failure);
+            }
+
+            if (refreshSnapshot)
+            {
+                QueueEventRefresh();
+            }
+
+            return BluetoothOperationResult.Succeeded;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetime.IsCancellationRequested)
+        {
+            TryKill(process);
+            return BluetoothOperationResult.Failed("The Bluetooth operation was cancelled");
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            return BluetoothOperationResult.Failed("The Bluetooth operation timed out");
+        }
+        catch (Exception exception)
+        {
+            TryKill(process);
+            return BluetoothOperationResult.Failed(TrimError(exception.Message));
+        }
+        finally
+        {
+            process?.Dispose();
+        }
+    }
+
+    private static string? GetCommandFailure(string output, string error, int exitCode)
+    {
+        var combined = string.Join('\n', new[] { error, output }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var failureLine = combined
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(line =>
+                line.Contains("Failed to", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("not available", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("no default controller", StringComparison.OrdinalIgnoreCase));
+        if (failureLine is not null)
+        {
+            if (failureLine.Contains("AuthenticationRejected", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Pairing was rejected. Put the device in pairing mode and try again.";
+            }
+
+            if (failureLine.Contains("connection-refused", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Connection was refused. Wake the device, disconnect it from other hosts, or forget and pair it again.";
+            }
+
+            return TrimError(failureLine);
+        }
+
+        return exitCode == 0
+            ? null
+            : TrimError(string.IsNullOrWhiteSpace(combined) ? $"bluetoothctl exited with code {exitCode}" : combined);
+    }
+
+    private static string TrimError(string error) =>
+        error.Length <= 180 ? error : error[..177] + "...";
+
+    private static void TryKill(Process? process)
+    {
+        try
+        {
+            if (process is { HasExited: false })
+            {
+                process.Kill(true);
+            }
+        }
+        catch
+        {
+        }
     }
 
     public void Dispose()
@@ -408,7 +623,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         _lifetime.Dispose();
     }
 
-    internal static IReadOnlyList<(string Address, string Name)> ParsePairedDevices(string output)
+    internal static IReadOnlyList<(string Address, string Name)> ParseDevices(string output)
     {
         var devices = new List<(string, string)>();
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -444,7 +659,8 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             }
         }
 
-        return new BluetoothDeviceSnapshot(address, name, connected, battery, icon);
+        var paired = !string.IsNullOrWhiteSpace(output) && PairedLine().IsMatch(output);
+        return new BluetoothDeviceSnapshot(address, name, connected, battery, icon, paired);
     }
 
     [GeneratedRegex(@"^Device\s+(?<address>[0-9A-Fa-f:]{17})\s+(?<name>.+)$", RegexOptions.CultureInvariant)]
@@ -455,6 +671,9 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
     [GeneratedRegex(@"^\s*Powered:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PoweredLine();
+
+    [GeneratedRegex(@"^\s*Paired:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PairedLine();
 
     [GeneratedRegex(@"^\s*Battery Percentage:\s*(?:0x[0-9A-Fa-f]+\s+)?\((?<percentage>\d+)\)\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BatteryLine();

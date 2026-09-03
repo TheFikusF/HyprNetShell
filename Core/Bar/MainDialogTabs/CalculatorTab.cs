@@ -9,7 +9,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class CalculatorTab : IMainDialogTab
+internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
 {
     private string _expression = "";
     private string _result = "";
@@ -71,7 +71,7 @@ internal sealed class CalculatorTab : IMainDialogTab
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Spread,
-                Style = ModulesCommon.ModuleStyle(Theme.Default, Theme.Default.Panel) with
+                Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
                 {
                     BorderRadius = 8,
                     Padding = 24,
@@ -89,11 +89,11 @@ internal sealed class CalculatorTab : IMainDialogTab
                         Children =
                         [
                             new TextNode(_expression.Length == 0 ? "0" : _expression, 24,
-                                Theme.Default.Muted),
+                                theme.Text.MutedColor),
                             new TextNode(_result.Length == 0 ? "=" : "= " + _result, 34,
-                                Theme.Default.Text),
+                                theme.Text),
                             new TextNode("Press Enter to copy", 18,
-                                Theme.Default.Muted),
+                                theme.Text.MutedColor),
                         ],
                     },
                 ]

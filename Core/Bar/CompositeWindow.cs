@@ -111,7 +111,7 @@ internal sealed class CompositeWindow : IDialogWindow
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 8 },
+        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 16 },
         Children = [BuildTabs(), ActiveTab.Draw()],
     };
 
@@ -119,7 +119,7 @@ internal sealed class CompositeWindow : IDialogWindow
     {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
-        Style = new Style { Spacing = 8 },
+        Style = Style.Spacer,
         Children = [.._tabs.Select(BuildTab)],
     };
 
@@ -140,7 +140,7 @@ internal sealed class CompositeWindow : IDialogWindow
             {
                 Spacing = 8,
                 BorderRadius = 8,
-                BorderWidth = index == _activeTabIndex ? _theme.BorderWidth : 0,
+                BorderWidth = index == _activeTabIndex ? _theme.Border.Width : 0,
             },
             Children = [new ImageNode(tab.Icon, 18, 18, _theme.Text), new TextNode(tab.Title, 15, _theme.Text)],
         };
@@ -151,5 +151,4 @@ internal sealed class CompositeWindow : IDialogWindow
         _activeTabIndex = index;
         ActiveTab.Activate();
     }
-
 }

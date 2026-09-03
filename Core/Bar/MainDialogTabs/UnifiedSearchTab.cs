@@ -184,7 +184,7 @@ internal sealed class UnifiedSearchTab(
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
                 Padding = new Insets(16, 10),
                 Spacing = 14,
             },
@@ -199,7 +199,7 @@ internal sealed class UnifiedSearchTab(
                     Children =
                     [
                         new TextNode(result.Title, 18, theme.Text),
-                        new TextNode(result.Description, theme.TextSize, selected ? theme.Text : theme.Muted),
+                        new TextNode(result.Description, theme.Text, selected ? theme.Text : theme.Text.MutedColor),
                     ],
                 },
             ],

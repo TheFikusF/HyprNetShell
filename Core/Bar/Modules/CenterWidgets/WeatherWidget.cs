@@ -34,12 +34,12 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
                 BuildTitleButton(openExpanded),
                 new BoxNode(Style.Spacer, ItemsAlignment.End, ItemsAlignment.Center)
                 {
-                    new TextNode(weather.Location, theme.TextSize, theme.Muted),
+                    new TextNode(weather.Location, theme.Text, theme.Text.MutedColor),
                     new TextNode(
                         refreshing ? "Updating…" :
                         state.UpdatedAt is null ? "Weather" : state.UpdatedAt.Value.ToString("HH:mm"),
-                        theme.TextSize,
-                        theme.Muted),
+                        theme.Text,
+                        theme.Text.MutedColor),
                 },
                 ..BuildWeatherContent(state, refreshing),
             ],
@@ -76,8 +76,8 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
         {
             yield return new TextNode(
                 refreshing ? "Loading forecast…" : state.Error ?? "Weather unavailable",
-                theme.TextSize,
-                theme.Muted);
+                theme.Text,
+                theme.Text.MutedColor);
             yield break;
         }
 
@@ -104,7 +104,7 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
             yield return BuildForecastRow(day, overallMinimum, overallMaximum);
         }
 
-        yield return new TextNode("Forecast: Open-Meteo", theme.TextSize, theme.Muted);
+        yield return new TextNode("Forecast: Open-Meteo", theme.Text, theme.Text.MutedColor);
     }
 
     private Node BuildForecastRow(ForecastDay day, double overallMinimum, double overallMaximum)
@@ -117,16 +117,16 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
             VerticalAlignment = ItemsAlignment.Center,
             Children =
             [
-                new TextNode(label, theme.TextSize, theme.Text),
-                new TextNode(condition.Icon, theme.TextSize, theme.Text),
-                new TextNode($"{Math.Round(day.Minimum):0}°", theme.TextSize, theme.Muted),
+                new TextNode(label, theme.Text, theme.Text),
+                new TextNode(condition.Icon, theme.Text, theme.Text),
+                new TextNode($"{Math.Round(day.Minimum):0}°", theme.Text, theme.Text.MutedColor),
                 new WeatherTemperatureRangeNode(
                     day.Minimum,
                     day.Maximum,
                     overallMinimum,
                     overallMaximum,
                     theme),
-                new TextNode($"{Math.Round(day.Maximum):0}°", theme.TextSize, theme.Text),
+                new TextNode($"{Math.Round(day.Maximum):0}°", theme.Text, theme.Text),
             ],
         };
     }

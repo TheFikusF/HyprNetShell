@@ -66,7 +66,7 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
                 [
                     MainDialogTabUi.BuildSectionHeader("Weather", weather.Location),
                     new TextNode(weather.IsRefreshing ? "Loading forecast…" : state.Error ?? "Weather unavailable",
-                        18, theme.Muted),
+                        18, theme.Text.MutedColor),
                 ],
             };
         }
@@ -107,7 +107,7 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
                 BuildHourly(state.Hourly, selectedDay.Date),
                 MainDialogTabUi.BuildSectionHeader("7-day forecast", "Daily low, high, and conditions"),
                 BuildDaily(state.Forecast),
-                new TextNode("Forecast: Open-Meteo", theme.TextSize, theme.Muted),
+                new TextNode("Forecast: Open-Meteo", theme.Text, theme.Text.MutedColor),
             ],
         };
     }
@@ -129,7 +129,7 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
                     BorderRadius = 8,
                     BorderWidth = 0,
                 },
-                Children = [new TextNode("Open forecast", theme.TextSize, theme.Text)],
+                Children = [new TextNode("Open forecast", theme.Text, theme.Text)],
             },
         };
     }
@@ -142,7 +142,7 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
             .ToArray();
         if (visible.Length == 0)
         {
-            return new TextNode("Hourly forecast unavailable", theme.TextSize, theme.Muted);
+            return new TextNode("Hourly forecast unavailable", theme.Text, theme.Text.MutedColor);
         }
 
         return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Stretch)
@@ -162,17 +162,17 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(theme, current ? theme.Active : theme.Panel) with
             {
-                Padding = 8 + (current ? 0 : (int)theme.BorderWidth),
+                Padding = 8 + (current ? 0 : (int)theme.Border.Width),
                 BorderRadius = 8,
-                BorderWidth = current ? theme.BorderWidth : 0,
+                BorderWidth = current ? theme.Border.Width : 0,
                 Spacing = 5,
             },
             Children =
             [
-                new TextNode(hour.Time.ToString("HH:mm"), theme.TextSize, current ? theme.Text : theme.Muted),
+                new TextNode(hour.Time.ToString("HH:mm"), theme.Text, current ? theme.Text : theme.Text.MutedColor),
                 new TextNode(condition.Icon, 24, theme.Text),
                 new TextNode($"{Math.Round(hour.Temperature):0}°", 18, theme.Text),
-                new TextNode($"Rain {hour.PrecipitationProbability}%", theme.TextSize, current ? theme.Text : theme.Muted),
+                new TextNode($"Rain {hour.PrecipitationProbability}%", theme.Text, current ? theme.Text : theme.Text.MutedColor),
             ],
         };
     }
@@ -206,25 +206,25 @@ internal sealed class WeatherTab(WeatherService weather, Theme theme) : IMainDia
             {
                 Padding = new Insets(14, 9),
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
             },
             Children =
             [
                 new TextNode(
                     $"{(selected ? ">" : " ")} {(today ? "Today" : day.Date.ToString("dddd"))}",
-                    theme.TextSize,
+                    theme.Text,
                     theme.Text),
-                new TextNode($"{condition.Icon}  {condition.Description}", theme.TextSize, theme.Text),
+                new TextNode($"{condition.Icon}  {condition.Description}", theme.Text, theme.Text),
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    new TextNode($"{Math.Round(day.Minimum):0}°", theme.TextSize, theme.Text),
+                    new TextNode($"{Math.Round(day.Minimum):0}°", theme.Text, theme.Text),
                     new WeatherTemperatureRangeNode(
                         day.Minimum,
                         day.Maximum,
                         overallMinimum,
                         overallMaximum,
                         theme),
-                    new TextNode($"{Math.Round(day.Maximum):0}°", theme.TextSize, theme.Text),
+                    new TextNode($"{Math.Round(day.Maximum):0}°", theme.Text, theme.Text),
                 }
             ],
         };

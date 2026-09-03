@@ -1,6 +1,5 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
-using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Helpers;
@@ -190,35 +189,26 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         };
     }
 
-    private Node BuildHeader(NetworkSnapshot network, bool enabled) => new BoxNode
+    private BoxNode BuildHeader(NetworkSnapshot network, bool enabled) => new BoxNode
     {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         Children =
         [
-            new BoxNode
-            {
-                Direction = Direction.Vertical,
-                Style = new Style { Spacing = 4 },
-                Children =
-                [
-                    ModulesCommon.BuildTextWithIcon(theme, Icons.WifiStrength[^1], "Wi-Fi"),
-                    new TextNode(network.Connected && network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
-                        ? $"Connected to {network.Connection}"
-                        : "Choose a wireless network", 14, theme.Muted),
-                ],
-            },
+            new TextNode(network.Connected && network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
+                ? $"Connected to {network.Connection}"
+                : "Choose a wireless network", theme.Text.HeaderSize, theme.Text),
             new BoxNode
             {
                 OnClick = network.WifiAvailable ? () => SetWifiEnabled(!enabled) : null,
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = new Style { Spacing = 10 },
+                Style = Style.Spacer,
                 Children =
                 [
-                    new TextNode(enabled ? "On" : "Off", 14, theme.Muted),
+                    new TextNode(enabled ? "On" : "Off", theme.Text, theme.Text.MutedColor),
                     new SwitchNode(enabled, _wifiSwitchAnimation)
                     {
-                        OffTrackColor = theme.Muted,
+                        OffTrackColor = theme.Text.MutedColor,
                         OnTrackColor = theme.Active,
                         KnobColor = theme.Text,
                     },
@@ -270,7 +260,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
             theme);
     }
 
-    private Node BuildNetworkRow(WifiNetworkSnapshot network, int index, bool busy)
+    private BoxNode BuildNetworkRow(WifiNetworkSnapshot network, int index, bool busy)
     {
         var rowState = _rowStates.GetState(network.Ssid, theme.Panel);
         var selected = index == _selectedIndex;
@@ -287,7 +277,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
             Style = ModulesCommon.ModuleStyle(theme, rowState.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
                 Spacing = 8,
             },
             Children =
@@ -297,7 +287,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
                     new RadioButtonNode(network.Active)
                     {
                         SelectedColor = Color.Orange,
-                        UnselectedColor = theme.Muted,
+                        UnselectedColor = theme.Text.MutedColor,
                         BackgroundColor = theme.Panel,
                     },
                     WifiIcon(network.Signal),
@@ -307,8 +297,8 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
                         Style = new Style { Spacing = 2 },
                         Children =
                         [
-                            new TextNode(network.Ssid, theme.TextSize, theme.Text, maxWidth: 310),
-                            new TextNode(network.SavedConnectionName is null ? security : $"{security} · Saved", 12, theme.Muted),
+                            new TextNode(network.Ssid, theme.Text, theme.Text, maxWidth: 310),
+                            new TextNode(network.SavedConnectionName is null ? security : $"{security} · Saved", 12, theme.Text.MutedColor),
                         ],
                     },
                 },
@@ -325,7 +315,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         };
     }
 
-    private Node BuildSharePrompt(WifiNetworkSnapshot network, RawImageData? qrImage) => new BoxNode
+    private BoxNode BuildSharePrompt(WifiNetworkSnapshot network, RawImageData? qrImage) => new BoxNode
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Center,
@@ -333,7 +323,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         Children =
         [
             ModulesCommon.BuildTextWithIcon(theme, Icons.QrCode, $"Share {network.Ssid}", maxTextWidth: 360),
-            new TextNode("Scan to connect to this Wi-Fi network", theme.TextSize, theme.Muted),
+            new TextNode("Scan to connect to this Wi-Fi network", theme.Text, theme.Text.MutedColor),
             qrImage is null
                 ? BuildMessage("Reading network credentials...")
                 : new BoxNode
@@ -353,7 +343,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         Children =
         [
             ModulesCommon.BuildTextWithIcon(theme, Icons.Lock, $"Connect to {network.Ssid}", maxTextWidth: 360),
-            new TextNode("Enter the network password", theme.TextSize, theme.Muted),
+            new TextNode("Enter the network password", theme.Text, theme.Text.MutedColor),
             MainDialogTabUi.BuildInput(new string('•', password.Length), "Password"),
             new BoxNode
             {
@@ -369,24 +359,8 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         ],
     };
 
-    private BoxNode BuildButton(string text, string key, Action? action)
-    {
-        var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(theme.Panel);
-        return new ()
-        {
-            IsHovered = state.Hovered,
-            OnClick = action,
-            VerticalAlignment = ItemsAlignment.Center,
-            HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
-            {
-                BorderRadius = 7,
-                BorderWidth = 0,
-                Padding = new Insets(10, 6),
-            },
-            Children = [new TextNode(text, 13, action is null ? theme.Muted : theme.Text)],
-        };
-    }
+    private BoxNode BuildButton(string text, string key, Action? action) =>
+        MainDialogTabUi.BuildButton(theme, _buttonStates, text, key, action);
 
     private BoxNode BuildIconButton(SvgAsset icon, string key, Action? action)
     {
@@ -403,21 +377,13 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
                 BorderWidth = 0,
                 Padding = 6,
             },
-            Children = [new ImageNode(icon, 16, 16, action is null ? theme.Muted : theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, action is null ? theme.Text.MutedColor : theme.Text)],
         };
     }
 
-    private Node BuildStatus(string? status) => string.IsNullOrWhiteSpace(status)
-        ? new SpacerNode()
-        : new TextNode(status, theme.TextSize, theme.Muted);
+    private Node BuildStatus(string? status) => MainDialogTabUi.BuildStatus(theme, status);
 
-    private BoxNode BuildMessage(string message) => new (height: 52)
-    {
-        VerticalAlignment = ItemsAlignment.Center,
-        HorizontalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8, BorderWidth = 0 },
-        Children = [new TextNode(message, theme.TextSize, theme.Muted)],
-    };
+    private BoxNode BuildMessage(string message) => MainDialogTabUi.BuildMessage(theme, message);
 
     private ImageNode WifiIcon(int? signal) => new (Icons.WifiStrength[signal switch
     {

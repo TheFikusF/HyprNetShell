@@ -61,7 +61,12 @@ public sealed class StatusBar
             services.DisplayControls,
             Theme.Default,
             _popupCoordinator);
-        var bluetoothModule = new BluetoothModule(services.Bluetooth, Theme.Default, _popupCoordinator);
+        var bluetoothModule = new BluetoothModule(
+            services.Bluetooth,
+            services.Dialogs,
+            services.Tabs,
+            Theme.Default,
+            _popupCoordinator);
         var batteryModule = new BatteryModule(services.Battery, Theme.Default, _popupCoordinator);
         var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
         var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);

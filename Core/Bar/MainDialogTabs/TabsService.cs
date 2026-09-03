@@ -14,6 +14,7 @@ internal sealed class TabsService : IDisposable
         ClipboardHistoryService clipboardHistory,
         IHyprctl hyprctl,
         NetworkModuleService network,
+        BluetoothModuleService bluetooth,
         WallpaperModuleService wallpapers,
         WeatherService weather,
         DictionaryService dictionary,
@@ -24,12 +25,13 @@ internal sealed class TabsService : IDisposable
         [
             new UnifiedSearchTab(hyprctl, closeDialog, theme),
             new ApplicationLauncherTab(hyprctl, closeDialog, theme),
-            new CalculatorTab(),
+            new CalculatorTab(theme),
             new DictionaryTab(dictionary, theme),
             new WorldClockTab(theme),
             new ClipboardManagerTab(clipboardHistory, closeDialog, theme),
             new WallpapersTab(wallpapers, closeDialog, theme),
             new WifiTab(network, theme),
+            new BluetoothTab(bluetooth, theme),
             new WeatherTab(weather, theme),
         ];
         _tabsById = _tabs.ToDictionary(tab => tab.Id, StringComparer.Ordinal);

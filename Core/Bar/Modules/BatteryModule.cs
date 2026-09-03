@@ -61,7 +61,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                     new BoxNode(74, 14 + 5 + 5)
                     {
                         IgnoreLayout = true,
-                        Left = (int)theme.BorderWidth,
+                        Left = (int)theme.Border.Width,
                         Style = new Style
                         {
                             BackgroundColor = Color.FromRgb(0, 0, 0, 0.5f),
@@ -74,7 +74,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                         Direction = Direction.Horizontal,
                         VerticalAlignment = ItemsAlignment.Center,
                         HorizontalAlignment = ItemsAlignment.Stretch,
-                        Left = (int)theme.BorderWidth,
+                        Left = (int)theme.Border.Width,
                         Style = new Style { Spacing = 2, Padding = new Insets(2, 2) },
                         Children = [
                             BuildBatteryBlock(battery.IsCharging, percentage, 0),
@@ -106,9 +106,9 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                             ?
                             [
                                 new ImageNode(Icons.Lightning, 16, 16, theme.Text),
-                                new TextNode($"{percentage:0}%", theme.TextSize, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }
+                                new TextNode($"{percentage:0}%", theme.Text, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }
                             ]
-                            : [new TextNode($"{percentage:0}%", theme.TextSize, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }]
+                            : [new TextNode($"{percentage:0}%", theme.Text, theme.Text) { ShadowColor = Color.Black with { A = 0.8f }, ShadowDistance = 2 }]
                     },
                 ],
             },
@@ -128,7 +128,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                 Style = new Style
                 {
                     BorderRadius = 8,
-                    BorderWidth = theme.BorderWidth,
+                    BorderWidth = theme.Border.Width,
                     BorderColor = theme.Border,
                     ShadowColor = Color.Black with { A = 0.45f },
                     ShadowDistance = 5.0f
@@ -146,7 +146,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
         //     return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5)
         //     {
         //         IgnoreLayout = true,
-        //         Left = (int)theme.BorderWidth,
+        //         Left = (int)theme.Border.Width,
         //         Direction = Direction.Horizontal,
         //         GradientDirection = GradientDirection.Horizontal,
         //     };
@@ -155,7 +155,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
         return new BoxNode(width, 14 + 5 + 5)
         {
             IgnoreLayout = true,
-            Left = (int)theme.BorderWidth,
+            Left = (int)theme.Border.Width,
             Style = new Style { BackgroundColor = Color.Darken(color, 0.5f) }
         };
     }
@@ -202,7 +202,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
             BuildRow("Device", battery.Device),
             new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
             {
-                new TextNode("Capacity", theme.TextSize, theme.Text),
+                new TextNode("Capacity", theme.Text, theme.Text),
                 ModulesCommon.BuildTextWithIcon(theme, BatteryLevelIcon(battery.Percentage), $"{battery.Percentage}%"),
             },
             BuildRow("Status", battery.Status),
@@ -226,7 +226,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
             Style = new Style { Spacing = 24 },
             Children =
             [
-                new TextNode("Charge limit", theme.TextSize, theme.Text),
+                new TextNode("Charge limit", theme.Text, theme.Text),
                 new BoxNode
                 {
                     VerticalAlignment = ItemsAlignment.Center,
@@ -239,7 +239,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                         {
                             HorizontalAlignment = ItemsAlignment.Center,
                             VerticalAlignment = ItemsAlignment.Center,
-                            Children = [new TextNode($"{limit}%", theme.TextSize, theme.Text)],
+                            Children = [new TextNode($"{limit}%", theme.Text, theme.Text)],
                         },
                         BuildChargeLimitButton("+", BatteryModuleService.CHARGE_LIMIT_STEP,
                             _chargeLimitIncreaseState, limit < BatteryModuleService.MAXIMUM_CHARGE_LIMIT),
@@ -255,7 +255,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
         ModulesCommon.BoxState buttonState,
         bool enabled)
     {
-        var state = buttonState.UpdateColor(theme.Muted);
+        var state = buttonState.UpdateColor(theme.Text.MutedColor);
         return new BoxNode()
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -270,7 +270,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new TextNode(label, 14, enabled ? theme.Text : theme.Muted)],
+            Children = [new TextNode(label, 14, enabled ? theme.Text : theme.Text.MutedColor)],
         };
     }
 
@@ -282,7 +282,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
         }
 
         yield return ModulesCommon.BuildDivider(theme.Border, height: 16);
-        yield return new TextNode("Power profile", theme.TextSize, theme.Text);
+        yield return new TextNode("Power profile", theme.Text, theme.Text);
         yield return new BoxNode
         {
             Direction = Direction.Horizontal,
@@ -310,7 +310,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
             OnClick = active ? null : () => service.SetPowerProfile(profile),
             Style = ModulesCommon.ModuleStyle(theme, state.Background, index == 0, index == 2) with
             {
-                BorderWidth = active ? theme.BorderWidth : 0,
+                BorderWidth = active ? theme.Border.Width : 0,
                 Padding = new Insets(7, 6),
             },
             Children = [new ImageNode(ProfileLabel(profile), 16, 16, theme.Text)],
@@ -328,8 +328,8 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
     private BoxNode BuildRow(string label, string value) =>
         new(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
-            new TextNode(label, theme.TextSize, theme.Text),
-            new TextNode(value, theme.TextSize, theme.Text),
+            new TextNode(label, theme.Text, theme.Text),
+            new TextNode(value, theme.Text, theme.Text),
         };
 
     public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[percentage switch

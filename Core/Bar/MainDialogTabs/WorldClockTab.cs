@@ -139,7 +139,7 @@ internal sealed class WorldClockTab : IMainDialogTab
             {
                 Padding = new Insets(14, 8),
                 BorderRadius = 8,
-                BorderWidth = selected ? _theme.BorderWidth : 0,
+                BorderWidth = selected ? _theme.Border.Width : 0,
             },
             Children =
             [
@@ -148,12 +148,12 @@ internal sealed class WorldClockTab : IMainDialogTab
                     new CheckboxNode(enabled, Icons.Check)
                     {
                         SelectedColor = selected ? _theme.Text : _theme.Active,
-                        UnselectedColor = selected ? _theme.Text : _theme.Muted,
+                        UnselectedColor = selected ? _theme.Text : _theme.Text.MutedColor,
                         BackgroundColor = selected ? _theme.Active : _theme.Panel,
                         CheckColor = selected ? _theme.Active : _theme.Text,
                     },
-                    new TextNode(clock.DisplayName, _theme.TextSize, _theme.Text),
-                    new TextNode(clock.TimeZoneId, _theme.TextSize, selected ? _theme.Text : _theme.Muted),
+                    new TextNode(clock.DisplayName, _theme.Text, _theme.Text),
+                    new TextNode(clock.TimeZoneId, _theme.Text, selected ? _theme.Text : _theme.Text.MutedColor),
                 },
                 new TextNode(time.ToString("HH:mm"), 18, _theme.Text),
             ],

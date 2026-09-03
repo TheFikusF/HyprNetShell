@@ -196,7 +196,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                     Style = ModulesCommon.ModuleStyle(theme, entryState.Background) with
                     {
                         BorderRadius = 8,
-                        BorderWidth = selected ? theme.BorderWidth : 0,
+                        BorderWidth = selected ? theme.Border.Width : 0,
                         Padding = new Insets(16, 10),
                         Spacing = 14,
                     },
@@ -215,8 +215,8 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                                 new TextNode(application.Name, 18, theme.Text),
                                 new TextNode(
                                     application.Comment ?? "",
-                                    theme.TextSize,
-                                    entrySelected ? theme.Text : theme.Muted),
+                                    theme.Text,
+                                    entrySelected ? theme.Text : theme.Text.MutedColor),
                             ],
                         },
                     ],
@@ -253,7 +253,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = entrySelected ? theme.BorderWidth : 0,
+                BorderWidth = entrySelected ? theme.Border.Width : 0,
                 Padding = selected ? new Insets(16, 10) : new Insets(4, 10),
                 Spacing = 8,
             },
@@ -266,11 +266,11 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                     Style = new Style
                     {
                         BackgroundColor = Color.Black,
-                        BorderRadius = new BorderRadius(theme.BorderRadius),
+                        BorderRadius = new BorderRadius(theme.Border.Radius),
                     },
                     Children = [new TextNode((actionIndex + 1).ToString(), 14, theme.Text)],
                 },
-                selected ? new TextNode(action.Name, theme.TextSize, theme.Text) : new SpacerNode(),
+                selected ? new TextNode(action.Name, theme.Text, theme.Text) : new SpacerNode(),
             ],
         };
     }

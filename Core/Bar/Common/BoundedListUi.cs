@@ -80,7 +80,7 @@ internal static class BoundedListUi
                     totalItems,
                     visibleItems,
                     theme.Panel,
-                    theme.Muted),
+                    theme.Text.MutedColor),
             ],
         };
     }

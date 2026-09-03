@@ -61,7 +61,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         className = string.IsNullOrWhiteSpace(className) ? "APP" : className;
 
         return _node.Draw([
-            new BoxNode(height: 52 - (int)(_theme.BorderWidth * 2))
+            new BoxNode(height: 52 - (int)(_theme.Border.Width * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 OnScroll = delta => ScrollWorkspace(monitor, activeWorkspaceId, delta),
@@ -78,14 +78,14 @@ internal sealed class WorkspacesModule : IDrawableModule
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
                     Spacing = 4,
                     BorderColor = _theme.Border,
-                    BorderRadius = new BorderRadius(0, _theme.BorderRadius, _theme.BorderRadius, 0),
+                    BorderRadius = new BorderRadius(0, _theme.Border.Radius, _theme.Border.Radius, 0),
                     Padding = new Insets(8, 8),
                     ShadowColor = Color.Black with { A = 0.45f },
                     ShadowDistance = 5.0f
                 },
                 Children =
                 {
-                    ModulesCommon.BuildAppBadge(className, 14, _theme.Muted, _theme),
+                    ModulesCommon.BuildAppBadge(className, 14, _theme.Text.MutedColor, _theme),
                     new TextNode(title.Length > 40 ? title[..37] + "..." : title, 14.0f, _theme.Text),
                 },
             }
@@ -174,19 +174,19 @@ internal sealed class WorkspacesModule : IDrawableModule
             {
                 Spacing = 8,
                 BorderRadius = 8,
-                BorderWidth = workspace.Active ? _theme.BorderWidth : 0,
+                BorderWidth = workspace.Active ? _theme.Border.Width : 0,
             },
             Children =
             [
-                new TextNode($"Workspace {workspace.Id}", theme.TextSize, theme.Text),
+                new TextNode($"Workspace {workspace.Id}", theme.Text, theme.Text),
                 ..workspace.Windows.Select(x => new BoxNode
                 {
                     Style = new Style { Spacing = 8, Padding = new Insets(0, 0, 0, 4) },
                     HorizontalAlignment = ItemsAlignment.Stretch,
                     Children =
                     [
-                        ModulesCommon.BuildAppBadge(x.ClassName, 14, theme.Muted, theme),
-                        new TextNode(x.Title, theme.TextSize, theme.Text, wrapping: TextWrapping.Ellipsis)
+                        ModulesCommon.BuildAppBadge(x.ClassName, 14, theme.Text.MutedColor, theme),
+                        new TextNode(x.Title, theme.Text, theme.Text, wrapping: TextWrapping.Ellipsis)
                     ]
                 }),
             ],

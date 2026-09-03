@@ -129,12 +129,12 @@ internal sealed class CompositeWindowsConfigurationTab(
                         "Choose its tabs and an optional Hyprland hotkey"),
                     BuildInput("Name", _name, "Window name", EditedField.Name),
                     BuildInput("Hotkey", _hotkey, "Example: SUPER + SPACE", EditedField.Hotkey),
-                    new TextNode("Tabs", theme.TextSize, theme.Text),
+                    new TextNode("Tabs", theme.Text, theme.Text),
                     BuildTabGrid(),
                     new TextNode(
                         _message.Length == 0 ? "Changes are applied after Save." : _message,
-                        theme.TextSize,
-                        _message.StartsWith("Saved", StringComparison.Ordinal) ? theme.Active : theme.Muted),
+                        theme.Text,
+                        _message.StartsWith("Saved", StringComparison.Ordinal) ? theme.Active : theme.Text.MutedColor),
                     BuildActions(),
                 ],
             },
@@ -166,16 +166,16 @@ internal sealed class CompositeWindowsConfigurationTab(
             {
                 Padding = 12,
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
                 Spacing = 3,
             },
             Children =
             [
-                new TextNode(window.Name, theme.TextSize, theme.Text),
+                new TextNode(window.Name, theme.Text, theme.Text),
                 new TextNode(
                     window.Hotkey.Length == 0 ? "No hotkey" : window.Hotkey,
                     12,
-                    selected ? theme.Text : theme.Muted),
+                    selected ? theme.Text : theme.Text.MutedColor),
             ],
         };
     }
@@ -196,13 +196,13 @@ internal sealed class CompositeWindowsConfigurationTab(
             {
                 Padding = 12,
                 BorderRadius = 8,
-                BorderWidth = active ? theme.BorderWidth : 0,
+                BorderWidth = active ? theme.Border.Width : 0,
                 Spacing = 5,
             },
             Children =
             [
-                new TextNode(label, 12, active ? theme.Text : theme.Muted),
-                new TextNode(displayedValue, theme.TextSize, active || value.Length > 0 ? theme.Text : theme.Muted),
+                new TextNode(label, 12, active ? theme.Text : theme.Text.MutedColor),
+                new TextNode(displayedValue, theme.Text, active || value.Length > 0 ? theme.Text : theme.Text.MutedColor),
             ],
         };
     }
@@ -367,7 +367,7 @@ internal sealed class CompositeWindowsConfigurationTab(
                 BorderWidth = 0,
                 Spacing = 8,
             },
-            Children = [new ImageNode(icon, 16, 16, theme.Text), new TextNode(label, theme.TextSize, theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, theme.Text), new TextNode(label, theme.Text, theme.Text)],
         };
     }
 

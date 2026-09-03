@@ -52,7 +52,7 @@ internal sealed class NetworkModule(
             new BoxNode
             {
                 IgnoreLayout = true,
-                Children = [new ImageNode(Icons.WifiStrength[^1], 18, 18, theme.Text with { A = 0.3f })]
+                Children = [new ImageNode(Icons.WifiStrength[^1], 18, 18, theme.Text.Color with { A = 0.3f })]
             },
             new BoxNode
             {
@@ -147,7 +147,7 @@ internal sealed class NetworkModule(
                         [
                             new SwitchNode(enabled, _wifiSwitchAnimation)
                             {
-                                OffTrackColor = theme.Muted,
+                                OffTrackColor = theme.Text.MutedColor,
                                 OnTrackColor = theme.Active,
                                 KnobColor = theme.Text,
                             }
@@ -221,7 +221,7 @@ internal sealed class NetworkModule(
                 new RadioButtonNode(wifi.Active)
                 {
                     SelectedColor = Color.Orange,
-                    UnselectedColor = theme.Muted,
+                    UnselectedColor = theme.Text.MutedColor,
                     BackgroundColor = theme.Panel,
                 },
                 WifiIcon(WifiStrengthIndex(wifi.Signal), 18),
@@ -257,7 +257,7 @@ internal sealed class NetworkModule(
         new BoxNode
         {
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-            Children = [new TextNode(text, 14.0f, theme.Muted)],
+            Children = [new TextNode(text, 14.0f, theme.Text.MutedColor)],
         };
 
     private void RefreshWifiNetworks(bool enabled)

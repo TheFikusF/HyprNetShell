@@ -238,15 +238,15 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
             IsHovered = state.Hovered,
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
-                Padding = 4 + (selected ? 0 : theme.BorderWidth),
+                Padding = 4 + (selected ? 0 : theme.Border.Width),
                 Spacing = 4,
                 BorderRadius = 6,
-                BorderWidth = selected ? theme.BorderWidth : 0,
+                BorderWidth = selected ? theme.Border.Width : 0,
             },
             Children =
             [
                 new ImageNode(wallpaper.Path, (int)(192 * 0.98f), (int)(108 * 0.98f), loadAsync: true),
-                new TextNode(wallpaper.Name, theme.TextSize, theme.Text, maxWidth: 188,
+                new TextNode(wallpaper.Name, theme.Text, theme.Text, maxWidth: 188,
                     wrapping: TextWrapping.Ellipsis),
             ],
         };

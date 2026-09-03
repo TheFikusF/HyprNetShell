@@ -29,7 +29,7 @@ internal sealed class PowerModule(
     };
 
     public Node Draw() => _node.Draw([
-            new BoxNode(height: 52 - (int)(theme.BorderWidth * 2))
+            new BoxNode(height: 52 - (int)(theme.Border.Width * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 Style =

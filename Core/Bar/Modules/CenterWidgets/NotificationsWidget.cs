@@ -71,7 +71,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             new ImageNode(enabled ? Icons.BellOff : Icons.Bell, 18, 18, theme.Text),
             new SwitchNode(enabled, _doNotDisturbSwitchAnimation)
             {
-                OffTrackColor = theme.Muted,
+                OffTrackColor = theme.Text.MutedColor,
                 OnTrackColor = theme.Active,
                 KnobColor = theme.Text,
             },
@@ -86,7 +86,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Children = [new TextNode("No notifications", 18, theme.Muted)]
+                Children = [new TextNode("No notifications", 18, theme.Text.MutedColor)]
             };
         }
 
@@ -112,12 +112,12 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             Icons.Check,
             selected => _dateRange = (HistoryDateRange)selected)
         {
-            FontSize = theme.TextSize,
+            FontSize = theme.Text,
             BackgroundColor = theme.Panel,
             HoverColor = Color.Lighten(theme.Panel, 0.18f),
             SelectedColor = theme.Active,
             BorderColor = theme.Border,
-            BorderWidth = theme.BorderWidth,
+            BorderWidth = theme.Border.Width,
             BorderRadius = 8,
             TextColor = theme.Text,
         };
@@ -138,10 +138,10 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     {
         if (!_clearButtonInitialized)
         {
-            _clearButtonState.Background = theme.Muted;
+            _clearButtonState.Background = theme.Text.MutedColor;
             _clearButtonInitialized = true;
         }
-        _clearButtonState.UpdateColor(theme.Muted);
+        _clearButtonState.UpdateColor(theme.Text.MutedColor);
 
         return new BoxNode
         {
@@ -159,7 +159,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             Children =
             [
                 new ImageNode(Icons.Trash, 18, 18, theme.Text),
-                new TextNode("Clear", theme.TextSize, theme.Text),
+                new TextNode("Clear", theme.Text, theme.Text),
             ],
         };
     }

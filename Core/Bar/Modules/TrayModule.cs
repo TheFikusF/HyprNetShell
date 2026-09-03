@@ -76,7 +76,7 @@ internal sealed class TrayModule(
             Style = ModulesCommon.PopupStyle(theme),
             Children = rows is { Count: > 0 }
                 ? rows.Select(row => BuildRow(item, row)).ToArray()
-                : [new TextNode(item.Title, 14.0f, theme.Muted)],
+                : [new TextNode(item.Title, 14.0f, theme.Text.MutedColor)],
         };
     }
 
@@ -105,7 +105,7 @@ internal sealed class TrayModule(
                 BorderRadius = 6,
                 Padding = new Insets(8, 4),
             },
-            Children = [new TextNode(row.Label, 14.0f, row.Enabled ? theme.Text : theme.Muted)],
+            Children = [new TextNode(row.Label, 14.0f, row.Enabled ? theme.Text : theme.Text.MutedColor)],
         };
     }
 }

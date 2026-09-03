@@ -84,7 +84,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
             ModulesCommon.BuildTextWithIcon(theme, Icons.RAM, FormatPercent(stats.RamPercent),
                 style: ModulesCommon.ModuleStyle(theme, _currentRamColor, false, false) with
                 {
-                    BorderWidth = new Insets(1, theme.BorderWidth),
+                    BorderWidth = new Insets(1, theme.Border.Width),
                     ShadowColor = null,
                 }, width: WIDTH),
             ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, FormatTemperature(stats.TemperatureCelsius),
@@ -164,7 +164,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         IReadOnlyList<float>? downData = null, Color? downColor = null, ICollection<Node>? downLabel = null)
     {
         var graphBackground = theme.Panel;
-        var grid = theme.Muted with { A = 0.22f };
+        var grid = theme.Text.MutedColor with { A = 0.22f };
         return new BoxNode(ModulesCommon.PopupStyle(theme) with { Padding = 0 })
         {
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -246,7 +246,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
                 },
                 new BoxNode(GRAPH_WIDTH, BAR_HEIGHT)
                 {
-                    Style = new Style { BackgroundColor = theme.Muted with { A = 0.35f }, BorderRadius = 5 },
+                    Style = new Style { BackgroundColor = theme.Text.MutedColor with { A = 0.35f }, BorderRadius = 5 },
                     Children =
                     [
                         new BoxNode((int)MathF.Round(GRAPH_WIDTH * percentage / 100.0f), BAR_HEIGHT)

@@ -95,6 +95,7 @@ public sealed class StatusBarServices : IDisposable
             ClipboardHistory,
             Hyprctl,
             Network,
+            Bluetooth,
             Wallpapers,
             Weather,
             Dictionary,

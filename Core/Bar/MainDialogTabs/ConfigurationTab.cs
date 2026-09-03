@@ -54,7 +54,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
             MainDialogTabUi.BuildSectionHeader("Wallpaper settings", "Saved automatically"),
             BuildSlideshowToggle(),
             BuildDurationControl(),
-            new TextNode($"Wallpaper directory: {wallpapers.WallpaperDirectory}", theme.TextSize, theme.Muted),
+            new TextNode($"Wallpaper directory: {wallpapers.WallpaperDirectory}", theme.Text, theme.Text.MutedColor),
             MainDialogTabUi.BuildSectionHeader("History settings", "Saved automatically"),
             BuildHistoryControl(
                 "Notification history",
@@ -92,7 +92,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
                 new TextNode("Wallpaper slideshow", 16, theme.Text),
                 new SwitchNode(enabled, _slideshowSwitchAnimation)
                 {
-                    OffTrackColor = theme.Muted,
+                    OffTrackColor = theme.Text.MutedColor,
                     OnTrackColor = theme.Active,
                     KnobColor = theme.Text,
                 },
@@ -122,7 +122,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
                     Children =
                     [
                         new TextNode("Slideshow duration", 16, theme.Text),
-                        new TextNode("Time between wallpaper changes", theme.TextSize, theme.Muted),
+                        new TextNode("Time between wallpaper changes", theme.Text, theme.Text.MutedColor),
                     ],
                 },
                 new BoxNode
@@ -170,7 +170,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
                 Children =
                 [
                     new TextNode(title, 16, theme.Text),
-                    new TextNode(description, theme.TextSize, theme.Muted),
+                    new TextNode(description, theme.Text, theme.Text.MutedColor),
                 ],
             },
             new BoxNode
@@ -194,7 +194,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
 
     private BoxNode BuildValueButton(string label, Action onClick, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(theme.Muted);
+        var state = buttonState.UpdateColor(theme.Text.MutedColor);
         return new BoxNode(38, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -213,7 +213,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
 
     private BoxNode BuildDurationButton(string label, int delta, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(theme.Muted);
+        var state = buttonState.UpdateColor(theme.Text.MutedColor);
         return new (38, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,

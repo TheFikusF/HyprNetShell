@@ -630,8 +630,11 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         return GetEnumerator();
     }
 
-    public void Add(Node node)
+    public void Add(Node? node)
     {
-        Children.Add(node);
+        if (node != null)
+        {
+            Children.Add(node);
+        }
     }
 }

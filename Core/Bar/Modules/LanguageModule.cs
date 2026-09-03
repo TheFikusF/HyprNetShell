@@ -72,7 +72,7 @@ internal sealed class LanguageModule : IDrawableModule
                 OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName),
                 OnScroll = delta => ScrollLanguage(keyboardName, layoutName, delta),
                 Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
-                Children = [new TextNode(alias, _theme.TextSize, _theme.Text)]
+                Children = [new TextNode(alias, _theme.Text, _theme.Text)]
             }
         ], () => BuildPopup(keyboardName));
     }
@@ -109,7 +109,7 @@ internal sealed class LanguageModule : IDrawableModule
     {
         var alias = _aliases[text];
         var normal = text == _lastLayoutName ? _theme.Active : _theme.Panel;
-        var fontSize = text == _lastLayoutName ? 20.0f : _theme.TextSize;
+        var fontSize = text == _lastLayoutName ? 20.0f : _theme.Text;
         var state = _languagesRowStates.GetState(text, normal).UpdateColor(normal);
         return new BoxNode
         {
@@ -121,7 +121,7 @@ internal sealed class LanguageModule : IDrawableModule
             Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = text == _lastLayoutName ? _theme.BorderWidth : 0,
+                BorderWidth = text == _lastLayoutName ? _theme.Border.Width : 0,
                 Padding = new Insets(0, text == _lastLayoutName ? 12 : 8)
             },
             Children = [new TextNode(alias, fontSize, _theme.Text)]

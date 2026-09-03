@@ -197,8 +197,8 @@ internal sealed class MusicModule(
                         Children =
                         [
                             new MarqueeTextNode(music.Title, 42, 16.0f, theme.Text),
-                            new MarqueeTextNode(FormatSubtitle(music), 47, theme.TextSize, theme.Text),
-                            new MarqueeTextNode(music.Player, 47, theme.TextSize, theme.Text),
+                            new MarqueeTextNode(FormatSubtitle(music), 47, theme.Text, theme.Text),
+                            new MarqueeTextNode(music.Player, 47, theme.Text, theme.Text),
                         ]
                     },
                     new BoxNode
@@ -235,7 +235,7 @@ internal sealed class MusicModule(
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-                Children = [new TextNode("M", 28.0f, theme.Muted)]
+                Children = [new TextNode("M", 28.0f, theme.Text.MutedColor)]
             }
             : new ImageNode(music.ImagePath, POPUP_IMAGE_SIZE, POPUP_IMAGE_SIZE);
 

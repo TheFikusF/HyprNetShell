@@ -30,7 +30,7 @@ public static class ModulesCommon
             Children =
             [
                 new ImageNode(icon, 18, 18, color ?? theme.Text),
-                new TextNode(text, theme.TextSize, color ?? theme.Text, maxTextWidth,
+                new TextNode(text, theme.Text, color ?? theme.Text, maxTextWidth,
                     maxTextWidth.HasValue ? TextWrapping.Ellipsis : TextWrapping.NoWrap),
             ],
         };
@@ -40,7 +40,7 @@ public static class ModulesCommon
         Direction = Direction.Horizontal,
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.BorderRadius) },
+        Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.Border.Radius) },
         Children = { new TextNode(text, 8, theme.Text) },
     };
 
@@ -56,10 +56,10 @@ public static class ModulesCommon
     {
         BackgroundColor = fill,
         BorderColor = theme.Border,
-        BorderRadius = new BorderRadius(left ? theme.BorderRadius : 0, right ? theme.BorderRadius : 0,
-            right ? theme.BorderRadius : 0, left ? theme.BorderRadius : 0),
-        BorderWidth = new Insets(theme.BorderWidth, right ? theme.BorderWidth : 0,
-            theme.BorderWidth, left ? theme.BorderWidth : 0),
+        BorderRadius = new BorderRadius(left ? theme.Border.Radius : 0, right ? theme.Border.Radius : 0,
+            right ? theme.Border.Radius : 0, left ? theme.Border.Radius : 0),
+        BorderWidth = new Insets(theme.Border.Width, right ? theme.Border.Width : 0,
+            theme.Border.Width, left ? theme.Border.Width : 0),
         Padding = new Insets(8, 6),
         ShadowColor = Color.Black with { A = 0.45f },
         ShadowDistance = 4.0f
@@ -80,7 +80,7 @@ public static class ModulesCommon
         return string.IsNullOrWhiteSpace(className) ? "?" : className[..1].ToUpperInvariant();
     }
 
-    public static TState GetState<TKey, TState>(this Dictionary<TKey, TState> stateDictionary, TKey key,
+    public static TState GetState<TKey, TState>(this IDictionary<TKey, TState> stateDictionary, TKey key,
         Color initialColor)
         where TState : BoxState, new()
         where TKey : notnull

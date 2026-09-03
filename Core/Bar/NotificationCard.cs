@@ -76,13 +76,13 @@ internal static class NotificationCard
         state.Content.UpdateColor(theme.Panel with { A = 0.2f });
 
         TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
-            ? [new TextNode(notification.Title, theme.TextSize, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 3)]
+            ? [new TextNode(notification.Title, theme.Text, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 3)]
             :
             [
                 new TextNode(notification.Title, 16, theme.Text, wrapping: TextWrapping.Ellipsis),
                 new TextNode(
                     notification.Body,
-                    theme.TextSize,
+                    theme.Text,
                     theme.Text,
                     wrapping: TextWrapping.Wrap,
                     maxLines: 3),
@@ -118,7 +118,7 @@ internal static class NotificationCard
                                 new TextNode(
                                     notification.AppName,
                                     11,
-                                    theme.Muted,
+                                    theme.Text.MutedColor,
                                     wrapping: TextWrapping.Ellipsis),
                             ]
                             : []),
@@ -136,10 +136,10 @@ internal static class NotificationCard
     {
         if (!state.CloseButtonInitialized)
         {
-            state.CloseButton.Background = theme.Muted;
+            state.CloseButton.Background = theme.Text.MutedColor;
             state.CloseButtonInitialized = true;
         }
-        state.CloseButton.UpdateColor(theme.Muted);
+        state.CloseButton.UpdateColor(theme.Text.MutedColor);
         return new BoxNode(22, 22)
         {
             HorizontalAlignment = ItemsAlignment.Center,

@@ -131,7 +131,7 @@ internal sealed class CenterModule : IDrawableModule
                         new BoxNode(new Style
                         {
                             BorderColor = Color.White,
-                            BorderWidth = _theme.BorderWidth,
+                            BorderWidth = _theme.Border.Width,
                             BorderRadius = 999,
                             BackgroundColor = Color.Black,
                             ShadowColor = Color.Black with { A = 0.45f },
