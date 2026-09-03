@@ -1,3 +1,5 @@
+<img width="1920" height="69" alt="image" src="https://github.com/user-attachments/assets/96eabc48-c185-4ef3-b153-fb05bbcba1c5" />
+
 # HyprNetShell
 
 HyprNetShell is an experimental Linux status bar and desktop shell for Hyprland, written in C# and C. It creates a Wayland `wlr-layer-shell` surface through a small native library and renders a custom interface directly with OpenGL.
