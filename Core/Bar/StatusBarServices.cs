@@ -59,6 +59,7 @@ public sealed class StatusBarServices : IDisposable
     internal DisplayControlsModuleService DisplayControls { get; }
     internal NetworkModuleService Network { get; }
     internal AudioModuleService Audio { get; }
+    internal PrivacyModuleService Privacy { get; }
     internal BluetoothModuleService Bluetooth { get; }
     internal BatteryModuleService Battery { get; }
     internal SystemStatsModuleService SystemStats { get; }
@@ -81,6 +82,7 @@ public sealed class StatusBarServices : IDisposable
         Wallpapers = new WallpaperModuleService(Hyprctl);
         Network = new NetworkModuleService();
         Audio = new AudioModuleService();
+        Privacy = new PrivacyModuleService(Audio);
         Bluetooth = new BluetoothModuleService();
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
@@ -120,6 +122,7 @@ public sealed class StatusBarServices : IDisposable
         [
             new(Network, RecoveryInterval),
             new(Audio, AudioFallbackInterval),
+            new(Privacy, FastSampleInterval),
             new(DisplayControls, FastSampleInterval),
             new(Bluetooth, RecoveryInterval),
             new(Battery, RecoveryInterval),

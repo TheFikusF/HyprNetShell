@@ -185,8 +185,9 @@ internal sealed class CompositeWindowsConfigurationTab(
         var active = _editedField == field;
         var caret = active && Math.Sin(Environment.TickCount64 / 200.0) > 0 ? "|" : "";
         var displayedValue = active
-            ? (value.Length == 0 ? placeholder : value) + caret
+            ? value + caret
             : value.Length == 0 ? placeholder : value;
+
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -201,7 +202,7 @@ internal sealed class CompositeWindowsConfigurationTab(
             },
             Children =
             [
-                new TextNode(label, 12, active ? theme.Text : theme.Text.MutedColor),
+                new TextNode(label, theme.Text.SmallSize, active ? theme.Text : theme.Text.MutedColor),
                 new TextNode(displayedValue, theme.Text, active || value.Length > 0 ? theme.Text : theme.Text.MutedColor),
             ],
         };

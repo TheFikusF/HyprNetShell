@@ -91,6 +91,9 @@ public static partial class Icons
     [SvgAsset("assets/icons/lucide/camera.svg")]
     public static partial SvgAsset Camera { get; }
 
+    [SvgAsset("assets/icons/lucide/screen-share.svg")]
+    public static partial SvgAsset ScreenShare { get; }
+
     [SvgAsset("assets/icons/lucide/printer.svg")]
     public static partial SvgAsset Printer { get; }
 

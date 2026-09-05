@@ -158,8 +158,7 @@ internal sealed class DictionaryService
         CancellationToken cancellationToken)
     {
         var pair = Uri.EscapeDataString($"en|{TranslationLanguage}");
-        var uri = new Uri(
-            $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(query)}&langpair={pair}");
+        var uri = new Uri($"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(query)}&langpair={pair}");
         using var response = await GetAsync(uri, cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -203,8 +202,7 @@ internal sealed class DictionaryService
 
     private static string BuildHeading(string word, string? partOfSpeech, string? phonetic)
     {
-        var details = new[] { partOfSpeech, phonetic }
-            .Where(value => !string.IsNullOrWhiteSpace(value));
+        var details = new[] { partOfSpeech, phonetic }.Where(value => !string.IsNullOrWhiteSpace(value));
         var suffix = string.Join(" · ", details);
         return suffix.Length == 0 ? word : $"{word} · {suffix}";
     }

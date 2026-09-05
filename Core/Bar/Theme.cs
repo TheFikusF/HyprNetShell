@@ -1,5 +1,4 @@
 using HyprNetShell.Rendering.Primitives;
-using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Bar;
 
@@ -9,6 +8,7 @@ public sealed record Theme
     {
         public float Size { get; init; }
         public float HeaderSize { get; init; }
+        public float SmallSize { get; init; }
         public Color Color { get; init; }
         public Color MutedColor { get; init; }
 
@@ -44,6 +44,7 @@ public sealed record Theme
             Color = Color.White,
             Size = 14.0f,
             HeaderSize = 18.0f,
+            SmallSize = 12.0f,
             MutedColor = Color.FromRgb(128, 128, 128),
         },
         Border = new BorderParams

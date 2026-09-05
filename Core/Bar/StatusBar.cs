@@ -57,6 +57,7 @@ public sealed class StatusBar
             Theme.Default,
             _popupCoordinator);
         var audioModule = new AudioModule(services.Audio, services.Bluetooth, Theme.Default, _popupCoordinator);
+        var privacyModule = new PrivacyModule(services.Privacy, Theme.Default, _popupCoordinator);
         var displayControlsModule = new DisplayControlsModule(
             services.DisplayControls,
             Theme.Default,
@@ -95,6 +96,7 @@ public sealed class StatusBar
         _leftModules = [workspacesModule, musicModule];
         _rightModules =
         [
+            privacyModule,
             new CompositeModule(new Style()
             {
                 BorderRadius = 999,
