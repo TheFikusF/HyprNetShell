@@ -1,0 +1,3 @@
+# Install as /etc/pam.d/hyprnetshell on systems providing system-login.
+auth      include system-login
+account   include system-login

@@ -14,6 +14,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class PowerModule(
     DialogService dialogs,
     IHyprctl hyprctl,
+    Action requestLockScreen,
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
@@ -93,7 +94,11 @@ internal sealed class PowerModule(
         dialogs.Open<SettingsDialog>();
     }
 
-    private static void LockScreen() => CommandRunner.TryStart("hyprlock", []);
+    private void LockScreen()
+    {
+        _node.ClosePopup();
+        requestLockScreen();
+    }
 
     private void Logout()
     {

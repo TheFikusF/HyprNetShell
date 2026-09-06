@@ -23,6 +23,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     {
         RemoveExpiredCardStates(snapshot.Items);
         var filteredItems = snapshot.Items
+            .Where(notification => notification.StoreInHistory)
             .Where(notification => HistoryDateFilter.Includes(_dateRange, notification.ReceivedAt))
             .ToArray();
 

@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 
 #include "hypr_layer.h"
 
@@ -17,6 +17,9 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "ext-image-capture-source-v1-client-protocol.h"
+#include "ext-image-copy-capture-v1-client-protocol.h"
+#include "ext-data-control-v1-client-protocol.h"
 
 struct hypr_bar {
     struct hypr_layer* layer;
@@ -42,6 +45,14 @@ struct hypr_bar {
     int closed;
     int keyboard_interactive;
 
+    struct wl_surface* screenshot_surface;
+    struct zwlr_layer_surface_v1* screenshot_layer_surface;
+    struct wl_egl_window* screenshot_egl_window;
+    EGLSurface screenshot_egl_surface;
+    int screenshot_width;
+    int screenshot_height;
+    int screenshot_configured;
+
     double pointer_x;
     double pointer_y;
     int pointer_inside;
@@ -52,10 +63,19 @@ struct hypr_bar {
     int pending_text_length;
 };
 
+struct clipboard_source {
+    struct hypr_layer* layer;
+    struct clipboard_source* next;
+    struct ext_data_control_source_v1* source;
+    unsigned char* data;
+    size_t length;
+};
+
 struct hypr_layer {
     struct wl_display* display;
     struct wl_registry* registry;
     struct wl_compositor* compositor;
+    struct wl_shm* shm;
     struct wl_seat* seat;
     uint32_t seat_registry_name;
     uint32_t seat_version;
@@ -63,6 +83,17 @@ struct hypr_layer {
     struct wl_keyboard* keyboard;
     struct zwlr_layer_shell_v1* layer_shell;
     uint32_t layer_shell_version;
+    struct ext_output_image_capture_source_manager_v1* output_capture_manager;
+    struct ext_image_copy_capture_manager_v1* image_capture_manager;
+    struct ext_data_control_manager_v1* data_control_manager;
+    struct ext_data_control_device_v1* data_control_device;
+    struct ext_data_control_offer_v1* incoming_offer;
+    struct clipboard_source* clipboard_sources;
+    void* capture_data;
+    size_t capture_size;
+    int capture_width;
+    int capture_height;
+    int capture_stride;
 
     struct xkb_context* xkb_context;
     struct xkb_keymap* xkb_keymap;
@@ -92,6 +123,9 @@ struct hypr_layer {
 
 static void create_bar_surface(struct hypr_bar* bar);
 static void destroy_bar_surface(struct hypr_bar* bar);
+static int create_screenshot_surface(struct hypr_bar* bar);
+static void destroy_screenshot_surface(struct hypr_bar* bar);
+static void ensure_data_control_device(struct hypr_layer* layer);
 static const struct wl_seat_listener seat_listener;
 
 static int64_t monotonic_milliseconds(void) {
@@ -150,7 +184,7 @@ static struct hypr_bar* find_bar_by_surface(
         return NULL;
     }
     for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (bar->surface == surface && !bar->closed) {
+        if ((bar->surface == surface || bar->screenshot_surface == surface) && !bar->closed) {
             return bar;
         }
     }
@@ -424,10 +458,139 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
     .closed = layer_surface_closed,
 };
 
+static void screenshot_surface_configure(
+    void* data,
+    struct zwlr_layer_surface_v1* layer_surface,
+    uint32_t serial,
+    uint32_t width,
+    uint32_t height) {
+    struct hypr_bar* bar = data;
+    zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
+    if (bar->screenshot_surface == NULL || width == 0 || height == 0 ||
+        width > INT32_MAX || height > INT32_MAX) {
+        destroy_screenshot_surface(bar);
+        return;
+    }
+
+    int dimensions_changed = bar->screenshot_width != (int)width || bar->screenshot_height != (int)height;
+    bar->screenshot_width = (int)width;
+    bar->screenshot_height = (int)height;
+    if (bar->screenshot_egl_window == NULL) {
+        bar->screenshot_egl_window = wl_egl_window_create(
+            bar->screenshot_surface,
+            bar->screenshot_width,
+            bar->screenshot_height);
+        if (bar->screenshot_egl_window == NULL) {
+            destroy_screenshot_surface(bar);
+            return;
+        }
+        bar->screenshot_egl_surface = eglCreateWindowSurface(
+            bar->layer->egl_display,
+            bar->layer->egl_config,
+            (EGLNativeWindowType)bar->screenshot_egl_window,
+            NULL);
+        if (bar->screenshot_egl_surface == EGL_NO_SURFACE) {
+            fail_bar_egl(bar, "failed to create screenshot overlay EGL surface");
+            destroy_screenshot_surface(bar);
+            return;
+        }
+    } else if (dimensions_changed) {
+        wl_egl_window_resize(
+            bar->screenshot_egl_window,
+            bar->screenshot_width,
+            bar->screenshot_height,
+            0,
+            0);
+    }
+    bar->screenshot_configured = 1;
+}
+
+static void screenshot_surface_closed(
+    void* data,
+    struct zwlr_layer_surface_v1* layer_surface) {
+    (void)layer_surface;
+    destroy_screenshot_surface(data);
+}
+
+static const struct zwlr_layer_surface_v1_listener screenshot_surface_listener = {
+    .configure = screenshot_surface_configure,
+    .closed = screenshot_surface_closed,
+};
+
+static void destroy_screenshot_surface(struct hypr_bar* bar) {
+    if (bar == NULL ||
+        (bar->screenshot_surface == NULL &&
+         bar->screenshot_layer_surface == NULL &&
+         bar->screenshot_egl_window == NULL &&
+         bar->screenshot_egl_surface == EGL_NO_SURFACE)) {
+        return;
+    }
+    if (bar->layer->pointer_focus == bar || bar->layer->keyboard_focus == bar) {
+        clear_bar_focus(bar);
+    }
+    if (bar->screenshot_egl_surface != EGL_NO_SURFACE) {
+        make_fallback_current(bar->layer);
+        eglDestroySurface(bar->layer->egl_display, bar->screenshot_egl_surface);
+        bar->screenshot_egl_surface = EGL_NO_SURFACE;
+    }
+    if (bar->screenshot_egl_window != NULL) {
+        wl_egl_window_destroy(bar->screenshot_egl_window);
+        bar->screenshot_egl_window = NULL;
+    }
+    if (bar->screenshot_layer_surface != NULL) {
+        zwlr_layer_surface_v1_destroy(bar->screenshot_layer_surface);
+        bar->screenshot_layer_surface = NULL;
+    }
+    if (bar->screenshot_surface != NULL) {
+        wl_surface_destroy(bar->screenshot_surface);
+        bar->screenshot_surface = NULL;
+    }
+    bar->screenshot_configured = 0;
+    bar->screenshot_width = 0;
+    bar->screenshot_height = 0;
+}
+
+static int create_screenshot_surface(struct hypr_bar* bar) {
+    if (bar == NULL || bar->closed || bar->screenshot_surface != NULL) {
+        return bar != NULL && bar->screenshot_surface != NULL;
+    }
+    struct hypr_layer* layer = bar->layer;
+    bar->screenshot_surface = wl_compositor_create_surface(layer->compositor);
+    if (bar->screenshot_surface == NULL) {
+        return 0;
+    }
+    bar->screenshot_layer_surface = zwlr_layer_shell_v1_get_layer_surface(
+        layer->layer_shell,
+        bar->screenshot_surface,
+        bar->output,
+        ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+        "hyprnetshell-screenshot");
+    if (bar->screenshot_layer_surface == NULL ||
+        zwlr_layer_surface_v1_add_listener(
+            bar->screenshot_layer_surface,
+            &screenshot_surface_listener,
+            bar) < 0) {
+        destroy_screenshot_surface(bar);
+        return 0;
+    }
+    zwlr_layer_surface_v1_set_anchor(
+        bar->screenshot_layer_surface,
+        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    zwlr_layer_surface_v1_set_size(bar->screenshot_layer_surface, 0, 0);
+    zwlr_layer_surface_v1_set_exclusive_zone(bar->screenshot_layer_surface, -1);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(bar->screenshot_layer_surface, 1);
+    wl_surface_commit(bar->screenshot_surface);
+    return 1;
+}
+
 static void destroy_bar_surface(struct hypr_bar* bar) {
     if (bar == NULL) {
         return;
     }
+    destroy_screenshot_surface(bar);
     clear_bar_focus(bar);
     destroy_bar_egl_surface(bar);
     if (bar->layer_surface != NULL) {
@@ -547,12 +710,138 @@ static void release_keyboard(struct hypr_layer* layer) {
     layer->repeat_active = 0;
 }
 
+static void clipboard_source_send(
+    void* data,
+    struct ext_data_control_source_v1* source,
+    const char* mime_type,
+    int32_t fd) {
+    (void)source;
+    (void)mime_type;
+    struct clipboard_source* clipboard = data;
+    size_t offset = 0;
+    while (offset < clipboard->length) {
+        ssize_t written = write(fd, clipboard->data + offset, clipboard->length - offset);
+        if (written > 0) {
+            offset += (size_t)written;
+        } else if (written < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    close(fd);
+}
+
+static void clipboard_source_cancelled(
+    void* data,
+    struct ext_data_control_source_v1* source) {
+    struct clipboard_source* clipboard = data;
+    struct clipboard_source** link = &clipboard->layer->clipboard_sources;
+    while (*link != NULL && *link != clipboard) {
+        link = &(*link)->next;
+    }
+    if (*link == clipboard) {
+        *link = clipboard->next;
+    }
+    ext_data_control_source_v1_destroy(source);
+    free(clipboard->data);
+    free(clipboard);
+}
+
+static const struct ext_data_control_source_v1_listener clipboard_source_listener = {
+    .send = clipboard_source_send,
+    .cancelled = clipboard_source_cancelled,
+};
+
+static void data_offer_mime(
+    void* data,
+    struct ext_data_control_offer_v1* offer,
+    const char* mime_type) {
+    (void)data;
+    (void)offer;
+    (void)mime_type;
+}
+
+static const struct ext_data_control_offer_v1_listener data_offer_listener = {
+    .offer = data_offer_mime,
+};
+
+static void data_device_offer(
+    void* data,
+    struct ext_data_control_device_v1* device,
+    struct ext_data_control_offer_v1* offer) {
+    (void)device;
+    struct hypr_layer* layer = data;
+    if (layer->incoming_offer != NULL) {
+        ext_data_control_offer_v1_destroy(layer->incoming_offer);
+    }
+    layer->incoming_offer = offer;
+    ext_data_control_offer_v1_add_listener(offer, &data_offer_listener, layer);
+}
+
+static void discard_data_offer(struct hypr_layer* layer, struct ext_data_control_offer_v1* offer) {
+    if (offer != NULL) {
+        ext_data_control_offer_v1_destroy(offer);
+    }
+    if (layer->incoming_offer == offer) {
+        layer->incoming_offer = NULL;
+    }
+}
+
+static void data_device_selection(
+    void* data,
+    struct ext_data_control_device_v1* device,
+    struct ext_data_control_offer_v1* offer) {
+    (void)device;
+    discard_data_offer(data, offer);
+}
+
+static void data_device_finished(void* data, struct ext_data_control_device_v1* device) {
+    struct hypr_layer* layer = data;
+    if (layer->data_control_device == device) {
+        ext_data_control_device_v1_destroy(device);
+        layer->data_control_device = NULL;
+    }
+}
+
+static void data_device_primary_selection(
+    void* data,
+    struct ext_data_control_device_v1* device,
+    struct ext_data_control_offer_v1* offer) {
+    (void)device;
+    discard_data_offer(data, offer);
+}
+
+static const struct ext_data_control_device_v1_listener data_device_listener = {
+    .data_offer = data_device_offer,
+    .selection = data_device_selection,
+    .finished = data_device_finished,
+    .primary_selection = data_device_primary_selection,
+};
+
+static void ensure_data_control_device(struct hypr_layer* layer) {
+    if (layer->data_control_device != NULL || layer->data_control_manager == NULL || layer->seat == NULL) {
+        return;
+    }
+    layer->data_control_device = ext_data_control_manager_v1_get_data_device(
+        layer->data_control_manager,
+        layer->seat);
+    if (layer->data_control_device == NULL ||
+        ext_data_control_device_v1_add_listener(layer->data_control_device, &data_device_listener, layer) < 0) {
+        fail_fatal(layer, "failed to initialize native clipboard control");
+    }
+}
+
 static void release_seat(struct hypr_layer* layer) {
     if (layer->seat == NULL) {
         return;
     }
     release_pointer(layer);
     release_keyboard(layer);
+    if (layer->data_control_device != NULL) {
+        ext_data_control_device_v1_destroy(layer->data_control_device);
+        layer->data_control_device = NULL;
+    }
     if (layer->seat_version >= WL_SEAT_RELEASE_SINCE_VERSION) {
         wl_seat_release(layer->seat);
     } else {
@@ -585,7 +874,24 @@ static void registry_global(
         if (wl_seat_add_listener(layer->seat, &seat_listener, layer) < 0) {
             fail_fatal(layer, "failed to initialize the Wayland seat");
             release_seat(layer);
+        } else {
+            ensure_data_control_device(layer);
         }
+    } else if (strcmp(interface, wl_shm_interface.name) == 0 && layer->shm == NULL) {
+        layer->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+    } else if (strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name) == 0 &&
+               layer->output_capture_manager == NULL) {
+        layer->output_capture_manager = wl_registry_bind(
+            registry, name, &ext_output_image_capture_source_manager_v1_interface, 1);
+    } else if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) == 0 &&
+               layer->image_capture_manager == NULL) {
+        layer->image_capture_manager = wl_registry_bind(
+            registry, name, &ext_image_copy_capture_manager_v1_interface, 1);
+    } else if (strcmp(interface, ext_data_control_manager_v1_interface.name) == 0 &&
+               layer->data_control_manager == NULL) {
+        layer->data_control_manager = wl_registry_bind(
+            registry, name, &ext_data_control_manager_v1_interface, 1);
+        ensure_data_control_device(layer);
     } else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0 && layer->layer_shell == NULL) {
         uint32_t bind_version = version < 5 ? version : 5;
         layer->layer_shell_version = bind_version;
@@ -607,6 +913,7 @@ static void registry_global(
         bar->id = layer->next_bar_id++;
         bar->pending_key = -1;
         bar->egl_surface = EGL_NO_SURFACE;
+        bar->screenshot_egl_surface = EGL_NO_SURFACE;
         snprintf(bar->fallback_output_name, sizeof(bar->fallback_output_name), "wl-output-%u", name);
         bar->output = wl_registry_bind(registry, name, &wl_output_interface, bind_version);
         if (bar->output == NULL || wl_output_add_listener(bar->output, &output_listener, bar) < 0) {
@@ -1123,11 +1430,253 @@ hypr_layer* hypr_layer_create(int reserved_height) {
     return layer;
 }
 
+struct capture_state {
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+    int has_format;
+    int constraints_done;
+    int stopped;
+    int frame_done;
+    int frame_ready;
+};
+
+static void capture_buffer_size(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t width, uint32_t height) {
+    (void)session;
+    struct capture_state* state = data;
+    state->width = width;
+    state->height = height;
+}
+
+static void capture_shm_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format) {
+    (void)session;
+    struct capture_state* state = data;
+    if (!state->has_format && (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888)) {
+        state->format = format;
+        state->has_format = 1;
+    }
+}
+
+static void capture_dmabuf_device(void* data, struct ext_image_copy_capture_session_v1* session, struct wl_array* device) {
+    (void)data; (void)session; (void)device;
+}
+
+static void capture_dmabuf_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format, struct wl_array* modifiers) {
+    (void)data; (void)session; (void)format; (void)modifiers;
+}
+
+static void capture_constraints_done(void* data, struct ext_image_copy_capture_session_v1* session) {
+    (void)session;
+    ((struct capture_state*)data)->constraints_done = 1;
+}
+
+static void capture_stopped(void* data, struct ext_image_copy_capture_session_v1* session) {
+    (void)session;
+    ((struct capture_state*)data)->stopped = 1;
+}
+
+static const struct ext_image_copy_capture_session_v1_listener capture_session_listener = {
+    .buffer_size = capture_buffer_size,
+    .shm_format = capture_shm_format,
+    .dmabuf_device = capture_dmabuf_device,
+    .dmabuf_format = capture_dmabuf_format,
+    .done = capture_constraints_done,
+    .stopped = capture_stopped,
+};
+
+static void capture_transform(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t transform) {
+    (void)data; (void)frame; (void)transform;
+}
+static void capture_damage(void* data, struct ext_image_copy_capture_frame_v1* frame, int32_t x, int32_t y, int32_t width, int32_t height) {
+    (void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
+}
+static void capture_presentation(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t tv_sec_hi, uint32_t tv_sec_lo, uint32_t tv_nsec) {
+    (void)data; (void)frame; (void)tv_sec_hi; (void)tv_sec_lo; (void)tv_nsec;
+}
+static void capture_ready(void* data, struct ext_image_copy_capture_frame_v1* frame) {
+    (void)frame;
+    struct capture_state* state = data;
+    state->frame_ready = 1;
+    state->frame_done = 1;
+}
+static void capture_failed(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t reason) {
+    (void)frame; (void)reason;
+    ((struct capture_state*)data)->frame_done = 1;
+}
+
+static const struct ext_image_copy_capture_frame_v1_listener capture_frame_listener = {
+    .transform = capture_transform,
+    .damage = capture_damage,
+    .presentation_time = capture_presentation,
+    .ready = capture_ready,
+    .failed = capture_failed,
+};
+
+int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL || layer->shm == NULL || layer->output_capture_manager == NULL ||
+        layer->image_capture_manager == NULL) {
+        return 0;
+    }
+
+    if (layer->capture_data != NULL) {
+        munmap(layer->capture_data, layer->capture_size);
+        layer->capture_data = NULL;
+        layer->capture_size = 0;
+    }
+
+    struct capture_state state = {0};
+    struct ext_image_capture_source_v1* source =
+        ext_output_image_capture_source_manager_v1_create_source(layer->output_capture_manager, bar->output);
+    struct ext_image_copy_capture_session_v1* session = source != NULL
+        ? ext_image_copy_capture_manager_v1_create_session(layer->image_capture_manager, source, 0)
+        : NULL;
+    if (session == NULL ||
+        ext_image_copy_capture_session_v1_add_listener(session, &capture_session_listener, &state) < 0) {
+        if (session != NULL) ext_image_copy_capture_session_v1_destroy(session);
+        if (source != NULL) ext_image_capture_source_v1_destroy(source);
+        return 0;
+    }
+
+    while (!state.constraints_done && !state.stopped) {
+        if (wl_display_roundtrip(layer->display) < 0) {
+            state.stopped = 1;
+        }
+    }
+    if (state.stopped || !state.has_format || state.width == 0 || state.height == 0 ||
+        state.width > INT32_MAX / 4 || state.height > SIZE_MAX / ((size_t)state.width * 4)) {
+        ext_image_copy_capture_session_v1_destroy(session);
+        ext_image_capture_source_v1_destroy(source);
+        return 0;
+    }
+
+    int stride = (int)state.width * 4;
+    size_t size = (size_t)stride * state.height;
+    if (size > INT32_MAX) {
+        ext_image_copy_capture_session_v1_destroy(session);
+        ext_image_capture_source_v1_destroy(source);
+        return 0;
+    }
+    int fd = memfd_create("hyprnetshell-capture", MFD_CLOEXEC);
+    if (fd < 0 || ftruncate(fd, (off_t)size) < 0) {
+        if (fd >= 0) close(fd);
+        ext_image_copy_capture_session_v1_destroy(session);
+        ext_image_capture_source_v1_destroy(source);
+        return 0;
+    }
+    void* pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    struct wl_shm_pool* pool = pixels != MAP_FAILED ? wl_shm_create_pool(layer->shm, fd, (int)size) : NULL;
+    struct wl_buffer* buffer = pool != NULL
+        ? wl_shm_pool_create_buffer(pool, 0, (int)state.width, (int)state.height, stride, state.format)
+        : NULL;
+    struct ext_image_copy_capture_frame_v1* frame = buffer != NULL
+        ? ext_image_copy_capture_session_v1_create_frame(session)
+        : NULL;
+    if (frame == NULL ||
+        ext_image_copy_capture_frame_v1_add_listener(frame, &capture_frame_listener, &state) < 0) {
+        if (frame != NULL) ext_image_copy_capture_frame_v1_destroy(frame);
+        if (buffer != NULL) wl_buffer_destroy(buffer);
+        if (pool != NULL) wl_shm_pool_destroy(pool);
+        if (pixels != MAP_FAILED) munmap(pixels, size);
+        close(fd);
+        ext_image_copy_capture_session_v1_destroy(session);
+        ext_image_capture_source_v1_destroy(source);
+        return 0;
+    }
+
+    ext_image_copy_capture_frame_v1_attach_buffer(frame, buffer);
+    ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, (int)state.width, (int)state.height);
+    ext_image_copy_capture_frame_v1_capture(frame);
+    while (!state.frame_done && !state.stopped) {
+        if (wl_display_roundtrip(layer->display) < 0) {
+            state.stopped = 1;
+        }
+    }
+
+    ext_image_copy_capture_frame_v1_destroy(frame);
+    wl_buffer_destroy(buffer);
+    wl_shm_pool_destroy(pool);
+    close(fd);
+    ext_image_copy_capture_session_v1_destroy(session);
+    ext_image_capture_source_v1_destroy(source);
+    if (!state.frame_ready) {
+        munmap(pixels, size);
+        return 0;
+    }
+
+    layer->capture_data = pixels;
+    layer->capture_size = size;
+    layer->capture_width = (int)state.width;
+    layer->capture_height = (int)state.height;
+    layer->capture_stride = stride;
+    return 1;
+}
+
+int hypr_layer_get_capture_width(const hypr_layer* layer) {
+    return layer != NULL ? layer->capture_width : 0;
+}
+
+int hypr_layer_get_capture_height(const hypr_layer* layer) {
+    return layer != NULL ? layer->capture_height : 0;
+}
+
+int hypr_layer_get_capture_stride(const hypr_layer* layer) {
+    return layer != NULL ? layer->capture_stride : 0;
+}
+
+int hypr_layer_copy_capture(const hypr_layer* layer, unsigned char* buffer, int buffer_size) {
+    if (layer == NULL || layer->capture_data == NULL || buffer == NULL || buffer_size < 0 ||
+        (size_t)buffer_size < layer->capture_size || layer->capture_size > INT32_MAX) {
+        return 0;
+    }
+    memcpy(buffer, layer->capture_data, layer->capture_size);
+    return (int)layer->capture_size;
+}
+
+int hypr_layer_set_clipboard(
+    hypr_layer* layer,
+    const unsigned char* data,
+    int data_length,
+    const char* mime_type) {
+    if (layer == NULL || data == NULL || data_length <= 0 || mime_type == NULL || mime_type[0] == '\0' ||
+        layer->data_control_manager == NULL || layer->data_control_device == NULL) {
+        return 0;
+    }
+    struct clipboard_source* clipboard = calloc(1, sizeof(struct clipboard_source));
+    if (clipboard == NULL) {
+        return 0;
+    }
+    clipboard->data = malloc((size_t)data_length);
+    clipboard->source = ext_data_control_manager_v1_create_data_source(layer->data_control_manager);
+    if (clipboard->data == NULL || clipboard->source == NULL ||
+        ext_data_control_source_v1_add_listener(clipboard->source, &clipboard_source_listener, clipboard) < 0) {
+        if (clipboard->source != NULL) ext_data_control_source_v1_destroy(clipboard->source);
+        free(clipboard->data);
+        free(clipboard);
+        return 0;
+    }
+    memcpy(clipboard->data, data, (size_t)data_length);
+    clipboard->length = (size_t)data_length;
+    clipboard->layer = layer;
+    clipboard->next = layer->clipboard_sources;
+    layer->clipboard_sources = clipboard;
+    ext_data_control_source_v1_offer(clipboard->source, mime_type);
+    ext_data_control_device_v1_set_selection(layer->data_control_device, clipboard->source);
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        return 0;
+    }
+    return 1;
+}
+
 void hypr_layer_destroy(hypr_layer* layer) {
     if (layer == NULL) {
         return;
     }
 
+    if (layer->capture_data != NULL) {
+        munmap(layer->capture_data, layer->capture_size);
+        layer->capture_data = NULL;
+    }
     if (layer->egl_display != EGL_NO_DISPLAY) {
         make_fallback_current(layer);
     }
@@ -1148,6 +1697,27 @@ void hypr_layer_destroy(hypr_layer* layer) {
         eglTerminate(layer->egl_display);
     }
     release_seat(layer);
+    while (layer->clipboard_sources != NULL) {
+        struct clipboard_source* clipboard = layer->clipboard_sources;
+        layer->clipboard_sources = clipboard->next;
+        if (clipboard->source != NULL) {
+            ext_data_control_source_v1_destroy(clipboard->source);
+        }
+        free(clipboard->data);
+        free(clipboard);
+    }
+    if (layer->data_control_manager != NULL) {
+        ext_data_control_manager_v1_destroy(layer->data_control_manager);
+    }
+    if (layer->image_capture_manager != NULL) {
+        ext_image_copy_capture_manager_v1_destroy(layer->image_capture_manager);
+    }
+    if (layer->output_capture_manager != NULL) {
+        ext_output_image_capture_source_manager_v1_destroy(layer->output_capture_manager);
+    }
+    if (layer->shm != NULL) {
+        wl_shm_destroy(layer->shm);
+    }
     if (layer->layer_shell != NULL) {
         zwlr_layer_shell_v1_destroy(layer->layer_shell);
     }
@@ -1376,6 +1946,66 @@ int hypr_layer_set_input_regions(
     wl_surface_commit(bar->surface);
     if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
         fail_fatal(layer, "wl_display_flush failed after setting input regions");
+        return 0;
+    }
+    return 1;
+}
+
+int hypr_layer_set_screenshot_overlay(hypr_layer* layer, uint64_t id) {
+    if (layer == NULL) {
+        return 0;
+    }
+    struct hypr_bar* target = id != 0 ? find_bar(layer, id) : NULL;
+    if (id != 0 && (target == NULL || !target->active || target->closed)) {
+        return 0;
+    }
+
+    int succeeded = 1;
+    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+        if (bar == target) {
+            succeeded = create_screenshot_surface(bar);
+        } else {
+            destroy_screenshot_surface(bar);
+        }
+    }
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        fail_fatal(layer, "failed to update the screenshot overlay surface");
+        return 0;
+    }
+    return succeeded;
+}
+
+int hypr_layer_make_screenshot_current(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL || !bar->screenshot_configured ||
+        bar->screenshot_egl_surface == EGL_NO_SURFACE) {
+        return 0;
+    }
+    if (!eglMakeCurrent(
+            layer->egl_display,
+            bar->screenshot_egl_surface,
+            bar->screenshot_egl_surface,
+            layer->egl_context)) {
+        fail_bar_egl(bar, "eglMakeCurrent failed for screenshot overlay");
+        destroy_screenshot_surface(bar);
+        return 0;
+    }
+    return 1;
+}
+
+int hypr_layer_swap_screenshot_buffers(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL || !bar->screenshot_configured ||
+        bar->screenshot_egl_surface == EGL_NO_SURFACE) {
+        return 0;
+    }
+    if (!eglSwapBuffers(layer->egl_display, bar->screenshot_egl_surface)) {
+        fail_bar_egl(bar, "eglSwapBuffers failed for screenshot overlay");
+        destroy_screenshot_surface(bar);
+        return 0;
+    }
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+        fail_fatal(layer, "wl_display_flush failed after swapping screenshot overlay buffers");
         return 0;
     }
     return 1;

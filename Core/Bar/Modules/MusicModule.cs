@@ -295,7 +295,7 @@ internal sealed class MusicModule(
         }
 
         _positionOverrideMicros = (long)(music.LengthMicros * Math.Clamp(ratio, 0.0f, 1.0f));
-        _seekQueue.Submit(music.Bus, music.Player, music.PositionMicros, _positionOverrideMicros);
+        _seekQueue.Submit(music.Bus, music.PositionMicros, _positionOverrideMicros);
     }
 
     private Node BuildControlButton(PlayerAction action, MusicSnapshot music)
@@ -360,54 +360,37 @@ internal sealed class MusicModule(
 
     private static void Control(MusicSnapshot music, PlayerAction action)
     {
-        _ = Task.Run(async () =>
+        if (string.IsNullOrWhiteSpace(music.Bus))
         {
-            if (!string.IsNullOrWhiteSpace(music.Bus))
-            {
-                await CommandRunner.TryReadAsync(
-                    "gdbus",
-                    $"call --session --dest {music.Bus} --object-path /org/mpris/MediaPlayer2 --method org.mpris.MediaPlayer2.Player.{action}",
-                    TimeSpan.FromMilliseconds(500),
-                    CancellationToken.None);
-                return;
-            }
+            return;
+        }
 
-            await CommandRunner.TryReadAsync(
-                "playerctl",
-                action switch
-                {
-                    PlayerAction.PlayPause => "play-pause",
-                    PlayerAction.Previous => "previous",
-                    PlayerAction.Next => "next",
-                    _ => "play-pause",
-                },
-                TimeSpan.FromMilliseconds(500),
-                CancellationToken.None);
-        });
+        _ = Task.Run(() => CommandRunner.TryReadAsync(
+            "gdbus",
+            $"call --session --dest {music.Bus} --object-path /org/mpris/MediaPlayer2 --method org.mpris.MediaPlayer2.Player.{action}",
+            TimeSpan.FromMilliseconds(500),
+            CancellationToken.None));
     }
 
     private sealed class SeekUpdateQueue
     {
         private readonly object _sync = new();
         private string _bus = "";
-        private string _player = "";
         private long _latestMicros;
         private long _sentMicros = -1;
         private bool _running;
 
-        public void Submit(string bus, string player, long currentMicros, long positionMicros)
+        public void Submit(string bus, long currentMicros, long positionMicros)
         {
             lock (_sync)
             {
                 if (!_running ||
-                    !string.Equals(_bus, bus, StringComparison.Ordinal) ||
-                    !string.Equals(_player, player, StringComparison.Ordinal))
+                    !string.Equals(_bus, bus, StringComparison.Ordinal))
                 {
                     _sentMicros = currentMicros;
                 }
 
                 _bus = bus;
-                _player = player;
                 _latestMicros = positionMicros;
                 if (_running)
                 {
@@ -425,7 +408,6 @@ internal sealed class MusicModule(
             while (true)
             {
                 string bus;
-                string player;
                 long positionMicros;
                 long previousMicros;
                 lock (_sync)
@@ -437,43 +419,30 @@ internal sealed class MusicModule(
                     }
 
                     bus = _bus;
-                    player = _player;
                     positionMicros = _latestMicros;
                     previousMicros = _sentMicros;
                     _sentMicros = positionMicros;
                 }
 
-                if (!string.IsNullOrWhiteSpace(bus))
+                if (string.IsNullOrWhiteSpace(bus))
                 {
-                    await CommandRunner.TryRunAsync(
-                        "gdbus",
-                        [
-                            "call",
-                            "--session",
-                            "--dest", bus,
-                            "--object-path", "/org/mpris/MediaPlayer2",
-                            "--method", "org.mpris.MediaPlayer2.Player.Seek",
-                            (positionMicros - previousMicros).ToString(CultureInfo.InvariantCulture),
-                        ],
-                        TimeSpan.FromMilliseconds(700),
-                        CancellationToken.None);
-                    await Task.Delay(50);
-                    continue;
+                    lock (_sync)
+                    {
+                        _running = false;
+                    }
+                    return;
                 }
 
-                var arguments = new List<string>();
-                if (!string.IsNullOrWhiteSpace(player))
-                {
-                    arguments.AddRange(["--player", player]);
-                }
-
-                arguments.AddRange([
-                    "position",
-                    (positionMicros / 1_000_000.0).ToString("0.######", CultureInfo.InvariantCulture),
-                ]);
                 await CommandRunner.TryRunAsync(
-                    "playerctl",
-                    arguments,
+                    "gdbus",
+                    [
+                        "call",
+                        "--session",
+                        "--dest", bus,
+                        "--object-path", "/org/mpris/MediaPlayer2",
+                        "--method", "org.mpris.MediaPlayer2.Player.Seek",
+                        (positionMicros - previousMicros).ToString(CultureInfo.InvariantCulture),
+                    ],
                     TimeSpan.FromMilliseconds(700),
                     CancellationToken.None);
                 await Task.Delay(50);

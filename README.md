@@ -9,15 +9,14 @@ The project includes Hyprland workspaces, system and media controls, notificatio
 ## Repository structure
 
 ```text
+Application/    Shell orchestration, lock screen, screenshots, and launch helpers
 Core/           Bar composition, modules, models, and system/Hyprland services
 GUI/            Custom retained node layout and input system
 Rendering/      OpenGL renderer, text, image, and SVG support
 Generators/     Roslyn source generator for embedded SVG assets
-Native/         Wayland layer-shell, EGL, and input native library
+Native/         Native library plus managed Wayland/PInvoke wrappers
 assets/         Embedded fonts, icons, SVGs, and images
-Program.cs      Application entry point and frame loop
-NativeMethods.cs
-                Managed wrapper and P/Invoke declarations for Native/
+Program.cs      Thin command-line mode dispatcher
 ```
 
 See [`AGENTS.md`](AGENTS.md) for a more detailed project map.
@@ -38,7 +37,7 @@ See [`AGENTS.md`](AGENTS.md) for a more detailed project map.
 
 The layer-shell protocol XML is vendored in `Native/protocols/`, so a separate `wlr-protocols` package is not required.
 
-Runtime features additionally use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-clipboard`, `hyprpaper`, and `hyprsunset`.
+Runtime features additionally use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-clipboard`, `hyprpaper`, and `hyprsunset`. Media metadata and controls use MPRIS over the session D-Bus.
 
 ### Steps
 
@@ -69,3 +68,14 @@ For a self-contained NativeAOT build:
 dotnet publish HyprNetShell.csproj \
   -p:PublishProfile=Properties/PublishProfiles/NativeAotOneFile.pubxml
 ```
+
+The profile also creates
+`bin/Release/net10.0/linux-x64/publish/HyprNetShell-0.1.0-linux-x64.tar.xz`,
+ready for the Gentoo binary ebuild or a GitHub release.
+
+## Gentoo installation
+
+A binary-package ebuild and local-overlay instructions are available under
+[`packaging/gentoo/`](packaging/gentoo/README.md). The ebuild installs the
+NativeAOT bundle, runtime feature dependencies, and the PAM policy required by
+the in-house lock screen.

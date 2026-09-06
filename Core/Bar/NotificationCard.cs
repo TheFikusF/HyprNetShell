@@ -28,9 +28,10 @@ internal static class NotificationCard
         Theme theme,
         State state)
     {
-        var iconPath = string.IsNullOrWhiteSpace(notification.IconName)
-            ? null
-            : IconResolver.TryResolveIcon(notification.IconName) ?? IconResolver.TryResolve(notification.IconName);
+        var svgIcon = Icons.ByName.GetValueOrDefault(notification.IconName);
+        var iconPath = svgIcon is null && !string.IsNullOrWhiteSpace(notification.IconName)
+            ? IconResolver.TryResolveIcon(notification.IconName) ?? IconResolver.TryResolve(notification.IconName)
+            : null;
 
         return new BoxNode
         {
@@ -52,7 +53,7 @@ internal static class NotificationCard
                     Style = new Style { Spacing = 12 },
                     Children =
                     [
-                        BuildContent(notification, iconPath, service, theme, state),
+                        BuildContent(notification, svgIcon, iconPath, service, theme, state),
                         BuildCloseButton(notification.Id, service, theme, state),
                     ],
                 },
@@ -63,6 +64,7 @@ internal static class NotificationCard
 
     private static Node BuildContent(
         NotificationSnapshot notification,
+        SvgAsset? svgIcon,
         string? iconPath,
         NotificationService service,
         Theme theme,
@@ -103,7 +105,7 @@ internal static class NotificationCard
             },
             Children =
             [
-                ..BuildIcon(notification.ImageData, notification.StoredImage, iconPath, 32),
+                ..BuildIcon(notification, svgIcon, iconPath, theme),
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
@@ -215,22 +217,28 @@ internal static class NotificationCard
     }
 
     private static IEnumerable<Node> BuildIcon(
-        RawImageData? imageData,
-        EncodedImageData? storedImage,
+        NotificationSnapshot notification,
+        SvgAsset? svgIcon,
         string? iconPath,
-        int size)
+        Theme theme)
     {
-        if (imageData is not null)
+        var width = notification.ShowImageAsPreview ? 128 : 32;
+        var height = notification.ShowImageAsPreview ? 80 : 32;
+        if (notification.ImageData is not null)
         {
-            yield return new ImageNode(imageData, size, size);
+            yield return new ImageNode(notification.ImageData, width, height);
         }
-        else if (storedImage is not null)
+        else if (notification.StoredImage is not null)
         {
-            yield return new ImageNode(storedImage, size, size);
+            yield return new ImageNode(notification.StoredImage, width, height);
+        }
+        else if (svgIcon is not null)
+        {
+            yield return new ImageNode(svgIcon, 32, 32, theme.Text);
         }
         else if (!string.IsNullOrWhiteSpace(iconPath))
         {
-            yield return new ImageNode(iconPath, size, size);
+            yield return new ImageNode(iconPath, 32, 32);
         }
     }
 }

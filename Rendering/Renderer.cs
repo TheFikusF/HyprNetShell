@@ -122,7 +122,9 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             BlendingFactor.OneMinusSrcAlpha);
     }
 
-    public void BeginFrame(int width, int height)
+    public void BeginFrame(int width, int height) => BeginFrame(width, height, new Color(0, 0, 0, 0));
+
+    public void BeginFrame(int width, int height, Color clearColor)
     {
         ResetFrameMetrics();
         _coloredVertices.Clear();
@@ -132,7 +134,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         Height = Math.Max(height, 1);
 
         _gl.Viewport(0, 0, (uint)Width, (uint)Height);
-        _gl.ClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        _gl.ClearColor(clearColor.R, clearColor.G, clearColor.B, clearColor.A);
         _gl.Clear(ClearBufferMask.ColorBufferBit);
         _gl.UseProgram(_program);
         _gl.Uniform2(_viewportLocation, (float)Width, (float)Height);

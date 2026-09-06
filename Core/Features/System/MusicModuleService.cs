@@ -125,8 +125,7 @@ internal sealed class MusicModuleService : IDisposable
 
         try
         {
-        var info = await ReadPlayerctlAsync(cancellationToken) ??
-                   await ReadMprisAsync(cancellationToken);
+        var info = await ReadMprisAsync(cancellationToken);
         if (info is null || string.IsNullOrWhiteSpace(info.Label))
         {
             _cached = MusicSnapshot.Empty;
@@ -147,34 +146,6 @@ internal sealed class MusicModuleService : IDisposable
         {
             _refreshGate.Release();
         }
-    }
-
-    private static async Task<MusicInfo?> ReadPlayerctlAsync(CancellationToken cancellationToken)
-    {
-        var metadata = await CommandRunner.TryReadAsync(
-            "playerctl",
-            "metadata --format \"{{status}}\\n{{playerName}}\\n{{artist}}\\n{{album}}\\n{{title}}\\n{{mpris:artUrl}}\\n{{mpris:length}}\\n{{position}}\"",
-            TimeSpan.FromMilliseconds(500),
-            cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(metadata))
-        {
-            return null;
-        }
-
-        var lines = metadata.Split('\n');
-        var status = lines.ElementAtOrDefault(0)?.Trim() ?? "";
-        var player = lines.ElementAtOrDefault(1)?.Trim() ?? "";
-        var artist = lines.ElementAtOrDefault(2)?.Trim() ?? "";
-        var album = lines.ElementAtOrDefault(3)?.Trim() ?? "";
-        var title = lines.ElementAtOrDefault(4)?.Trim() ?? "";
-        var artUrl = lines.ElementAtOrDefault(5)?.Trim() ?? "";
-        var length = ParseLong(lines.ElementAtOrDefault(6));
-        var position = ParseLong(lines.ElementAtOrDefault(7));
-        var label = FormatLabel(artist, title);
-        return string.IsNullOrWhiteSpace(label)
-            ? null
-            : new MusicInfo("", player, artist, album, title, label, artUrl, null, string.Equals(status, "Playing", StringComparison.OrdinalIgnoreCase), length, position);
     }
 
     private static async Task<MusicInfo?> ReadMprisAsync(CancellationToken cancellationToken)

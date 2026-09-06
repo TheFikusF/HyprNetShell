@@ -6,6 +6,7 @@ using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Services;
+using HyprNetShell.Rendering;
 
 namespace HyprNetShell.Core.Bar;
 
@@ -42,6 +43,13 @@ public sealed class StatusBarServices : IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<IBarDataService> _dueServicesBuffer = [];
     private Task? _refreshTask;
+    private bool _connectionNotificationsInitialized;
+    private bool _lastNetworkConnected;
+    private string _lastNetworkConnection = "";
+    private HashSet<string> _lastConnectedBluetoothDevices = new(StringComparer.OrdinalIgnoreCase);
+    private bool _batteryNotificationInitialized;
+    private bool _batteryWasCritical;
+    private int _lockScreenRequested;
     private bool _disposed;
 
     internal HistoryStore History { get; }
@@ -52,6 +60,7 @@ public sealed class StatusBarServices : IDisposable
     internal HyprlandService Hyprland { get; }
     internal KeyStateService SuperKey { get; }
     internal NotificationService Notifications { get; }
+    internal ScreenshotService Screenshots { get; }
     internal MusicModuleService Music { get; }
     internal ClipboardHistoryService ClipboardHistory { get; }
     internal WallpaperModuleService Wallpapers { get; }
@@ -77,6 +86,7 @@ public sealed class StatusBarServices : IDisposable
         Hyprctl = new Hyprctl();
         Hyprland = new HyprlandService();
         Notifications = new NotificationService(Hyprland, Hyprctl, History);
+        Screenshots = new ScreenshotService(Hyprctl);
         SuperKey = new KeyStateService(Hyprctl);
         DisplayControls = new DisplayControlsModuleService(Hyprctl);
         Wallpapers = new WallpaperModuleService(Hyprctl);
@@ -131,9 +141,26 @@ public sealed class StatusBarServices : IDisposable
         ];
     }
 
+    internal void RequestLockScreen() => Interlocked.Exchange(ref _lockScreenRequested, 1);
+
+    public bool TryTakeLockScreenRequest() => Interlocked.Exchange(ref _lockScreenRequested, 0) != 0;
+
+    public bool TryTakeScreenshotRequest(out ScreenshotMode mode) => Screenshots.TryTakeRequest(out mode);
+
+    public void ShowShellNotification(
+        string title,
+        string body,
+        string iconName = "",
+        bool storeInHistory = false,
+        EncodedImageData? image = null,
+        bool showImageAsPreview = false) =>
+        Notifications.ShowLocal(title, body, iconName, storeInHistory, image, showImageAsPreview);
+
     public void RefreshState()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        CheckConnectionNotifications();
+        CheckBatteryNotification();
         if (_refreshTask is { IsCompleted: false })
         {
             return;
@@ -153,6 +180,77 @@ public sealed class StatusBarServices : IDisposable
     }
 
 
+
+    private void CheckConnectionNotifications()
+    {
+        var network = Network.Snapshot;
+        var connectedBluetooth = Bluetooth.Snapshot.Devices
+            .Where(device => device.Connected)
+            .ToDictionary(device => device.Address, device => device.Name, StringComparer.OrdinalIgnoreCase);
+
+        if (!_connectionNotificationsInitialized)
+        {
+            if (!network.WifiAvailable && !Bluetooth.Snapshot.Available)
+            {
+                return;
+            }
+
+            _connectionNotificationsInitialized = true;
+            _lastNetworkConnected = network.Connected;
+            _lastNetworkConnection = network.Connection;
+            _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        if (network.Connected && (!_lastNetworkConnected ||
+            !string.Equals(network.Connection, _lastNetworkConnection, StringComparison.Ordinal)))
+        {
+            Notifications.ShowLocal("Network connected", network.Connection, "wifi", storeInHistory: false);
+        }
+        else if (!network.Connected && _lastNetworkConnected)
+        {
+            Notifications.ShowLocal("Network disconnected", _lastNetworkConnection, "wifi-off", storeInHistory: false);
+        }
+
+        foreach (var device in connectedBluetooth.Where(device => !_lastConnectedBluetoothDevices.Contains(device.Key)))
+        {
+            Notifications.ShowLocal("Bluetooth connected", device.Value, "bluetooth-connected", storeInHistory: false);
+        }
+        foreach (var address in _lastConnectedBluetoothDevices.Where(address => !connectedBluetooth.ContainsKey(address)))
+        {
+            Notifications.ShowLocal("Bluetooth disconnected", address, "bluetooth-off", storeInHistory: false);
+        }
+
+        _lastNetworkConnected = network.Connected;
+        _lastNetworkConnection = network.Connection;
+        _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void CheckBatteryNotification()
+    {
+        var battery = Battery.Snapshot;
+        if (!battery.Available)
+        {
+            return;
+        }
+
+        if (!_batteryNotificationInitialized)
+        {
+            _batteryNotificationInitialized = true;
+            _batteryWasCritical = false;
+        }
+
+        if (battery.IsCritical && !_batteryWasCritical)
+        {
+            Notifications.ShowLocal(
+                "Low battery",
+                $"Battery is at {battery.Percentage}%.",
+                "battery-warning",
+                storeInHistory: false);
+        }
+
+        _batteryWasCritical = battery.IsCritical;
+    }
 
     private async Task RefreshStateAsync(
         CancellationToken cancellationToken)
@@ -213,6 +311,7 @@ public sealed class StatusBarServices : IDisposable
         Network.Dispose();
         Wallpapers.Dispose();
         SuperKey.Dispose();
+        Screenshots.Dispose();
         Notifications.Dispose();
         Hyprland.Dispose();
         Hyprctl.Dispose();

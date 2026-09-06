@@ -65,7 +65,11 @@ public abstract class Node
     protected void UpdateInteractionState(int x, int y)
     {
         var hovered = Layout.Input.Contains(new Rect(x, y, Width, Height));
-        SetInteractionState(hovered, false, hovered && Layout.Input.PointerPressed, false);
+        SetInteractionState(
+            hovered,
+            false,
+            hovered && Layout.Input.PointerPressed && !Layout.IsLowerLayerClickBlocked,
+            false);
     }
 
     protected void SetInteractionState(bool hovered, bool hoveredThrough, bool clicked, bool clickedThrough)

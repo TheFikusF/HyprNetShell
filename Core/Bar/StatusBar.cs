@@ -74,6 +74,7 @@ public sealed class StatusBar
         var powerModule = new PowerModule(
             services.Dialogs,
             services.Hyprctl,
+            services.RequestLockScreen,
             Theme.Default,
             _popupCoordinator);
         var workspacesModule = new WorkspacesModule(
@@ -117,7 +118,7 @@ public sealed class StatusBar
         {
             DrawLeftRight();
             DrawCenter();
-            DrawNotificationPopups();
+            Layout.DrawOnLayer(RenderLayer.Bar, _ => DrawNotificationPopups());
         }
         finally
         {
@@ -148,7 +149,11 @@ public sealed class StatusBar
 
     private void DrawNotificationPopups()
     {
-        using var layout = new Layout(_renderer, _renderer.Width, _renderer.Height);
+        using var layout = new Layout(
+            _renderer,
+            _renderer.Width,
+            _renderer.Height,
+            layer: RenderLayer.BarPopup);
         layout.AddNode(new SpacerNode());
         layout.AddNode(NotificationPopupLayout.Draw(
             _notificationService.Snapshot,

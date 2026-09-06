@@ -1,5 +1,5 @@
 using System.Net;
-using System.Text.Json;
+
 using System.Text.RegularExpressions;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Features.Hyprland;
@@ -52,6 +52,8 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             item.Image,
             [],
             item.Resident,
+            true,
+            false,
             item.ReceivedAt,
             DateTime.MinValue)));
         _history.LimitsChanged += ApplyHistoryLimit;
@@ -66,7 +68,12 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
         {
             lock (_gate)
             {
-                return new NotificationsSnapshot(_items.Count, _items.ToArray(), _doNotDisturb);
+                var now = DateTime.UtcNow;
+                _items.RemoveAll(item => !item.StoreInHistory && item.PopupUntil <= now);
+                return new NotificationsSnapshot(
+                    _items.Count(item => item.StoreInHistory),
+                    _items.ToArray(),
+                    _doNotDisturb);
             }
         }
     }
@@ -142,6 +149,44 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
         }
     }
 
+    internal uint ShowLocal(
+        string title,
+        string body,
+        string iconName = "",
+        bool storeInHistory = true,
+        EncodedImageData? image = null,
+        bool showImageAsPreview = false)
+    {
+        var now = DateTime.UtcNow;
+        lock (_gate)
+        {
+            var id = NextId();
+            var notification = new NotificationSnapshot(
+                id,
+                PlainText(title),
+                PlainText(body),
+                "HyprNetShell",
+                "hyprnetshell",
+                iconName,
+                null,
+                image,
+                [],
+                false,
+                storeInHistory,
+                showImageAsPreview,
+                now,
+                _doNotDisturb ? DateTime.MinValue : now + PopupDuration);
+            _items.Insert(0, notification);
+            TrimHistoryItems();
+
+            if (storeInHistory)
+            {
+                _history.SaveNotification(notification, image);
+            }
+            return id;
+        }
+    }
+
     public void Dismiss(uint id) => Close(id, 2);
 
     public void Activate(uint id) => _ = ActivateAsync(id);
@@ -179,8 +224,8 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
         uint[] ids;
         lock (_gate)
         {
-            ids = _items.Select(item => item.Id).ToArray();
-            _items.Clear();
+            ids = _items.Where(item => item.StoreInHistory).Select(item => item.Id).ToArray();
+            _items.RemoveAll(item => item.StoreInHistory);
         }
 
         _history.ClearNotifications();
@@ -262,6 +307,8 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
                 null,
                 actions,
                 BoolHint(hints, "resident"),
+                true,
+                false,
                 now,
                 _doNotDisturb ? DateTime.MinValue : now + PopupDuration);
 
@@ -271,10 +318,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             }
 
             _items.Insert(0, notification);
-            if (_items.Count > _history.NotificationLimit)
-            {
-                _items.RemoveRange(_history.NotificationLimit, _items.Count - _history.NotificationLimit);
-            }
+            TrimHistoryItems();
 
             _history.SaveNotification(notification, historyImage);
         }
@@ -356,7 +400,9 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
                 EmitActionInvoked(id, defaultAction.Key);
             }
 
-            AppLogger.Info("Notifications", JsonSerializer.Serialize(notification));
+            AppLogger.Info(
+                "Notifications",
+                $"Activating notification {notification.Id} from {notification.AppName}: {notification.Title}");
             var window = FindWindow(notification);
             if (window is not null && !string.IsNullOrWhiteSpace(window.Address))
             {
@@ -601,10 +647,22 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
     {
         lock (_gate)
         {
-            if (_items.Count > _history.NotificationLimit)
+            TrimHistoryItems();
+        }
+    }
+
+    private void TrimHistoryItems()
+    {
+        var historyItems = 0;
+        for (var index = 0; index < _items.Count;)
+        {
+            if (_items[index].StoreInHistory && ++historyItems > _history.NotificationLimit)
             {
-                _items.RemoveRange(_history.NotificationLimit, _items.Count - _history.NotificationLimit);
+                _items.RemoveAt(index);
+                continue;
             }
+
+            index++;
         }
     }
 

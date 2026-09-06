@@ -24,7 +24,6 @@ public sealed class HyprLayer : IDisposable
     private int _shutdownRequested;
     private int _returnCode;
     private ulong _topologySerial;
-    private ulong _keyboardInteractiveBar = ulong.MaxValue;
     private bool _hasTopologySerial;
 
     public IReadOnlyList<Output> Outputs => _readOnlyOutputs;
@@ -53,6 +52,8 @@ public sealed class HyprLayer : IDisposable
             throw;
         }
     }
+
+    public sealed record CapturedImage(int Width, int Height, int Stride, byte[] BgraPixels);
 
     public sealed class Output
     {
@@ -130,6 +131,37 @@ public sealed class HyprLayer : IDisposable
     public bool SwapBuffers(ulong outputId) =>
         _layer != IntPtr.Zero && NativeMethods.hypr_layer_swap_buffers(_layer, outputId) != 0;
 
+    public bool MakeScreenshotCurrent(ulong outputId) =>
+        _layer != IntPtr.Zero && NativeMethods.hypr_layer_make_screenshot_current(_layer, outputId) != 0;
+
+    public bool SwapScreenshotBuffers(ulong outputId) =>
+        _layer != IntPtr.Zero && NativeMethods.hypr_layer_swap_screenshot_buffers(_layer, outputId) != 0;
+
+    public CapturedImage? CaptureOutput(ulong outputId)
+    {
+        if (_layer == IntPtr.Zero || NativeMethods.hypr_layer_capture_output(_layer, outputId) == 0)
+        {
+            return null;
+        }
+
+        var width = NativeMethods.hypr_layer_get_capture_width(_layer);
+        var height = NativeMethods.hypr_layer_get_capture_height(_layer);
+        var stride = NativeMethods.hypr_layer_get_capture_stride(_layer);
+        if (width <= 0 || height <= 0 || stride < width * 4 || (long)stride * height > int.MaxValue)
+        {
+            return null;
+        }
+
+        var pixels = new byte[stride * height];
+        return NativeMethods.hypr_layer_copy_capture(_layer, pixels, pixels.Length) == pixels.Length
+            ? new CapturedImage(width, height, stride, pixels)
+            : null;
+    }
+
+    public bool SetClipboard(byte[] data, string mimeType) =>
+        _layer != IntPtr.Zero && data.Length > 0 &&
+        NativeMethods.hypr_layer_set_clipboard(_layer, data, data.Length, mimeType) != 0;
+
     public void SetInputRegions(ulong outputId, IReadOnlyList<Rect> regions)
     {
         if (_layer == IntPtr.Zero)
@@ -160,12 +192,19 @@ public sealed class HyprLayer : IDisposable
         NativeMethods.hypr_layer_set_input_regions(_layer, outputId, rectangles, regions.Count);
     }
 
+    public void SetScreenshotOverlay(ulong outputId)
+    {
+        if (_layer != IntPtr.Zero)
+        {
+            NativeMethods.hypr_layer_set_screenshot_overlay(_layer, outputId);
+        }
+    }
+
     public void SetKeyboardInteractiveBar(ulong outputId)
     {
-        if (_layer != IntPtr.Zero && _keyboardInteractiveBar != outputId)
+        if (_layer != IntPtr.Zero)
         {
             NativeMethods.hypr_layer_set_keyboard_interactive_bar(_layer, outputId);
-            _keyboardInteractiveBar = outputId;
         }
     }
 

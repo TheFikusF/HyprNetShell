@@ -10,11 +10,11 @@ public class Layout : IDisposable
     internal static IRenderApi Renderer { get; private set; } = null!;
     public static LayoutInput Input { get; set; } = LayoutInput.None;
     private static readonly List<Rect> InputRegions = [];
-    private static readonly List<Action<IRenderApi>> TopLayerDraws = [];
-    private static readonly List<Rect> ActiveTopLayerInputRegions = [];
-    private static readonly Dictionary<ulong, List<Rect>> NextTopLayerInputRegions = [];
+    private static readonly SortedDictionary<RenderLayer, List<Action<IRenderApi>>> LayerDraws = [];
+    private static readonly Dictionary<RenderLayer, List<Rect>> ActiveLayerInputRegions = [];
+    private static readonly Dictionary<ulong, Dictionary<RenderLayer, List<Rect>>> NextLayerInputRegions = [];
     private static ulong _currentOutputId;
-    private static bool _drawingTopLayer;
+    private static RenderLayer _drawingLayer;
     private static bool _diagnosticsEnabled;
     private static long _layoutsCreated;
     private static long _layoutsDrawn;
@@ -24,10 +24,18 @@ public class Layout : IDisposable
     private static long _childArrayAllocations;
     private static long _childArrayElements;
     private readonly BoxNode _root;
+    private readonly RenderLayer _layer;
 
-    public Layout(IRenderApi renderer, int width, int height, Style style = default, LayoutInput? input = null)
+    public Layout(
+        IRenderApi renderer,
+        int width,
+        int height,
+        Style style = default,
+        LayoutInput? input = null,
+        RenderLayer layer = RenderLayer.Bar)
     {
         Renderer = renderer;
+        _layer = layer;
         if (_diagnosticsEnabled)
         {
             _layoutsCreated++;
@@ -59,7 +67,7 @@ public class Layout : IDisposable
             _layoutsDrawn++;
         }
 
-        _root.Draw(Renderer, 0, 0);
+        DrawOnLayer(_layer, renderer => _root.Draw(renderer, 0, 0));
     }
 
     [Conditional(PerformanceProfiling.Symbol)]
@@ -124,56 +132,84 @@ public class Layout : IDisposable
     public static void BeginInputRegionFrame(ulong outputId)
     {
         InputRegions.Clear();
-        TopLayerDraws.Clear();
-        ActiveTopLayerInputRegions.Clear();
+        LayerDraws.Clear();
+        ActiveLayerInputRegions.Clear();
         _currentOutputId = outputId;
-        if (NextTopLayerInputRegions.TryGetValue(outputId, out var previousRegions))
+        if (NextLayerInputRegions.TryGetValue(outputId, out var previousRegions))
         {
-            ActiveTopLayerInputRegions.AddRange(previousRegions);
-        }
-        NextTopLayerInputRegions[outputId] = [];
-        _drawingTopLayer = false;
-    }
-
-    public static void DrawTopLayer()
-    {
-        _drawingTopLayer = true;
-        try
-        {
-            for (var index = 0; index < TopLayerDraws.Count; index++)
+            foreach (var (layer, regions) in previousRegions)
             {
-                TopLayerDraws[index](Renderer);
+                ActiveLayerInputRegions[layer] = [.. regions];
             }
         }
-        finally
-        {
-            _drawingTopLayer = false;
-            TopLayerDraws.Clear();
-        }
+        NextLayerInputRegions[outputId] = [];
+        _drawingLayer = RenderLayer.Bar;
     }
 
-    internal static void DrawOnTop(Action<IRenderApi> draw) => TopLayerDraws.Add(draw);
-
-    internal static void RegisterTopLayerInputRegion(Rect rect)
+    public static void DrawLayers()
     {
-        if (!ActiveTopLayerInputRegions.Contains(rect))
+        foreach (var layer in Enum.GetValues<RenderLayer>().Order())
         {
-            ActiveTopLayerInputRegions.Add(rect);
+            if (!LayerDraws.TryGetValue(layer, out var draws))
+            {
+                continue;
+            }
+
+            _drawingLayer = layer;
+            for (var index = 0; index < draws.Count; index++)
+            {
+                draws[index](Renderer);
+            }
         }
-        var nextRegions = NextTopLayerInputRegions[_currentOutputId];
+
+        LayerDraws.Clear();
+    }
+
+    public static void DrawOnLayer(RenderLayer layer, Action<IRenderApi> draw)
+    {
+        if (!LayerDraws.TryGetValue(layer, out var draws))
+        {
+            draws = [];
+            LayerDraws.Add(layer, draws);
+        }
+
+        draws.Add(draw);
+    }
+
+    internal static void RegisterLayerInputRegion(RenderLayer layer, Rect rect)
+    {
+        if (!ActiveLayerInputRegions.TryGetValue(layer, out var activeRegions))
+        {
+            activeRegions = [];
+            ActiveLayerInputRegions.Add(layer, activeRegions);
+        }
+        if (!activeRegions.Contains(rect))
+        {
+            activeRegions.Add(rect);
+        }
+
+        var nextRegionsByLayer = NextLayerInputRegions[_currentOutputId];
+        if (!nextRegionsByLayer.TryGetValue(layer, out var nextRegions))
+        {
+            nextRegions = [];
+            nextRegionsByLayer.Add(layer, nextRegions);
+        }
         if (!nextRegions.Contains(rect))
         {
             nextRegions.Add(rect);
         }
     }
 
-    internal static void UnregisterNextTopLayerInputRegion(Rect rect) =>
-        NextTopLayerInputRegions[_currentOutputId].Remove(rect);
+    internal static void UnregisterNextLayerInputRegion(RenderLayer layer, Rect rect)
+    {
+        if (NextLayerInputRegions[_currentOutputId].TryGetValue(layer, out var regions))
+        {
+            regions.Remove(rect);
+        }
+    }
 
-    internal static bool IsNormalLayerClickBlocked =>
-        !_drawingTopLayer &&
-        Input.PointerPressed &&
-        ActiveTopLayerInputRegions.Any(Input.Contains);
+    internal static bool IsLowerLayerClickBlocked =>
+        ActiveLayerInputRegions.Any(pair => pair.Key > _drawingLayer && pair.Value.Any(Input.Contains));
 
     public static IReadOnlyList<Rect> GetInputRegions() => InputRegions;
 
@@ -182,6 +218,10 @@ public class Layout : IDisposable
         if (rect.Width > 0 && rect.Height > 0)
         {
             InputRegions.Add(rect);
+            if (_drawingLayer != RenderLayer.OptionsSelector)
+            {
+                RegisterLayerInputRegion(_drawingLayer, rect);
+            }
         }
     }
 }

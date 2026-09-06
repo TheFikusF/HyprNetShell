@@ -18,11 +18,15 @@ The application deliberately does not use GTK, Qt, Avalonia, SDL, GLFW, or a nor
 
 ```text
 HyprNetShell/
-├── Program.cs                         Process entry point and frame loop
-├── NativeMethods.cs                   Managed HyprLayer wrapper and native P/Invoke declarations
-├── DesktopEntryLauncher.cs            GLib/GIO-based .desktop entry launching
+├── Program.cs                         Thin command-line mode dispatcher
 ├── HyprNetShell.csproj                Executable, native copy/AOT integration
 ├── HyprNetShell.slnx                  Managed solution
+├── Application/
+│   ├── ShellApplication.cs            Shell startup and frame-loop orchestration
+│   ├── DesktopEntries/                GLib/GIO-based .desktop entry launching
+│   ├── Diagnostics/                   Optional runtime performance profiling
+│   ├── LockScreen/                    Lock process and background transfer
+│   └── Screenshots/                   Selection, capture, PNG, and OCR handling
 ├── Core/
 │   ├── HyprNetShell.Core.csproj       Bar/application domain project
 │   ├── Assets/                        [SvgAsset] declarations used by generated code
@@ -56,10 +60,11 @@ HyprNetShell/
 │   ├── HyprNetShell.Generators.csproj Roslyn analyzer/source-generator project
 │   └── SvgAssetGenerator.cs           Generates values for [SvgAsset] properties
 ├── Native/
+│   ├── Managed/                       HyprLayer/session-lock wrappers and P/Invoke declarations
 │   ├── meson.build                    Native shared/static library build
 │   ├── hypr_layer.c                   Wayland, layer-shell, EGL, and input implementation
 │   ├── hypr_layer.h                   Public C ABI
-│   └── protocols/                     Vendored layer-shell protocol XML
+│   └── protocols/                     Vendored Wayland protocol XML
 ├── Properties/PublishProfiles/        NativeAOT publish profile
 └── assets/
     ├── fonts/                         Fonts embedded by Rendering
@@ -73,7 +78,7 @@ Generated and local output directories such as `bin/`, `obj/`, `.idea/`, and `Na
 
 ### Executable
 
-`Program.cs` owns process startup, logging lifetime, creation order, and the frame loop. Each frame:
+`Program.cs` only dispatches command-line modes. `Application/ShellApplication.cs` owns normal shell startup, logging lifetime, creation order, and the frame loop. Each frame:
 
 1. `HyprLayer.Update()` polls native events and creates managed input state.
 2. Input is forwarded to `StatusBar` and `GUI.Layout`.
@@ -136,8 +141,8 @@ Do not edit files under `obj/` produced by the generator.
 
 - `Native/hypr_layer.h`;
 - `Native/hypr_layer.c`;
-- the `NativeMethods` declarations in `NativeMethods.cs`;
-- the managed `HyprLayer` wrapper when behavior or ownership changes.
+- the `NativeMethods` declarations in `Native/Managed/NativeMethods.cs`;
+- the managed wrapper in `Native/Managed/HyprLayer.cs` when behavior or ownership changes.
 
 The native object owns Wayland globals, surfaces, seats/input objects, xkb state, and EGL resources. Preserve deterministic cleanup and error propagation through `hypr_layer_has_error`. Do not throw C++ exceptions or expose C++ ABI types; this is a C11 library.
 
@@ -150,7 +155,7 @@ The code intentionally uses Linux and desktop command-line interfaces instead of
 - Hyprland IPC and `hyprctl`;
 - `socat` for callbacks from dynamically registered Hyprland binds;
 - session D-Bus for notifications, StatusNotifierItem, dbusmenu, and MPRIS;
-- `wpctl`, `nmcli`, `bluetoothctl`, `powerprofilesctl`, and `playerctl`;
+- `wpctl`, `nmcli`, `bluetoothctl`, and `powerprofilesctl`;
 - `wl-copy`/`wl-paste` for clipboard transport;
 - `hyprpaper`, `hyprsunset`, and `hyprlock`;
 - Linux `sysfs` for battery, backlight, thermal, and hardware data;

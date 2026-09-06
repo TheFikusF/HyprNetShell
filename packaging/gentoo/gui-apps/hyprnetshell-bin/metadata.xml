@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+
+  <upstream>
+    <remote-id type="github">TheFikusF/HyprNetShell</remote-id>
+  </upstream>
+  <use>
+    <flag name="audio">Enable native WirePlumber audio integration and media controls</flag>
+    <flag name="bluetooth">Install BlueZ tools used for Bluetooth discovery and pairing</flag>
+    <flag name="clipboard">Install wl-clipboard for clipboard history and non-screenshot copy actions</flag>
+    <flag name="network">Install NetworkManager tools used for Wi-Fi management</flag>
+    <flag name="ocr">Install Tesseract for screenshot text recognition</flag>
+    <flag name="power-profiles">Install power-profiles-daemon for power profile controls</flag>
+    <flag name="wallpaper">Install hyprpaper and hyprsunset wallpaper/display integrations</flag>
+  </use>
+</pkgmetadata>

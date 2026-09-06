@@ -17,6 +17,8 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
     private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
 
     private static readonly TimeSpan EventCoalesceDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan PairingStatePollInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan PairingStateVerificationTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(60);
 
     private readonly object _stateLock = new();
@@ -417,11 +419,83 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             return trustResult;
         }
 
+        var verificationResult = await VerifyPairingPersistenceAsync(address, cancellationToken);
+        if (!verificationResult.Success)
+        {
+            return verificationResult;
+        }
+
         return await ConnectWithRecoveryAsync(address, cancellationToken);
     }
 
     internal Task<BluetoothOperationResult> ForgetAsync(string address, CancellationToken cancellationToken) =>
         RunBluetoothctlAsync(["remove", address], TimeSpan.FromSeconds(8), cancellationToken);
+
+    private async Task<BluetoothOperationResult> VerifyPairingPersistenceAsync(
+        string address,
+        CancellationToken cancellationToken)
+    {
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _lifetime.Token);
+        var stopwatch = Stopwatch.StartNew();
+        string? info = null;
+
+        try
+        {
+            while (stopwatch.Elapsed < PairingStateVerificationTimeout)
+            {
+                linkedCancellation.Token.ThrowIfCancellationRequested();
+                var remaining = PairingStateVerificationTimeout - stopwatch.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+
+                info = await CommandRunner.TryReadAsync(
+                    "bluetoothctl",
+                    $"info {address}",
+                    remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1),
+                    linkedCancellation.Token);
+                linkedCancellation.Token.ThrowIfCancellationRequested();
+
+                if (info is not null && PairedLine().IsMatch(info) &&
+                    BondedLine().IsMatch(info) && TrustedLine().IsMatch(info))
+                {
+                    return BluetoothOperationResult.Succeeded;
+                }
+
+                remaining = PairingStateVerificationTimeout - stopwatch.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+
+                await Task.Delay(
+                    remaining < PairingStatePollInterval ? remaining : PairingStatePollInterval,
+                    linkedCancellation.Token);
+            }
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested || _lifetime.IsCancellationRequested)
+        {
+            return BluetoothOperationResult.Failed("The Bluetooth operation was cancelled");
+        }
+
+        var paired = info is not null && PairedLine().IsMatch(info);
+        var bonded = info is not null && BondedLine().IsMatch(info);
+        var trusted = info is not null && TrustedLine().IsMatch(info);
+        var missingState = string.Join(
+            ", ",
+            new[]
+            {
+                paired ? null : "Paired: yes",
+                bonded ? null : "Bonded: yes",
+                trusted ? null : "Trusted: yes",
+            }.Where(value => value is not null));
+        return BluetoothOperationResult.Failed(
+            $"Pairing was not saved by BlueZ: bluetoothctl did not report {missingState}.");
+    }
 
     private async Task<BluetoothOperationResult> ConnectWithRecoveryAsync(
         string address,
@@ -674,6 +748,12 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
     [GeneratedRegex(@"^\s*Paired:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PairedLine();
+
+    [GeneratedRegex(@"^\s*Bonded:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BondedLine();
+
+    [GeneratedRegex(@"^\s*Trusted:\s*yes\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TrustedLine();
 
     [GeneratedRegex(@"^\s*Battery Percentage:\s*(?:0x[0-9A-Fa-f]+\s+)?\((?<percentage>\d+)\)\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BatteryLine();

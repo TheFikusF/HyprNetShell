@@ -6,7 +6,7 @@ using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 
-namespace HyprNetShell;
+namespace HyprNetShell.Application.Diagnostics;
 
 internal enum PerformancePhase
 {

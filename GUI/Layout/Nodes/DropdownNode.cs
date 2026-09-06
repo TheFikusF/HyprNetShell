@@ -105,14 +105,14 @@ public sealed class DropdownNode : Node
             var optionsY = y + TriggerHeight + TriggerSpacing;
             var optionsOverlay = BuildOptionsOverlay();
             optionsRect = new Rect(x, optionsY, optionsOverlay.Width, optionsOverlay.Height);
-            Layout.RegisterTopLayerInputRegion(optionsRect.Value);
+            Layout.RegisterLayerInputRegion(RenderLayer.OptionsSelector, optionsRect.Value);
             optionsOverlay.Opacity = inheritedOpacity;
-            Layout.DrawOnTop(topRenderer =>
+            Layout.DrawOnLayer(RenderLayer.OptionsSelector, topRenderer =>
             {
                 optionsOverlay.Draw(topRenderer, x, optionsY);
                 if (!_isOpen)
                 {
-                    Layout.UnregisterNextTopLayerInputRegion(optionsRect.Value);
+                    Layout.UnregisterNextLayerInputRegion(RenderLayer.OptionsSelector, optionsRect.Value);
                 }
             });
         }

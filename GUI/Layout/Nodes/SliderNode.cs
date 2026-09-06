@@ -25,11 +25,12 @@ public sealed class SliderNode(
     {
         var bounds = new Rect(x, y, Width, Height);
         var hovered = Layout.Input.Contains(bounds);
-        if (hovered && Layout.Input.PointerPressed)
+        var acceptsInput = !Layout.IsLowerLayerClickBlocked;
+        if (hovered && Layout.Input.PointerPressed && acceptsInput)
         {
             dragging.Value = true;
         }
-        else if (!Layout.Input.PointerDown)
+        else if (!Layout.Input.PointerDown || !acceptsInput)
         {
             dragging.Value = false;
         }
@@ -39,7 +40,7 @@ public sealed class SliderNode(
             onValueChanged(Math.Clamp((Layout.Input.PointerX - x) / Math.Max(1.0f, Width), 0.0f, 1.0f));
         }
 
-        if (hovered && Layout.Input.ScrollDelta != 0.0f)
+        if (hovered && acceptsInput && Layout.Input.ScrollDelta != 0.0f)
         {
             var direction = Layout.Input.ScrollDelta < 0.0f ? 1.0f : -1.0f;
             onValueChanged(Math.Clamp(value + direction * scrollStep, 0.0f, 1.0f));
@@ -60,6 +61,6 @@ public sealed class SliderNode(
             thumbColor.PushOpacity(Opacity));
 
         Layout.AddInputRegion(bounds);
-        SetInteractionState(hovered, false, hovered && Layout.Input.PointerPressed, false);
+        SetInteractionState(hovered, false, hovered && Layout.Input.PointerPressed && acceptsInput, false);
     }
 }

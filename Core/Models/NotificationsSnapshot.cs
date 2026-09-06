@@ -21,6 +21,8 @@ public sealed record NotificationSnapshot(
     EncodedImageData? StoredImage,
     IReadOnlyList<NotificationActionSnapshot> Actions,
     bool Resident,
+    bool StoreInHistory,
+    bool ShowImageAsPreview,
     DateTime ReceivedAt,
     DateTime PopupUntil);
 
