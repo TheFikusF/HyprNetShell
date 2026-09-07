@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using HyprNetShell.Core.Features.Sni;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
@@ -15,10 +16,11 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
     private const string DBUS_INTERFACE = "org.freedesktop.DBus";
     private const string OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager";
     private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+    private const string BLUEZ_DEVICE_INTERFACE = "org.bluez.Device1";
 
     private static readonly TimeSpan EventCoalesceDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan PairingStatePollInterval = TimeSpan.FromMilliseconds(200);
-    private static readonly TimeSpan PairingStateVerificationTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DeviceStateVerificationTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(60);
 
     private readonly object _stateLock = new();
@@ -32,10 +34,11 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
     private Task? _eventRefreshTask;
     private DateTime _lastRecoveryUtc = DateTime.MinValue;
     private int _refreshPending;
+    private BluetoothSnapshot _snapshot = BluetoothSnapshot.Empty;
     private bool _initialReadComplete;
     private bool _disposed;
 
-    public BluetoothSnapshot Snapshot { get; private set; } = BluetoothSnapshot.Empty;
+    public BluetoothSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
@@ -103,14 +106,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             cancellationToken.ThrowIfCancellationRequested();
             await connection.ConnectAsync();
             cancellationToken.ThrowIfCancellationRequested();
-            propertiesSubscription = await AddInvalidationMatchAsync(connection, new MatchRule
-            {
-                Type = MessageType.Signal,
-                Sender = BLUEZ_BUS_NAME,
-                PathNamespace = "/org/bluez",
-                Interface = PROPERTIES_INTERFACE,
-                Member = "PropertiesChanged",
-            });
+            propertiesSubscription = await AddPropertiesSubscriptionAsync(connection);
             interfacesAddedSubscription = await AddInvalidationMatchAsync(connection, new MatchRule
             {
                 Type = MessageType.Signal,
@@ -160,9 +156,12 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
-            // bluetoothctl remains the snapshot and action fallback when system D-Bus is unavailable.
+            AppLogger.Warning(
+                "Bluetooth",
+                "Could not subscribe to BlueZ events; bluetoothctl polling remains available",
+                exception);
         }
         finally
         {
@@ -173,6 +172,39 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             connection?.Dispose();
         }
     }
+
+    private ValueTask<IDisposable> AddPropertiesSubscriptionAsync(DBusConnection connection) =>
+        connection.AddMatchAsync(
+            new MatchRule
+            {
+                Type = MessageType.Signal,
+                Sender = BLUEZ_BUS_NAME,
+                Interface = PROPERTIES_INTERFACE,
+                Member = "PropertiesChanged",
+            },
+            static (message, _) =>
+            {
+                var reader = message.GetBodyReader();
+                return new BluetoothPropertiesChange(
+                    message.PathAsString ?? "",
+                    reader.ReadString(),
+                    reader.ReadDictionaryOfStringToVariantValue(),
+                    reader.ReadArrayOfString());
+            },
+            static notification =>
+            {
+                var service = (BluetoothModuleService)notification.State!;
+                if (!notification.HasValue)
+                {
+                    service.ResetSubscriptions();
+                    return;
+                }
+
+                service.ApplyPropertiesChange(notification.Value);
+            },
+            false,
+            Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
+            this);
 
     private ValueTask<IDisposable> AddInvalidationMatchAsync(DBusConnection connection, MatchRule rule) =>
         connection.AddMatchAsync(
@@ -193,6 +225,77 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             false,
             Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
             this);
+
+    private void ApplyPropertiesChange(BluetoothPropertiesChange change)
+    {
+        if (!change.Path.StartsWith("/org/bluez/", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!change.Interface.Equals(BLUEZ_DEVICE_INTERFACE, StringComparison.Ordinal) ||
+            !TryParseDeviceAddress(change.Path, out var address))
+        {
+            QueueEventRefresh();
+            return;
+        }
+
+        if (!change.Changed.TryGetValue("Connected", out var rawConnected) ||
+            rawConnected.Unwrap().Type != VariantValueType.Bool)
+        {
+            if (change.Invalidated.Contains("Connected", StringComparer.Ordinal))
+            {
+                QueueEventRefresh();
+            }
+
+            return;
+        }
+
+        ApplyConnectedState(address, rawConnected.Unwrap().GetBool());
+    }
+
+    private void ApplyConnectedState(string address, bool connected)
+    {
+        while (true)
+        {
+            var snapshot = Snapshot;
+            var devices = snapshot.Devices.ToArray();
+            var index = Array.FindIndex(devices, device =>
+                device.Address.Equals(address, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                QueueEventRefresh();
+                return;
+            }
+
+            devices[index] = devices[index] with { Connected = connected };
+            var updated = snapshot with
+            {
+                Devices = devices
+                    .OrderByDescending(device => device.Connected)
+                    .ThenBy(device => device.Name)
+                    .ToArray(),
+            };
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _snapshot, updated, snapshot), snapshot))
+            {
+                return;
+            }
+        }
+    }
+
+    private static bool TryParseDeviceAddress(string path, out string address)
+    {
+        const string marker = "/dev_";
+        var markerIndex = path.LastIndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            address = "";
+            return false;
+        }
+
+        address = path[(markerIndex + marker.Length)..].Replace('_', ':');
+        return Address().IsMatch(address);
+    }
 
     private void ResetSubscriptions()
     {
@@ -299,40 +402,38 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         var controllerOutput = await CommandRunner.TryReadAsync(
             "bluetoothctl",
             "show",
-            TimeSpan.FromMilliseconds(700),
+            TimeSpan.FromSeconds(2),
             cancellationToken);
 
         if (controllerOutput is null)
         {
-            Snapshot = BluetoothSnapshot.Empty;
             return;
         }
 
         var powered = PoweredLine().IsMatch(controllerOutput);
         if (!powered)
         {
-            Snapshot = new BluetoothSnapshot(true, false, []);
+            PublishSnapshot(new BluetoothSnapshot(true, false, []));
             return;
         }
 
         var devicesOutput = await CommandRunner.TryReadAsync(
             "bluetoothctl",
             "devices Paired",
-            TimeSpan.FromMilliseconds(700),
+            TimeSpan.FromSeconds(2),
             cancellationToken);
 
         if (devicesOutput is null)
         {
-            Snapshot = new BluetoothSnapshot(true, true, []);
             return;
         }
 
         var devices = await ReadDevicesAsync(ParseDevices(devicesOutput), cancellationToken);
 
-        Snapshot = new BluetoothSnapshot(
+        PublishSnapshot(new BluetoothSnapshot(
             true,
             true,
-            devices.OrderByDescending(device => device.Connected).ThenBy(device => device.Name).ToArray());
+            devices.OrderByDescending(device => device.Connected).ThenBy(device => device.Name).ToArray()));
     }
 
     internal async Task<IReadOnlyList<BluetoothDeviceSnapshot>> ScanDevicesAsync(CancellationToken cancellationToken)
@@ -381,16 +482,21 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
     {
         if (!connected)
         {
-            return await RunBluetoothctlAsync(
+            var disconnectResult = await RunBluetoothctlAsync(
                 ["disconnect", address],
                 TimeSpan.FromSeconds(10),
-                cancellationToken);
+                cancellationToken,
+                refreshSnapshot: false);
+            return disconnectResult.Success
+                ? await VerifyDeviceStateAsync(address, expectedConnected: false, cancellationToken)
+                : disconnectResult;
         }
 
         var trustResult = await RunBluetoothctlAsync(
             ["trust", address],
             TimeSpan.FromSeconds(5),
-            cancellationToken);
+            cancellationToken,
+            refreshSnapshot: false);
         if (!trustResult.Success)
         {
             return trustResult;
@@ -401,19 +507,22 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
     internal async Task<BluetoothOperationResult> PairAsync(string address, CancellationToken cancellationToken)
     {
-        var pairResult = await RunBluetoothctlAsync(
-            ["--agent", "NoInputNoOutput", "--timeout", "30", "pair", address],
+        var connectResult = await RunBluetoothctlAsync(
+            ["connect", address],
             TimeSpan.FromSeconds(32),
-            cancellationToken);
-        if (!pairResult.Success)
+            cancellationToken,
+            refreshSnapshot: false,
+            standardInput: "yes\n");
+        if (!connectResult.Success)
         {
-            return pairResult;
+            return connectResult;
         }
 
         var trustResult = await RunBluetoothctlAsync(
             ["trust", address],
             TimeSpan.FromSeconds(5),
-            cancellationToken);
+            cancellationToken,
+            refreshSnapshot: false);
         if (!trustResult.Success)
         {
             return trustResult;
@@ -425,7 +534,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             return verificationResult;
         }
 
-        return await ConnectWithRecoveryAsync(address, cancellationToken);
+        return await VerifyDeviceStateAsync(address, expectedConnected: true, cancellationToken);
     }
 
     internal Task<BluetoothOperationResult> ForgetAsync(string address, CancellationToken cancellationToken) =>
@@ -443,10 +552,10 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
         try
         {
-            while (stopwatch.Elapsed < PairingStateVerificationTimeout)
+            while (stopwatch.Elapsed < DeviceStateVerificationTimeout)
             {
                 linkedCancellation.Token.ThrowIfCancellationRequested();
-                var remaining = PairingStateVerificationTimeout - stopwatch.Elapsed;
+                var remaining = DeviceStateVerificationTimeout - stopwatch.Elapsed;
                 if (remaining <= TimeSpan.Zero)
                 {
                     break;
@@ -465,7 +574,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
                     return BluetoothOperationResult.Succeeded;
                 }
 
-                remaining = PairingStateVerificationTimeout - stopwatch.Elapsed;
+                remaining = DeviceStateVerificationTimeout - stopwatch.Elapsed;
                 if (remaining <= TimeSpan.Zero)
                 {
                     break;
@@ -504,8 +613,14 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         var result = await RunBluetoothctlAsync(
             ["connect", address],
             TimeSpan.FromSeconds(10),
-            cancellationToken);
-        if (result.Success || result.Error?.StartsWith("Connection was refused", StringComparison.Ordinal) != true)
+            cancellationToken,
+            refreshSnapshot: false);
+        if (result.Success)
+        {
+            return await VerifyDeviceStateAsync(address, expectedConnected: true, cancellationToken);
+        }
+
+        if (result.Error?.StartsWith("Connection was refused", StringComparison.Ordinal) != true)
         {
             return result;
         }
@@ -515,30 +630,94 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             TimeSpan.FromSeconds(7),
             cancellationToken,
             refreshSnapshot: false);
-        return await RunBluetoothctlAsync(
+        result = await RunBluetoothctlAsync(
             ["connect", address],
             TimeSpan.FromSeconds(10),
-            cancellationToken);
+            cancellationToken,
+            refreshSnapshot: false);
+        return result.Success
+            ? await VerifyDeviceStateAsync(address, expectedConnected: true, cancellationToken)
+            : result;
+    }
+
+    private void PublishSnapshot(BluetoothSnapshot snapshot) => Volatile.Write(ref _snapshot, snapshot);
+
+    private async Task<BluetoothOperationResult> VerifyDeviceStateAsync(
+        string address,
+        bool expectedConnected,
+        CancellationToken cancellationToken)
+    {
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _lifetime.Token);
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            while (stopwatch.Elapsed < DeviceStateVerificationTimeout)
+            {
+                var info = await CommandRunner.TryReadAsync(
+                    "bluetoothctl",
+                    $"info {address}",
+                    TimeSpan.FromSeconds(2),
+                    linkedCancellation.Token);
+                if (info is not null && ConnectedLine().IsMatch(info) == expectedConnected)
+                {
+                    await RefreshSnapshotNowAsync(linkedCancellation.Token);
+                    return BluetoothOperationResult.Succeeded;
+                }
+
+                await Task.Delay(PairingStatePollInterval, linkedCancellation.Token);
+            }
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested || _lifetime.IsCancellationRequested)
+        {
+            return BluetoothOperationResult.Failed("The Bluetooth operation was cancelled");
+        }
+
+        QueueEventRefresh();
+        return BluetoothOperationResult.Failed(
+            $"Bluetooth did not report the device as {(expectedConnected ? "connected" : "disconnected")}.");
+    }
+
+    private async Task RefreshSnapshotNowAsync(CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
+        try
+        {
+            await ReadSnapshotAsync(cancellationToken);
+        }
+        finally
+        {
+            _refreshGate.Release();
+        }
     }
 
     private async Task<IReadOnlyList<BluetoothDeviceSnapshot>> ReadDevicesAsync(
         IReadOnlyList<(string Address, string Name)> devices,
-        CancellationToken cancellationToken) =>
-        await Task.WhenAll(devices.Select(async device =>
+        CancellationToken cancellationToken)
+    {
+        var previousDevices = Snapshot.Devices.ToDictionary(device => device.Address, StringComparer.OrdinalIgnoreCase);
+        return await Task.WhenAll(devices.Select(async device =>
         {
             var info = await CommandRunner.TryReadAsync(
                 "bluetoothctl",
                 $"info {device.Address}",
-                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
                 cancellationToken);
-            return ParseDeviceInfo(device.Address, device.Name, info);
+            return info is null && previousDevices.TryGetValue(device.Address, out var previous)
+                ? previous with { Name = device.Name }
+                : ParseDeviceInfo(device.Address, device.Name, info);
         }));
+    }
 
     private async Task<BluetoothOperationResult> RunBluetoothctlAsync(
         IReadOnlyList<string> arguments,
         TimeSpan timeout,
         CancellationToken cancellationToken,
-        bool refreshSnapshot = true)
+        bool refreshSnapshot = true,
+        string? standardInput = null)
     {
         Process? process = null;
         try
@@ -550,6 +729,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
                 FileName = "bluetoothctl",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = standardInput is not null,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
@@ -566,6 +746,12 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
             var outputTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
             var errorTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+            if (standardInput is not null)
+            {
+                await process.StandardInput.WriteAsync(standardInput.AsMemory(), timeoutCts.Token);
+                await process.StandardInput.FlushAsync(timeoutCts.Token);
+            }
+
             await process.WaitForExitAsync(timeoutCts.Token);
             var output = (await outputTask).Trim();
             var error = (await errorTask).Trim();
@@ -736,6 +922,15 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         var paired = !string.IsNullOrWhiteSpace(output) && PairedLine().IsMatch(output);
         return new BluetoothDeviceSnapshot(address, name, connected, battery, icon, paired);
     }
+
+    private readonly record struct BluetoothPropertiesChange(
+        string Path,
+        string Interface,
+        IReadOnlyDictionary<string, VariantValue> Changed,
+        string[] Invalidated);
+
+    [GeneratedRegex(@"^[0-9A-Fa-f:]{17}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Address();
 
     [GeneratedRegex(@"^Device\s+(?<address>[0-9A-Fa-f:]{17})\s+(?<name>.+)$", RegexOptions.CultureInvariant)]
     private static partial Regex DeviceLine();

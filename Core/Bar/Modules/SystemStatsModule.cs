@@ -63,6 +63,45 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         return _node.Draw([BuildStateModule(stats)], () => BuildPopup(stats));
     }
 
+    private BoxNode Module(SvgAsset icon, string text, Color color, bool left, bool right)
+    {
+        const Direction DIRECTION = Direction.Horizontal;
+        var width = DIRECTION == Direction.Horizontal ? WIDTH : WIDTH - 30;
+        var radius = DIRECTION == Direction.Horizontal ? theme.Border.Radius : 12;
+
+        var style = new Style()
+        {
+            BackgroundColor = color,
+            BorderRadius = new BorderRadius(left ? radius : 0, right ? radius : 0,
+                right ? radius : 0, left ? radius : 0),
+            BorderWidth = new Insets(theme.Border.Width, right ? theme.Border.Width : 0,
+                theme.Border.Width, left ? theme.Border.Width : 0),
+            BorderColor = theme.Border.Color,
+            Spacing = DIRECTION == Direction.Horizontal ? 8 : 2,
+            ShadowColor = null,
+        };
+
+        if (left  == false && right == false)
+        {
+            style = style with { BorderWidth = new Insets(1, theme.Border.Width) };
+        }
+
+        return new BoxNode(width, DIRECTION == Direction.Vertical
+            ? 52 - (int)(theme.Border.Width * 2)
+            : 18 + 6 * 2 + 3 * 2)
+        {
+            Direction = DIRECTION,
+            VerticalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Center,
+            Style = style,
+            Children =
+            [
+                new ImageNode(icon, 18, 18, theme.Text),
+                new TextNode(text, theme.Text, theme.Text),
+            ],
+        };
+    }
+
     private BoxNode BuildStateModule(SystemStatsSnapshot stats) => new()
     {
         Direction = Direction.Horizontal,
@@ -76,22 +115,9 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         },
         Children =
         {
-            ModulesCommon.BuildTextWithIcon(theme, Icons.CPU, FormatPercent(stats.CpuPercent),
-                style: ModulesCommon.ModuleStyle(theme, _currentCpuColor, right: false) with
-                {
-                    ShadowColor = null,
-                }, width: WIDTH),
-            ModulesCommon.BuildTextWithIcon(theme, Icons.RAM, FormatPercent(stats.RamPercent),
-                style: ModulesCommon.ModuleStyle(theme, _currentRamColor, false, false) with
-                {
-                    BorderWidth = new Insets(1, theme.Border.Width),
-                    ShadowColor = null,
-                }, width: WIDTH),
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, FormatTemperature(stats.TemperatureCelsius),
-                style: ModulesCommon.ModuleStyle(theme, _currentTempColor, left: false) with
-                {
-                    ShadowColor = null,
-                }, width: WIDTH),
+            Module(Icons.CPU, FormatPercent(stats.CpuPercent), _currentCpuColor, true, false),
+            Module(Icons.RAM, FormatPercent(stats.RamPercent), _currentRamColor, false, false),
+            Module(Icons.Temperature, FormatPercent(stats.TemperatureCelsius), _currentTempColor, false, true),
         },
     };
 
