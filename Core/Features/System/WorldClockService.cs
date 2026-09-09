@@ -1,24 +1,14 @@
-using System.Text.Json;
-using HyprNetShell.Core.Logging;
+using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Models;
 
 namespace HyprNetShell.Core.Features.System;
 
 internal sealed class WorldClockService
 {
-    private static readonly string[] DefaultTimeZoneIds =
-    [
-        "UTC",
-        "Europe/Kyiv",
-        "Asia/Tel_Aviv",
-        "America/New_York",
-        "America/Los_Angeles",
-        "Asia/Tokyo",
-    ];
+
 
     private readonly Lock _stateLock = new();
-    private readonly SemaphoreSlim _persistLock = new(1, 1);
-    private readonly string _configPath;
+    private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly IReadOnlyDictionary<string, WorldClock> _clocksById;
     private WorldClock[] _selectedClocks;
 
@@ -37,9 +27,8 @@ internal sealed class WorldClockService
         }
     }
 
-    public WorldClockService(string? configPath = null)
+    public WorldClockService()
     {
-        _configPath = configPath ?? GetConfigPath();
         AvailableClocks = TimeZoneInfo.GetSystemTimeZones()
             .Select(zone => new WorldClock(zone.Id, BuildDisplayName(zone.Id), zone))
             .OrderBy(clock => clock.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -74,7 +63,7 @@ internal sealed class WorldClockService
                 : [.. _selectedClocks, clock];
         }
 
-        _ = PersistLatestAsync();
+        PersistLatest();
     }
 
     public static DateTime GetTime(WorldClock clock, DateTime utcNow)
@@ -91,25 +80,7 @@ internal sealed class WorldClockService
 
     private WorldClock[] LoadSelectedClocks()
     {
-        try
-        {
-            if (File.Exists(_configPath))
-            {
-                var document = JsonSerializer.Deserialize(
-                    File.ReadAllText(_configPath),
-                    WorldClockJsonContext.Default.WorldClockConfigurationDocument);
-                if (document is not null)
-                {
-                    return ResolveClocks(document.TimeZoneIds);
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("WorldClocks", "Could not load world clock configuration; using defaults", exception);
-        }
-
-        return ResolveClocks(DefaultTimeZoneIds);
+        return ResolveClocks(_configuration.Snapshot.WorldClocks.TimeZoneIds);
     }
 
     private WorldClock[] ResolveClocks(IEnumerable<string>? timeZoneIds)
@@ -122,32 +93,15 @@ internal sealed class WorldClockService
             .ToArray() ?? [];
     }
 
-    private async Task PersistLatestAsync()
+    private void PersistLatest()
     {
-        await _persistLock.WaitAsync();
-        try
+        List<string> selectedIds;
+        lock (_stateLock)
         {
-            string[] selectedIds;
-            lock (_stateLock)
-            {
-                selectedIds = _selectedClocks.Select(clock => clock.TimeZoneId).ToArray();
-            }
+            selectedIds = _selectedClocks.Select(clock => clock.TimeZoneId).ToList();
+        }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
-            await File.WriteAllTextAsync(
-                _configPath,
-                JsonSerializer.Serialize(
-                    new WorldClockConfigurationDocument(selectedIds),
-                    WorldClockJsonContext.Default.WorldClockConfigurationDocument));
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("WorldClocks", "Could not save world clock configuration", exception);
-        }
-        finally
-        {
-            _persistLock.Release();
-        }
+        _configuration.Update(config => config.WorldClocks.TimeZoneIds = selectedIds);
     }
 
     private static string BuildDisplayName(string timeZoneId)
@@ -161,16 +115,5 @@ internal sealed class WorldClockService
         return timeZoneId[(separator + 1)..].Replace('_', ' ');
     }
 
-    private static string GetConfigPath()
-    {
-        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrWhiteSpace(configRoot))
-        {
-            configRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config");
-        }
 
-        return Path.Combine(configRoot, "hyprnetshell", "world-clocks.json");
-    }
 }

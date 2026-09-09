@@ -1,7 +1,5 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using HyprNetShell.Core.Bar.MainDialogTabs;
-using HyprNetShell.Core.Logging;
+using HyprNetShell.Core.Configuration;
 
 namespace HyprNetShell.Core.Bar.Dialogs;
 
@@ -11,15 +9,11 @@ internal sealed record CompositeWindowDefinition(
     string Hotkey,
     string[] TabIds);
 
-internal sealed record CompositeWindowConfigurationDocument(CompositeWindowDefinition[] Windows);
 
-[JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(CompositeWindowConfigurationDocument))]
-internal sealed partial class CompositeWindowConfigurationJsonContext : JsonSerializerContext;
 
 internal sealed class CompositeWindowConfiguration
 {
-    private readonly string _configPath = GetConfigPath();
+    private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly HashSet<string> _availableTabIds;
     private CompositeWindowDefinition[] _windows;
 
@@ -29,7 +23,7 @@ internal sealed class CompositeWindowConfiguration
     internal CompositeWindowConfiguration(IReadOnlyList<IMainDialogTab> tabs)
     {
         _availableTabIds = tabs.Select(tab => tab.Id).ToHashSet(StringComparer.Ordinal);
-        _windows = Load(_configPath, tabs);
+        _windows = Load(tabs);
     }
 
     internal bool TryUpsert(CompositeWindowDefinition definition, out string error)
@@ -97,30 +91,21 @@ internal sealed class CompositeWindowConfiguration
             .ToArray(),
     };
 
-    private CompositeWindowDefinition[] Load(string path, IReadOnlyList<IMainDialogTab> tabs)
+    private CompositeWindowDefinition[] Load(IReadOnlyList<IMainDialogTab> tabs)
     {
-        try
+        var windows = _configuration.Snapshot.CompositeWindows
+            .Select(window => Normalize(new CompositeWindowDefinition(
+                window.Id,
+                window.Name,
+                window.Hotkey,
+                window.TabIds.ToArray())))
+            .Where(window => window.Name.Length > 0 && window.TabIds.Length > 0)
+            .GroupBy(window => window.Id, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+        if (windows.Length > 0)
         {
-            if (File.Exists(path))
-            {
-                var document = JsonSerializer.Deserialize(
-                    File.ReadAllText(path),
-                    CompositeWindowConfigurationJsonContext.Default.CompositeWindowConfigurationDocument);
-                var windows = document?.Windows
-                    .Select(Normalize)
-                    .Where(window => window.Name.Length > 0 && window.TabIds.Length > 0)
-                    .GroupBy(window => window.Id, StringComparer.Ordinal)
-                    .Select(group => group.First())
-                    .ToArray();
-                if (windows is { Length: > 0 })
-                {
-                    return windows;
-                }
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("CompositeWindows", "Could not load composite window configuration; using defaults", exception);
+            return windows;
         }
 
         return
@@ -135,29 +120,14 @@ internal sealed class CompositeWindowConfiguration
 
     private void Persist()
     {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
-            File.WriteAllText(
-                _configPath,
-                JsonSerializer.Serialize(
-                    new CompositeWindowConfigurationDocument(_windows),
-                    CompositeWindowConfigurationJsonContext.Default.CompositeWindowConfigurationDocument));
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("CompositeWindows", "Could not save composite window configuration", exception);
-        }
-    }
-
-    private static string GetConfigPath()
-    {
-        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrWhiteSpace(configRoot))
-        {
-            configRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-        }
-
-        return Path.Combine(configRoot, "hyprnetshell", "composite-windows.json");
+        _configuration.Update(config => config.CompositeWindows = _windows
+            .Select(window => new CompositeWindowConfigurationValue
+            {
+                Id = window.Id,
+                Name = window.Name,
+                Hotkey = window.Hotkey,
+                TabIds = window.TabIds.ToList(),
+            })
+            .ToList());
     }
 }

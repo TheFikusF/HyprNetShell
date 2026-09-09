@@ -18,7 +18,9 @@ public sealed record DisplayControlsSnapshot(
     bool HyprsunsetRunning,
     int TemperatureKelvin,
     IReadOnlyList<TemperatureCurvePoint> TemperatureCurve,
-    bool AutomaticTemperatureEnabled)
+    bool AutomaticTemperatureEnabled,
+    IReadOnlyList<BrightnessCurvePoint> BrightnessCurve,
+    bool AutomaticBrightnessEnabled)
 {
     public bool Available => Display is not null || Keyboard is not null || HyprsunsetInstalled;
 
@@ -29,10 +31,14 @@ public sealed record DisplayControlsSnapshot(
         false,
         6000,
         TemperatureCurveMath.DefaultPoints,
-        true);
+        true,
+        BrightnessCurveMath.DefaultPoints,
+        false);
 }
 
 public sealed record TemperatureCurvePoint(float Hour, int TemperatureKelvin);
+
+public sealed record BrightnessCurvePoint(float Hour, int Percentage);
 
 public static class TemperatureCurveMath
 {
@@ -47,49 +53,78 @@ public static class TemperatureCurveMath
         new(24.0f, 3500),
     ];
 
-    public static int Evaluate(IReadOnlyList<TemperatureCurvePoint> points, float hour)
+    public static int Evaluate(IReadOnlyList<TemperatureCurvePoint> points, float hour) =>
+        TimeCurveMath.Evaluate(points, hour, point => point.Hour, point => point.TemperatureKelvin, 6000);
+}
+
+public static class BrightnessCurveMath
+{
+    public const int MINIMUM_BRIGHTNESS = 1;
+    public const int MAXIMUM_BRIGHTNESS = 100;
+
+    public static IReadOnlyList<BrightnessCurvePoint> DefaultPoints { get; } =
+    [
+        new(0.0f, 30),
+        new(7.0f, 55),
+        new(12.0f, 100),
+        new(20.0f, 45),
+    ];
+
+    public static int Evaluate(IReadOnlyList<BrightnessCurvePoint> points, float hour) =>
+        TimeCurveMath.Evaluate(points, hour, point => point.Hour, point => point.Percentage, 50);
+}
+
+internal static class TimeCurveMath
+{
+    internal static int Evaluate<T>(
+        IReadOnlyList<T> points,
+        float hour,
+        Func<T, float> getHour,
+        Func<T, int> getValue,
+        int fallback)
     {
         if (points.Count == 0)
         {
-            return 6000;
+            return fallback;
         }
 
         hour = Math.Clamp(hour, 0.0f, 24.0f);
-        if (hour < points[0].Hour)
+        if (hour < getHour(points[0]))
         {
             return Interpolate(
-                points[^1] with { Hour = points[^1].Hour - 24.0f },
-                points[0],
+                getHour(points[^1]) - 24.0f,
+                getValue(points[^1]),
+                getHour(points[0]),
+                getValue(points[0]),
                 hour);
         }
 
         for (var i = 0; i < points.Count - 1; i++)
         {
-            var left = points[i];
-            var right = points[i + 1];
-            if (hour > right.Hour)
+            if (hour <= getHour(points[i + 1]))
             {
-                continue;
+                return Interpolate(
+                    getHour(points[i]),
+                    getValue(points[i]),
+                    getHour(points[i + 1]),
+                    getValue(points[i + 1]),
+                    hour);
             }
-
-            return Interpolate(left, right, hour);
         }
 
         return Interpolate(
-            points[^1],
-            points[0] with { Hour = points[0].Hour + 24.0f },
+            getHour(points[^1]),
+            getValue(points[^1]),
+            getHour(points[0]) + 24.0f,
+            getValue(points[0]),
             hour);
     }
 
-    private static int Interpolate(
-        TemperatureCurvePoint left,
-        TemperatureCurvePoint right,
-        float hour)
+    private static int Interpolate(float leftHour, int leftValue, float rightHour, int rightValue, float hour)
     {
-        var duration = Math.Max(0.001f, right.Hour - left.Hour);
-        var t = Math.Clamp((hour - left.Hour) / duration, 0.0f, 1.0f);
+        var duration = Math.Max(0.001f, rightHour - leftHour);
+        var t = Math.Clamp((hour - leftHour) / duration, 0.0f, 1.0f);
         var eased = t * t * (3.0f - 2.0f * t);
-        return (int)MathF.Round(left.TemperatureKelvin +
-                                (right.TemperatureKelvin - left.TemperatureKelvin) * eased);
+        return (int)MathF.Round(leftValue + (rightValue - leftValue) * eased);
     }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
@@ -26,7 +27,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
     private static readonly TimeSpan PowerProfilesFallbackInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan DbusReconnectInterval = TimeSpan.FromSeconds(15);
 
-    private readonly string _chargeLimitConfigPath = GetChargeLimitConfigPath();
+    private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private readonly SemaphoreSlim _batteryRecoveryGate = new(1, 1);
@@ -586,33 +587,12 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
         _chargeLimitConfigLoaded = true;
     }
 
-    private int? ReadChargeLimitConfig()
-    {
-        try
-        {
-            var text = File.ReadAllText(_chargeLimitConfigPath).Trim();
-            return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var chargeLimit)
-                ? Math.Clamp(chargeLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT)
-                : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private int? ReadChargeLimitConfig() => _configuration.Snapshot.Battery.ChargeLimit is { } chargeLimit
+        ? Math.Clamp(chargeLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT)
+        : null;
 
-    private void PersistChargeLimit(int chargeLimit)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_chargeLimitConfigPath)!);
-            File.WriteAllText(_chargeLimitConfigPath, chargeLimit.ToString(CultureInfo.InvariantCulture));
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("Battery", "Could not save the battery charge limit", exception);
-        }
-    }
+    private void PersistChargeLimit(int chargeLimit) =>
+        _configuration.Update(config => config.Battery.ChargeLimit = chargeLimit);
 
     private async Task ApplyChargeLimitAsync(int chargeLimit)
     {
@@ -1024,18 +1004,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
         }
     }
 
-    private static string GetChargeLimitConfigPath()
-    {
-        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrWhiteSpace(configRoot))
-        {
-            configRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config");
-        }
 
-        return Path.Combine(configRoot, "hyprnetshell", "battery-charge-limit");
-    }
 
     private sealed record PropertiesChange(
         string Interface,

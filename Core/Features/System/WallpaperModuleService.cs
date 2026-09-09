@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Text.Json;
+using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Logging;
 
@@ -18,7 +18,7 @@ internal sealed class WallpaperModuleService : IDisposable
 
     private readonly Lock _stateLock = new();
     private readonly IHyprctl _hyprctl;
-    private readonly string _configPath = GetConfigPath();
+    private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _settingsChanged = new(0, 1);
     private readonly Task _slideshowTask;
@@ -31,7 +31,7 @@ internal sealed class WallpaperModuleService : IDisposable
     internal WallpaperModuleService(IHyprctl hyprctl)
     {
         _hyprctl = hyprctl;
-        var config = LoadConfig(_configPath);
+        var config = _configuration.Snapshot.Wallpaper;
         _slideshowEnabled = config.SlideshowEnabled;
         _durationMinutes = NormalizeDuration(config.DurationMinutes);
 
@@ -232,55 +232,23 @@ internal sealed class WallpaperModuleService : IDisposable
 
     private void PersistConfig()
     {
-        WallpaperSlideshowConfig config;
+        bool slideshowEnabled;
+        int durationMinutes;
         lock (_stateLock)
         {
-            config = new WallpaperSlideshowConfig(_slideshowEnabled, _durationMinutes);
+            slideshowEnabled = _slideshowEnabled;
+            durationMinutes = _durationMinutes;
         }
 
-        try
+        _configuration.Update(configuration =>
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
-            File.WriteAllText(
-                _configPath,
-                JsonSerializer.Serialize(config, WallpaperJsonContext.Default.WallpaperSlideshowConfig));
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("Wallpapers", "Could not save wallpaper slideshow settings", exception);
-        }
-    }
-
-    private static WallpaperSlideshowConfig LoadConfig(string path)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize(
-                       File.ReadAllText(path),
-                       WallpaperJsonContext.Default.WallpaperSlideshowConfig)
-                   ?? new WallpaperSlideshowConfig(true, DEFAULT_DURATION_MINUTES);
-        }
-        catch
-        {
-            return new WallpaperSlideshowConfig(true, DEFAULT_DURATION_MINUTES);
-        }
+            configuration.Wallpaper.SlideshowEnabled = slideshowEnabled;
+            configuration.Wallpaper.DurationMinutes = durationMinutes;
+        });
     }
 
     private static int NormalizeDuration(int durationMinutes) =>
         Math.Clamp(durationMinutes, MINIMUM_DURATION_MINUTES, MAXIMUM_DURATION_MINUTES);
-
-    private static string GetConfigPath()
-    {
-        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrWhiteSpace(configRoot))
-        {
-            configRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config");
-        }
-
-        return Path.Combine(configRoot, "hyprnetshell", "wallpapers.json");
-    }
 
     private void StartHyprpaper()
     {

@@ -22,8 +22,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
     private readonly Dictionary<string, Ref<bool>> _sliderDragging = [];
     private readonly Dictionary<string, int> _overrides = [];
     private readonly Dictionary<string, ValueUpdateQueue> _updateQueues = [];
-    private readonly TemperatureCurveDragState _curveDragState = new();
+    private readonly CurveDragState _temperatureCurveDragState = new();
+    private readonly CurveDragState _brightnessCurveDragState = new();
     private readonly Ref<float> _automaticTemperatureSwitchAnimation = new(service.IsAutomaticTemperatureEnabled() ? 1.0f : 0.0f);
+    private readonly Ref<float> _automaticBrightnessSwitchAnimation = new(service.IsAutomaticBrightnessEnabled() ? 1.0f : 0.0f);
     private float _iconRotation = 0;
 
     public Node Draw()
@@ -74,7 +76,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         Children =
         [
             ModulesCommon.BuildTextWithIcon(theme, Icons.Brightness[0], "Display controls"),
-            BuildBacklightControl("display", "Screen brightness", Icons.Brightness[0], controls.Display),
+            BuildBrightnessSchedule(controls),
             BuildBacklightControl("keyboard", "Keyboard brightness", Icons.Keyboard, controls.Keyboard),
             BuildTemperatureSchedule(controls),
         ],
@@ -92,6 +94,75 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             normalized => SetValue(key, QuantizePercentage(backlight, normalized),
                 percentage => service.SetBacklightAsync(backlight, percentage)));
     }
+
+    private BoxNode BuildBrightnessSchedule(DisplayControlsSnapshot controls)
+    {
+        if (controls.Display is not { } display)
+        {
+            return BuildUnavailableRow("Screen brightness unavailable");
+        }
+
+        var enabled = service.IsAutomaticBrightnessEnabled();
+        var value = EffectiveValue("display", display.Percentage);
+        return new BoxNode
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            {
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Spacing = 8,
+            },
+            Children =
+            [
+                new BoxNode
+                {
+                    Direction = Direction.Horizontal,
+                    HorizontalAlignment = ItemsAlignment.Spread,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    Style = Style.Spacer,
+                    Children =
+                    [
+                        ModulesCommon.BuildTextWithIcon(theme, Icons.Brightness[0], "Screen brightness"),
+                        new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                        {
+                            new TextNode($"{value}%", theme.Text, theme.Text),
+                            BuildAutomaticToggle(
+                                enabled,
+                                _automaticBrightnessSwitchAnimation,
+                                () => service.SetAutomaticBrightnessEnabled(!enabled)),
+                        },
+                    ],
+                },
+                enabled ? BuildBrightnessCurve() : BuildManualBrightnessSlider(display, value),
+            ],
+        };
+    }
+
+    private TimeCurveNode<BrightnessCurvePoint> BuildBrightnessCurve()
+    {
+        var points = service.GetBrightnessCurve();
+        return new TimeCurveNode<BrightnessCurvePoint>(
+            points,
+            BrightnessCurveMath.MINIMUM_BRIGHTNESS,
+            BrightnessCurveMath.MAXIMUM_BRIGHTNESS,
+            point => point.Hour,
+            point => point.Percentage,
+            hour => BrightnessCurveMath.Evaluate(points, hour),
+            value => $"{value}%",
+            theme.Text.MutedColor,
+            Color.Orange,
+            theme.Text,
+            service.SetBrightnessCurvePoint,
+            _brightnessCurveDragState);
+    }
+
+    private SliderNode BuildManualBrightnessSlider(BacklightSnapshot display, int value) =>
+        new(340, 14, value / 100.0f, theme.Text.MutedColor, Color.Orange, theme.Text,
+            normalized => SetValue("display", QuantizePercentage(display, normalized),
+                percentage => service.SetBacklightAsync(display, percentage)),
+            GetSliderDragging("display"));
 
     private BoxNode BuildTemperatureSchedule(DisplayControlsSnapshot controls)
     {
@@ -130,20 +201,44 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                     ],
                 },
                 automaticTemperatureEnabled
-                    ? new TemperatureCurveNode(service.GetTemperatureCurve(), theme.Text.MutedColor, Color.Orange, theme.Text, service.SetCurvePoint, _curveDragState)
+                    ? BuildTemperatureCurve()
                     : BuildManualTemperatureSlider(controls),
             ],
         };
     }
 
-    private BoxNode BuildAutomaticTemperatureToggle(bool enabled) => new(44, 28)
+    private TimeCurveNode<TemperatureCurvePoint> BuildTemperatureCurve()
+    {
+        var points = service.GetTemperatureCurve();
+        return new TimeCurveNode<TemperatureCurvePoint>(
+            points,
+            TemperatureCurveMath.MINIMUM_TEMPERATURE,
+            TemperatureCurveMath.MAXIMUM_TEMPERATURE,
+            point => point.Hour,
+            point => point.TemperatureKelvin,
+            hour => TemperatureCurveMath.Evaluate(points, hour),
+            value => $"{value / 1000.0f:0.#}k",
+            theme.Text.MutedColor,
+            Color.Orange,
+            theme.Text,
+            service.SetCurvePoint,
+            _temperatureCurveDragState);
+    }
+
+    private BoxNode BuildAutomaticTemperatureToggle(bool enabled) =>
+        BuildAutomaticToggle(
+            enabled,
+            _automaticTemperatureSwitchAnimation,
+            () => service.SetAutomaticTemperatureEnabled(!enabled));
+
+    private BoxNode BuildAutomaticToggle(bool enabled, Ref<float> animation, Action toggle) => new(44, 28)
     {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
-        OnClick = () => service.SetAutomaticTemperatureEnabled(!enabled),
+        OnClick = toggle,
         Children =
         [
-            new SwitchNode(enabled, _automaticTemperatureSwitchAnimation)
+            new SwitchNode(enabled, animation)
             {
                 OffTrackColor = theme.Text.MutedColor,
                 OnTrackColor = theme.Active,

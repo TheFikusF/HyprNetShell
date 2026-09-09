@@ -62,7 +62,7 @@ internal static class NotificationCard
         };
     }
 
-    private static Node BuildContent(
+    private static BoxNode BuildContent(
         NotificationSnapshot notification,
         SvgAsset? svgIcon,
         string? iconPath,
@@ -130,7 +130,7 @@ internal static class NotificationCard
         };
     }
 
-    private static Node BuildCloseButton(
+    private static BoxNode BuildCloseButton(
         uint id,
         NotificationService service,
         Theme theme,
@@ -138,10 +138,10 @@ internal static class NotificationCard
     {
         if (!state.CloseButtonInitialized)
         {
-            state.CloseButton.Background = theme.Text.MutedColor;
+            state.CloseButton.Background = theme.Panel;
             state.CloseButtonInitialized = true;
         }
-        state.CloseButton.UpdateColor(theme.Text.MutedColor);
+        state.CloseButton.UpdateColor(theme.Panel);
         return new BoxNode(22, 22)
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -184,7 +184,7 @@ internal static class NotificationCard
         };
     }
 
-    private static Node BuildAction(
+    private static BoxNode BuildAction(
         uint notificationId,
         NotificationActionSnapshot action,
         NotificationService service,

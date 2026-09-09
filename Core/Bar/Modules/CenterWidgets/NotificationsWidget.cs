@@ -11,6 +11,8 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class NotificationsWidget(NotificationService service, Theme theme)
 {
+    private const int VisibleNotificationCount = 5;
+
     public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
     private readonly Ref<float> _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
     private readonly Dictionary<uint, NotificationCard.State> _cardStates = new();
@@ -18,6 +20,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     private bool _clearButtonInitialized;
     private HistoryDateRange _dateRange;
     private DropdownNode? _dateDropdown;
+    private int _firstNotificationIndex;
 
     public Node Draw(NotificationsSnapshot snapshot)
     {
@@ -26,6 +29,10 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             .Where(notification => notification.StoreInHistory)
             .Where(notification => HistoryDateFilter.Includes(_dateRange, notification.ReceivedAt))
             .ToArray();
+        BoundedListUi.NormalizeViewport(
+            ref _firstNotificationIndex,
+            filteredItems.Length,
+            VisibleNotificationCount);
 
         return new BoxNode(WIDTH)
         {
@@ -87,21 +94,48 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Children = [new TextNode("No notifications", 18, theme.Text.MutedColor)]
+                Children = [new TextNode("No notifications", theme.Text.HeaderSize, theme.Text.MutedColor)]
             };
+            yield break;
         }
 
-        foreach (var notification in notifications.Take(5))
+        var content = new BoxNode
         {
-            if (!_cardStates.TryGetValue(notification.Id, out var state))
-            {
-                state = new NotificationCard.State();
-                _cardStates[notification.Id] = state;
-            }
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = Style.Spacer,
+            Children = notifications
+                .VisibleItems(_firstNotificationIndex, VisibleNotificationCount)
+                .Select(item => BuildNotificationCard(item.Item))
+                .ToArray(),
+        };
 
-            yield return NotificationCard.Draw(notification, service, theme, state);
-        }
+        yield return BoundedListUi.BuildScrollableResults(
+            content,
+            _firstNotificationIndex,
+            notifications.Count,
+            VisibleNotificationCount,
+            theme,
+            delta => ScrollNotifications(delta, notifications.Count));
     }
+
+    private Node BuildNotificationCard(NotificationSnapshot notification)
+    {
+        if (!_cardStates.TryGetValue(notification.Id, out var state))
+        {
+            state = new NotificationCard.State();
+            _cardStates[notification.Id] = state;
+        }
+
+        return NotificationCard.Draw(notification, service, theme, state);
+    }
+
+    private void ScrollNotifications(float delta, int notificationCount) =>
+        BoundedListUi.MoveViewport(
+            ref _firstNotificationIndex,
+            delta > 0.0f ? 1 : -1,
+            notificationCount,
+            VisibleNotificationCount);
 
     private DropdownNode BuildDateDropdown()
     {
@@ -111,7 +145,11 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             (int)_dateRange,
             Icons.ChevronDown,
             Icons.Check,
-            selected => _dateRange = (HistoryDateRange)selected)
+            selected =>
+            {
+                _dateRange = (HistoryDateRange)selected;
+                _firstNotificationIndex = 0;
+            })
         {
             FontSize = theme.Text,
             BackgroundColor = theme.Panel,
@@ -139,10 +177,10 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     {
         if (!_clearButtonInitialized)
         {
-            _clearButtonState.Background = theme.Text.MutedColor;
+            _clearButtonState.Background = theme.Panel;
             _clearButtonInitialized = true;
         }
-        _clearButtonState.UpdateColor(theme.Text.MutedColor);
+        _clearButtonState.UpdateColor(theme.Panel);
 
         return new BoxNode
         {
@@ -153,8 +191,8 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             Style = new Style
             {
                 BackgroundColor = _clearButtonState.Background,
-                BorderRadius = 7,
-                Padding = new Insets(8, 5),
+                BorderRadius = 8,
+                Padding = new Insets(8, 6),
                 Spacing = 6,
             },
             Children =

@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Json;
+using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
@@ -16,17 +16,23 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private static readonly SemaphoreSlim HyprsunsetLock = new(1, 1);
     private readonly object _curveLock = new();
     private readonly object _temperatureQueueLock = new();
+    private readonly object _brightnessQueueLock = new();
     private readonly IHyprctl _hyprctl;
-    private readonly string _curvePath = GetCurvePath();
+    private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private TemperatureCurvePoint[] _temperatureCurve;
+    private BrightnessCurvePoint[] _brightnessCurve;
     private bool _automaticTemperatureEnabled;
-    private CancellationTokenSource? _persistCurveCts;
+    private bool _automaticBrightnessEnabled;
     private int _latestQueuedTemperature;
     private int _sentQueuedTemperature = int.MinValue;
     private bool _temperatureQueueRunning;
+    private int _latestQueuedBrightness;
+    private int _sentQueuedBrightness = int.MinValue;
+    private bool _brightnessQueueRunning;
     private bool? _hyprsunsetInstalled;
     private int _temperature = DEFAULT_TEMPERATURE;
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
+    private DateTime _nextBrightnessUpdate = DateTime.MinValue;
     private DateTime _nextBacklightRefreshUtc = DateTime.MinValue;
     private DateTime _nextTemperatureRecoveryUtc = DateTime.MinValue;
     private DisplayControlsSnapshot _snapshot = DisplayControlsSnapshot.Empty;
@@ -36,7 +42,13 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     public DisplayControlsModuleService(IHyprctl hyprctl)
     {
         _hyprctl = hyprctl;
-        (_temperatureCurve, _automaticTemperatureEnabled) = LoadSchedule(_curvePath);
+        var display = _configuration.Snapshot.Display;
+        _temperatureCurve = NormalizeTemperatureCurve(display.Temperature.Points
+            .Select(point => new TemperatureCurvePoint(point.Hour, point.Value)));
+        _automaticTemperatureEnabled = display.Temperature.Enabled;
+        _brightnessCurve = NormalizeBrightnessCurve(display.Brightness.Points
+            .Select(point => new BrightnessCurvePoint(point.Hour, point.Value)));
+        _automaticBrightnessEnabled = display.Brightness.Enabled;
     }
 
     internal IReadOnlyList<TemperatureCurvePoint> GetTemperatureCurve()
@@ -55,6 +67,22 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
+    internal IReadOnlyList<BrightnessCurvePoint> GetBrightnessCurve()
+    {
+        lock (_curveLock)
+        {
+            return [.._brightnessCurve];
+        }
+    }
+
+    internal bool IsAutomaticBrightnessEnabled()
+    {
+        lock (_curveLock)
+        {
+            return _automaticBrightnessEnabled;
+        }
+    }
+
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         var utcNow = DateTime.UtcNow;
@@ -62,13 +90,17 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         var recoverTemperature = utcNow >= _nextTemperatureRecoveryUtc;
 
         bool automaticTemperatureEnabled;
+        bool automaticBrightnessEnabled;
         lock (_curveLock)
         {
             automaticTemperatureEnabled = _automaticTemperatureEnabled;
+            automaticBrightnessEnabled = _automaticBrightnessEnabled;
         }
 
-        var updateAutomaticTemperature = automaticTemperatureEnabled && DateTime.Now >= _nextTemperatureUpdate;
-        if (!refreshBacklights && !recoverTemperature && !updateAutomaticTemperature)
+        var localNow = DateTime.Now;
+        var updateAutomaticTemperature = automaticTemperatureEnabled && localNow >= _nextTemperatureUpdate;
+        var updateAutomaticBrightness = automaticBrightnessEnabled && localNow >= _nextBrightnessUpdate;
+        if (!refreshBacklights && !recoverTemperature && !updateAutomaticTemperature && !updateAutomaticBrightness)
         {
             return;
         }
@@ -104,11 +136,10 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                 curve = [.._temperatureCurve];
             }
 
-            var now = DateTime.Now;
-            _temperature = TemperatureCurveMath.Evaluate(curve, now.Hour + now.Minute / 60.0f);
+            _temperature = TemperatureCurveMath.Evaluate(curve, CurrentHour(localNow));
             await SetTemperatureAsync(_temperature);
             running = Snapshot.HyprsunsetRunning;
-            _nextTemperatureUpdate = now.AddMinutes(5);
+            _nextTemperatureUpdate = localNow.AddMinutes(5);
         }
 
         BacklightSnapshot? display = current.Display;
@@ -120,10 +151,29 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             keyboard = ReadBacklight("/sys/class/leds", IsKeyboardBacklight);
         }
 
-        TemperatureCurvePoint[] snapshotCurve;
+        if (updateAutomaticBrightness && display is not null)
+        {
+            BrightnessCurvePoint[] curve;
+            lock (_curveLock)
+            {
+                curve = [.._brightnessCurve];
+            }
+
+            var percentage = BrightnessCurveMath.Evaluate(curve, CurrentHour(localNow));
+            await SetBacklightAsync(display, percentage);
+            display = display with
+            {
+                Value = (int)Math.Round(display.Maximum * percentage / 100.0, MidpointRounding.AwayFromZero),
+            };
+            _nextBrightnessUpdate = localNow.AddMinutes(5);
+        }
+
+        TemperatureCurvePoint[] snapshotTemperatureCurve;
+        BrightnessCurvePoint[] snapshotBrightnessCurve;
         lock (_curveLock)
         {
-            snapshotCurve = [.._temperatureCurve];
+            snapshotTemperatureCurve = [.._temperatureCurve];
+            snapshotBrightnessCurve = [.._brightnessCurve];
         }
 
         Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
@@ -132,8 +182,10 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             _hyprsunsetInstalled == true,
             running,
             _temperature,
-            snapshotCurve,
-            automaticTemperatureEnabled));
+            snapshotTemperatureCurve,
+            automaticTemperatureEnabled,
+            snapshotBrightnessCurve,
+            automaticBrightnessEnabled));
     }
 
     internal void SetCurvePoint(int index, float hour, int temperatureKelvin)
@@ -157,8 +209,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                     TemperatureCurveMath.MAXIMUM_TEMPERATURE));
         }
 
-        ScheduleCurvePersistence();
-        ApplyCurveImmediatelyIfEnabled();
+        PersistCurves();
+        ApplyTemperatureCurveImmediatelyIfEnabled();
     }
 
     internal void SetAutomaticTemperatureEnabled(bool enabled)
@@ -173,10 +225,51 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             _automaticTemperatureEnabled = enabled;
         }
 
-        ScheduleCurvePersistence();
+        PersistCurves();
         if (enabled)
         {
-            ApplyCurveImmediatelyIfEnabled();
+            ApplyTemperatureCurveImmediatelyIfEnabled();
+        }
+    }
+
+    internal void SetBrightnessCurvePoint(int index, float hour, int percentage)
+    {
+        lock (_curveLock)
+        {
+            if ((uint)index >= (uint)_brightnessCurve.Length)
+            {
+                return;
+            }
+
+            var minimumHour = index == 0 ? 0.0f : _brightnessCurve[index - 1].Hour + 0.25f;
+            var maximumHour = index == _brightnessCurve.Length - 1
+                ? 24.0f
+                : _brightnessCurve[index + 1].Hour - 0.25f;
+            _brightnessCurve[index] = new BrightnessCurvePoint(
+                Math.Clamp(MathF.Round(hour * 4.0f) / 4.0f, minimumHour, maximumHour),
+                Math.Clamp(percentage, BrightnessCurveMath.MINIMUM_BRIGHTNESS, BrightnessCurveMath.MAXIMUM_BRIGHTNESS));
+        }
+
+        PersistCurves();
+        ApplyBrightnessCurveImmediatelyIfEnabled();
+    }
+
+    internal void SetAutomaticBrightnessEnabled(bool enabled)
+    {
+        lock (_curveLock)
+        {
+            if (_automaticBrightnessEnabled == enabled)
+            {
+                return;
+            }
+
+            _automaticBrightnessEnabled = enabled;
+        }
+
+        PersistCurves();
+        if (enabled)
+        {
+            ApplyBrightnessCurveImmediatelyIfEnabled();
         }
     }
 
@@ -304,97 +397,81 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         name.Contains("kbd", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("keyboard", StringComparison.OrdinalIgnoreCase);
 
-    private void ScheduleCurvePersistence()
+    private void PersistCurves()
     {
-        _persistCurveCts?.Cancel();
-        _persistCurveCts?.Dispose();
-        _persistCurveCts = new CancellationTokenSource();
-        var cancellationToken = _persistCurveCts.Token;
-        _ = Task.Run(async () =>
+        TemperatureCurvePoint[] temperatureCurve;
+        BrightnessCurvePoint[] brightnessCurve;
+        bool temperatureEnabled;
+        bool brightnessEnabled;
+        lock (_curveLock)
         {
-            try
-            {
-                await Task.Delay(350, cancellationToken);
-                TemperatureCurvePoint[] curve;
-                bool enabled;
-                lock (_curveLock)
-                {
-                    curve = [.._temperatureCurve];
-                    enabled = _automaticTemperatureEnabled;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(_curvePath)!);
-                await File.WriteAllTextAsync(
-                    _curvePath,
-                    JsonSerializer.Serialize(
-                        new TemperatureScheduleConfig(enabled, curve),
-                        DisplayControlsJsonContext.Default.TemperatureScheduleConfig),
-                    cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // A newer drag update will persist the final curve.
-            }
-            catch
-            {
-                // Keep the in-memory curve if the config directory is not writable.
-            }
-        }, cancellationToken);
-    }
-
-    private static (TemperatureCurvePoint[] Points, bool Enabled) LoadSchedule(string path)
-    {
-        try
-        {
-            var json = File.ReadAllText(path);
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind == JsonValueKind.Array)
-            {
-                var legacyPoints = JsonSerializer.Deserialize(
-                    json,
-                    DisplayControlsJsonContext.Default.TemperatureCurvePointArray);
-                return legacyPoints is { Length: 4 }
-                    ? (NormalizeCurve(legacyPoints), true)
-                    : ([..TemperatureCurveMath.DefaultPoints], true);
-            }
-
-            var config = JsonSerializer.Deserialize(
-                json,
-                DisplayControlsJsonContext.Default.TemperatureScheduleConfig);
-            return config?.Points is { Length: 4 }
-                ? (NormalizeCurve(config.Points), config.Enabled)
-                : ([..TemperatureCurveMath.DefaultPoints], true);
-        }
-        catch
-        {
-            // Fall back to a useful day/night curve.
+            temperatureCurve = [.._temperatureCurve];
+            brightnessCurve = [.._brightnessCurve];
+            temperatureEnabled = _automaticTemperatureEnabled;
+            brightnessEnabled = _automaticBrightnessEnabled;
         }
 
-        return ([..TemperatureCurveMath.DefaultPoints], true);
+        _configuration.Update(config =>
+        {
+            config.Display.Temperature.Enabled = temperatureEnabled;
+            config.Display.Temperature.Points = temperatureCurve
+                .Select(point => new CurvePointConfiguration { Hour = point.Hour, Value = point.TemperatureKelvin })
+                .ToList();
+            config.Display.Brightness.Enabled = brightnessEnabled;
+            config.Display.Brightness.Points = brightnessCurve
+                .Select(point => new CurvePointConfiguration { Hour = point.Hour, Value = point.Percentage })
+                .ToList();
+        });
     }
 
-    private static TemperatureCurvePoint[] NormalizeCurve(IReadOnlyList<TemperatureCurvePoint> points)
+    private static TemperatureCurvePoint[] NormalizeTemperatureCurve(IEnumerable<TemperatureCurvePoint> points)
+    {
+        var normalized = NormalizeCurve(
+            points.Select(point => (point.Hour, point.TemperatureKelvin)),
+            TemperatureCurveMath.MINIMUM_TEMPERATURE,
+            TemperatureCurveMath.MAXIMUM_TEMPERATURE,
+            TemperatureCurveMath.DefaultPoints.Select(point => (point.Hour, point.TemperatureKelvin)));
+        return normalized.Select(point => new TemperatureCurvePoint(point.Hour, point.Value)).ToArray();
+    }
+
+    private static BrightnessCurvePoint[] NormalizeBrightnessCurve(IEnumerable<BrightnessCurvePoint> points)
+    {
+        var normalized = NormalizeCurve(
+            points.Select(point => (point.Hour, point.Percentage)),
+            BrightnessCurveMath.MINIMUM_BRIGHTNESS,
+            BrightnessCurveMath.MAXIMUM_BRIGHTNESS,
+            BrightnessCurveMath.DefaultPoints.Select(point => (point.Hour, point.Percentage)));
+        return normalized.Select(point => new BrightnessCurvePoint(point.Hour, point.Value)).ToArray();
+    }
+
+    private static (float Hour, int Value)[] NormalizeCurve(
+        IEnumerable<(float Hour, int Value)> points,
+        int minimumValue,
+        int maximumValue,
+        IEnumerable<(float Hour, int Value)> defaults)
     {
         var ordered = points
-            .Select(point => new TemperatureCurvePoint(
+            .Select(point => (
                 Math.Clamp(MathF.Round(point.Hour * 4.0f) / 4.0f, 0.0f, 24.0f),
-                Math.Clamp(point.TemperatureKelvin,
-                    TemperatureCurveMath.MINIMUM_TEMPERATURE,
-                    TemperatureCurveMath.MAXIMUM_TEMPERATURE)))
-            .OrderBy(point => point.Hour)
+                Math.Clamp(point.Value, minimumValue, maximumValue)))
+            .OrderBy(point => point.Item1)
             .ToArray();
+        if (ordered.Length != 4)
+        {
+            ordered = defaults.ToArray();
+        }
 
         for (var i = 0; i < ordered.Length; i++)
         {
-            var minimumHour = i == 0 ? 0.0f : ordered[i - 1].Hour + 0.25f;
+            var minimumHour = i == 0 ? 0.0f : ordered[i - 1].Item1 + 0.25f;
             var maximumHour = 24.0f - (ordered.Length - 1 - i) * 0.25f;
-            ordered[i] = ordered[i] with { Hour = Math.Clamp(ordered[i].Hour, minimumHour, maximumHour) };
+            ordered[i] = (Math.Clamp(ordered[i].Item1, minimumHour, maximumHour), ordered[i].Item2);
         }
 
         return ordered;
     }
 
-    private void ApplyCurveImmediatelyIfEnabled()
+    private void ApplyTemperatureCurveImmediatelyIfEnabled()
     {
         TemperatureCurvePoint[] curve;
         lock (_curveLock)
@@ -408,8 +485,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
 
         var now = DateTime.Now;
-        var temperature = TemperatureCurveMath.Evaluate(curve,
-            now.Hour + now.Minute / 60.0f + now.Second / 3600.0f);
+        var temperature = TemperatureCurveMath.Evaluate(curve, CurrentHour(now));
         _nextTemperatureUpdate = now.AddMinutes(5);
         QueueTemperatureUpdate(temperature);
     }
@@ -463,18 +539,81 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
-    private static string GetCurvePath()
+    private void ApplyBrightnessCurveImmediatelyIfEnabled()
     {
-        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrWhiteSpace(configRoot))
+        BrightnessCurvePoint[] curve;
+        BacklightSnapshot? display;
+        lock (_curveLock)
         {
-            configRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config");
+            if (!_automaticBrightnessEnabled)
+            {
+                return;
+            }
+
+            curve = [.._brightnessCurve];
+            display = Snapshot.Display;
         }
 
-        return Path.Combine(configRoot, "hyprnetshell", "temperature-curve.json");
+        if (display is null)
+        {
+            return;
+        }
+
+        var now = DateTime.Now;
+        _nextBrightnessUpdate = now.AddMinutes(5);
+        QueueBrightnessUpdate(BrightnessCurveMath.Evaluate(curve, CurrentHour(now)));
     }
+
+    private void QueueBrightnessUpdate(int percentage)
+    {
+        lock (_brightnessQueueLock)
+        {
+            _latestQueuedBrightness = percentage;
+            if (_brightnessQueueRunning)
+            {
+                return;
+            }
+
+            _brightnessQueueRunning = true;
+        }
+
+        _ = Task.Run(ProcessBrightnessQueueAsync);
+    }
+
+    private async Task ProcessBrightnessQueueAsync()
+    {
+        while (true)
+        {
+            int percentage;
+            lock (_brightnessQueueLock)
+            {
+                if (_sentQueuedBrightness == _latestQueuedBrightness)
+                {
+                    _brightnessQueueRunning = false;
+                    return;
+                }
+
+                percentage = _latestQueuedBrightness;
+                _sentQueuedBrightness = percentage;
+            }
+
+            if (!IsAutomaticBrightnessEnabled() || Snapshot.Display is not { } display)
+            {
+                lock (_brightnessQueueLock)
+                {
+                    _sentQueuedBrightness = int.MinValue;
+                    _brightnessQueueRunning = false;
+                }
+                return;
+            }
+
+            await SetBacklightAsync(display, percentage);
+            await Task.Delay(50);
+        }
+    }
+
+    private static float CurrentHour(DateTime now) =>
+        now.Hour + now.Minute / 60.0f + now.Second / 3600.0f;
 
     private static bool StartHyprsunset(int temperatureKelvin)
     {

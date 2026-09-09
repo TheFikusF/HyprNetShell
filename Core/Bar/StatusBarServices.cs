@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
+using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.System;
@@ -316,6 +317,7 @@ public sealed class StatusBarServices : IDisposable
         Hyprland.Dispose();
         Hyprctl.Dispose();
         History.Dispose();
+        AppConfigurationStore.Shared.Flush();
         _lifetime.Dispose();
     }
 }

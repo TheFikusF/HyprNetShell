@@ -42,6 +42,28 @@ internal static class BoundedListUi
         AlignViewport(ref firstIndex, selectedIndex, itemCount, visibleItemCount);
     }
 
+    public static void MoveViewport(
+        ref int firstIndex,
+        int direction,
+        int itemCount,
+        int visibleItemCount = DefaultVisibleItemCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(visibleItemCount, 1);
+        firstIndex = Math.Clamp(
+            firstIndex + Math.Sign(direction),
+            0,
+            Math.Max(0, itemCount - visibleItemCount));
+    }
+
+    public static void NormalizeViewport(
+        ref int firstIndex,
+        int itemCount,
+        int visibleItemCount = DefaultVisibleItemCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(visibleItemCount, 1);
+        firstIndex = Math.Clamp(firstIndex, 0, Math.Max(0, itemCount - visibleItemCount));
+    }
+
     public static IEnumerable<(T Item, int Index)> VisibleItems<T>(
         this IReadOnlyList<T> items,
         int firstIndex,
@@ -59,7 +81,8 @@ internal static class BoundedListUi
         int firstItem,
         int totalItems,
         int visibleItems,
-        Theme theme)
+        Theme theme,
+        Action<float>? onScroll = null)
     {
         if (totalItems <= visibleItems)
         {
@@ -69,6 +92,7 @@ internal static class BoundedListUi
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Stretch,
+            OnScroll = onScroll,
             VerticalAlignment = ItemsAlignment.Start,
             Style = new Style { Spacing = 8 },
             Children =

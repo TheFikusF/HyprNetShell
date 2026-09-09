@@ -1,22 +1,27 @@
-using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Nodes;
 
-internal sealed class TemperatureCurveDragState
+internal sealed class CurveDragState
 {
     public int PointIndex { get; set; } = -1;
 }
 
-internal sealed class TemperatureCurveNode(
-    IReadOnlyList<TemperatureCurvePoint> points,
+internal sealed class TimeCurveNode<T>(
+    IReadOnlyList<T> points,
+    int minimumValue,
+    int maximumValue,
+    Func<T, float> getHour,
+    Func<T, int> getValue,
+    Func<float, int> evaluate,
+    Func<int, string> formatValue,
     Color gridColor,
     Color curveColor,
     Color pointColor,
     Action<int, float, int> onPointChanged,
-    TemperatureCurveDragState dragState) : Node
+    CurveDragState dragState) : Node
 {
     private Color _gridColor = gridColor;
     private Color _curveColor = curveColor;
@@ -54,11 +59,11 @@ internal sealed class TemperatureCurveNode(
             renderer.DrawText(hour.ToString("00"), px - 7, plot.Y + plot.Height + 15, 10, color);
         }
 
-        void DrawTemperatureLine(int temperature, Color color)
+        void DrawValueLine(int value, Color color)
         {
-            var py = TemperatureToY(plot, temperature);
+            var py = ValueToY(plot, value);
             renderer.FillRect(new Rect(plot.X, py, plot.Width, 1), color);
-            renderer.DrawText($"{temperature / 1000.0f:0.#}k", plot.X - 34, py + 5, 10, color);
+            renderer.DrawText(formatValue(value), plot.X - 34, py + 5, 10, color);
         }
 
         for (var hour = 0; hour <= 24; hour += 6)
@@ -66,21 +71,16 @@ internal sealed class TemperatureCurveNode(
             DrawTimeLine(hour, _gridColor);
         }
 
-        foreach (var temperature in new[]
-                 {
-                     TemperatureCurveMath.MAXIMUM_TEMPERATURE,
-                     (TemperatureCurveMath.MAXIMUM_TEMPERATURE + TemperatureCurveMath.MINIMUM_TEMPERATURE) / 2,
-                     TemperatureCurveMath.MINIMUM_TEMPERATURE,
-                 })
+        foreach (var value in new[] { maximumValue, (maximumValue + minimumValue) / 2, minimumValue })
         {
-            DrawTemperatureLine(temperature, _gridColor);
+            DrawValueLine(value, _gridColor);
         }
 
         if (dragState.PointIndex > -1)
         {
             var point = points[dragState.PointIndex];
-            DrawTimeLine(point.Hour, _pointColor);
-            DrawTemperatureLine(point.TemperatureKelvin, _pointColor);
+            DrawTimeLine(getHour(point), _pointColor);
+            DrawValueLine(getValue(point), _pointColor);
         }
 
         var now = DateTime.Now;
@@ -93,17 +93,15 @@ internal sealed class TemperatureCurveNode(
         for (var i = 0; i < SAMPLES; i++)
         {
             var hour = 24.0f * i / (SAMPLES - 1);
-            var temperature = TemperatureCurveMath.Evaluate(points, hour);
             var px = plot.X + plot.Width * hour / 24.0f;
-            var py = TemperatureToY(plot, temperature);
+            var py = ValueToY(plot, evaluate(hour));
             renderer.FillRoundedRect(new Rect(px - 1.5f, py - 1.5f, 3, 3), 1.5f, _curveColor);
         }
 
-        for (var i = 0; i < points.Count; i++)
+        foreach (var point in points)
         {
-            var point = points[i];
-            var px = plot.X + plot.Width * point.Hour / 24.0f;
-            var py = TemperatureToY(plot, point.TemperatureKelvin);
+            var px = plot.X + plot.Width * getHour(point) / 24.0f;
+            var py = ValueToY(plot, getValue(point));
             renderer.FillRoundedRect(new Rect(px - 5, py - 5, 10, 10), 5, _pointColor);
         }
     }
@@ -128,10 +126,8 @@ internal sealed class TemperatureCurveNode(
 
         var hour = Math.Clamp((Layout.Input.PointerX - plot.X) / plot.Width * 24.0f, 0.0f, 24.0f);
         var normalizedY = Math.Clamp((Layout.Input.PointerY - plot.Y) / plot.Height, 0.0f, 1.0f);
-        var temperature = (int)MathF.Round(
-            TemperatureCurveMath.MAXIMUM_TEMPERATURE -
-            normalizedY * (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE));
-        onPointChanged(dragState.PointIndex, hour, temperature);
+        var value = (int)MathF.Round(maximumValue - normalizedY * (maximumValue - minimumValue));
+        onPointChanged(dragState.PointIndex, hour, value);
     }
 
     private int FindClosestPoint(Rect plot, float pointerX, float pointerY)
@@ -140,8 +136,8 @@ internal sealed class TemperatureCurveNode(
         var closestDistance = float.MaxValue;
         for (var i = 0; i < points.Count; i++)
         {
-            var px = plot.X + plot.Width * points[i].Hour / 24.0f;
-            var py = TemperatureToY(plot, points[i].TemperatureKelvin);
+            var px = plot.X + plot.Width * getHour(points[i]) / 24.0f;
+            var py = ValueToY(plot, getValue(points[i]));
             var distance = (px - pointerX) * (px - pointerX) + (py - pointerY) * (py - pointerY);
             if (distance < closestDistance)
             {
@@ -153,8 +149,6 @@ internal sealed class TemperatureCurveNode(
         return closest;
     }
 
-    private static float TemperatureToY(Rect plot, int temperature) =>
-        plot.Y + plot.Height *
-        (TemperatureCurveMath.MAXIMUM_TEMPERATURE - temperature) /
-        (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE);
+    private float ValueToY(Rect plot, int value) =>
+        plot.Y + plot.Height * (maximumValue - value) / (maximumValue - minimumValue);
 }

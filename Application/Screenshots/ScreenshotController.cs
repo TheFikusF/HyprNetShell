@@ -122,6 +122,7 @@ internal sealed class ScreenshotController
         var y = MathF.Min(selection.StartY, selection.EndY) - 1;
         var width = MathF.Abs(selection.EndX - selection.StartX) + 2;
         var height = MathF.Abs(selection.EndY - selection.StartY) + 2;
+
         renderer.FillRect(new Rect(0, 0, x, renderer.Height), new Color(0, 0, 0, 0.48f));
         renderer.FillRect(new Rect(x + width, 0, renderer.Width - (x + width), renderer.Height), new Color(0, 0, 0, 0.48f));
         renderer.FillRect(new Rect(x, 0, width, y), new Color(0, 0, 0, 0.48f));
