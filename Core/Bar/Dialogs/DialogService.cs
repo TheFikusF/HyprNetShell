@@ -24,6 +24,7 @@ internal enum DialogKey
     PhysicalA,
     PhysicalS,
     PhysicalD,
+    PhysicalV,
     Shift,
     Space,
 }
@@ -153,7 +154,7 @@ public sealed class DialogService : IDisposable
             return;
         }
 
-        var input = new DialogInput(ToDialogKey(pressedKey), textInput, scrollDelta);
+        var input = new DialogInput(ToDialogKey(pressedKey, textInput), textInput, scrollDelta);
         if (state.Window.HandleInput(input) == DialogInputResult.Close)
         {
             Close();
@@ -225,7 +226,7 @@ public sealed class DialogService : IDisposable
         ? state
         : throw new InvalidOperationException($"Dialog window {type.Name} is not registered");
 
-    private static DialogKey ToDialogKey(int key) => key switch
+    private static DialogKey ToDialogKey(int key, string textInput) => key switch
     {
         1 => DialogKey.Escape,
         14 => DialogKey.Backspace,
@@ -238,6 +239,7 @@ public sealed class DialogService : IDisposable
         30 => DialogKey.PhysicalA,
         31 => DialogKey.PhysicalS,
         32 => DialogKey.PhysicalD,
+        47 when textInput.Length == 0 => DialogKey.PhysicalV,
         42 or 54 => DialogKey.Shift,
         57 => DialogKey.Space,
         103 => DialogKey.Up,

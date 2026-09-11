@@ -6,6 +6,7 @@ internal sealed class AppConfiguration
     public DisplayConfiguration Display { get; set; } = new();
     public BatteryConfiguration Battery { get; set; } = new();
     public WorldClocksConfiguration WorldClocks { get; set; } = new();
+    public CalendarConfiguration Calendars { get; set; } = new();
     public List<CompositeWindowConfigurationValue> CompositeWindows { get; set; } = [];
 }
 
@@ -70,6 +71,11 @@ internal sealed class WorldClocksConfiguration
         "America/Los_Angeles",
         "Asia/Tokyo",
     ];
+}
+
+internal sealed class CalendarConfiguration
+{
+    public List<string> Urls { get; set; } = [];
 }
 
 internal sealed class CompositeWindowConfigurationValue

@@ -13,12 +13,16 @@ namespace HyprNetShell.Core.Bar;
 
 public sealed class StatusBarServices : IDisposable
 {
-    private sealed class ScheduledService(IBarDataService service, TimeSpan interval)
+    private sealed class ScheduledService(
+        IBarDataService service,
+        TimeSpan interval,
+        TimeSpan? timeout = null)
     {
         private readonly long _intervalTicks = Math.Max(1, (long)Math.Ceiling(interval.TotalSeconds * Stopwatch.Frequency));
         private long _nextRefreshTimestamp;
 
         public IBarDataService Service { get; } = service;
+        public TimeSpan Timeout { get; } = timeout ?? TimeSpan.FromSeconds(2);
 
         public bool TrySchedule(long timestamp)
         {
@@ -39,10 +43,11 @@ public sealed class StatusBarServices : IDisposable
     private static readonly TimeSpan TrayRefreshInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan AudioFallbackInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan CalendarRefreshInterval = TimeSpan.FromHours(1);
 
     private readonly IReadOnlyCollection<ScheduledService> _scheduledServices;
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly List<IBarDataService> _dueServicesBuffer = [];
+    private readonly List<ScheduledService> _dueServicesBuffer = [];
     private Task? _refreshTask;
     private bool _connectionNotificationsInitialized;
     private bool _lastNetworkConnected;
@@ -74,6 +79,7 @@ public sealed class StatusBarServices : IDisposable
     internal BatteryModuleService Battery { get; }
     internal SystemStatsModuleService SystemStats { get; }
     internal WeatherService Weather { get; }
+    internal CalendarService Calendar { get; }
     internal DictionaryService Dictionary { get; }
 
     public DialogService Dialogs { get; }
@@ -98,6 +104,7 @@ public sealed class StatusBarServices : IDisposable
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
         Weather = new WeatherService();
+        Calendar = new CalendarService();
         Dictionary = new DictionaryService();
         Music = new MusicModuleService();
         ClipboardHistory = new ClipboardHistoryService(History);
@@ -111,6 +118,7 @@ public sealed class StatusBarServices : IDisposable
             Bluetooth,
             Wallpapers,
             Weather,
+            Calendar,
             Dictionary,
             Dialogs.Close,
             Theme.Default);
@@ -139,6 +147,7 @@ public sealed class StatusBarServices : IDisposable
             new(Battery, RecoveryInterval),
             new(SystemStats, FastSampleInterval),
             new(Tray, TrayRefreshInterval),
+            new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(15)),
         ];
     }
 
@@ -171,7 +180,7 @@ public sealed class StatusBarServices : IDisposable
         _dueServicesBuffer.Clear();
         foreach (var scheduled in _scheduledServices.Where(x => x.TrySchedule(now)))
         {
-            _dueServicesBuffer.Add(scheduled.Service);
+            _dueServicesBuffer.Add(scheduled);
         }
 
         if (_dueServicesBuffer.Count > 0)
@@ -256,25 +265,37 @@ public sealed class StatusBarServices : IDisposable
     private async Task RefreshStateAsync(
         CancellationToken cancellationToken)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(2));
         try
         {
             var refreshTasks = new Task[_dueServicesBuffer.Count];
             for (var index = 0; index < _dueServicesBuffer.Count; index++)
             {
-                refreshTasks[index] = _dueServicesBuffer[index].RefreshAsync(timeout.Token).AsTask();
+                refreshTasks[index] = RefreshScheduledServiceAsync(_dueServicesBuffer[index], cancellationToken);
             }
 
             await Task.WhenAll(refreshTasks);
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            AppLogger.Warning("StatusBar", "Bar service refresh timed out; keeping existing service state");
-        }
         catch (Exception exception)
         {
             AppLogger.Warning("StatusBar", "Could not refresh bar services; keeping their previous state", exception);
+        }
+    }
+
+    private static async Task RefreshScheduledServiceAsync(
+        ScheduledService scheduled,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(scheduled.Timeout);
+        try
+        {
+            await scheduled.Service.RefreshAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            AppLogger.Warning(
+                "StatusBar",
+                $"{scheduled.Service.GetType().Name} refresh timed out; keeping existing service state");
         }
     }
 
@@ -305,6 +326,7 @@ public sealed class StatusBarServices : IDisposable
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();
+        Calendar.Dispose();
         Weather.Dispose();
         Battery.Dispose();
         Bluetooth.Dispose();

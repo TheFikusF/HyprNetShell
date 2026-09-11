@@ -89,6 +89,7 @@ public sealed class StatusBar
         var weatherWidget = new WeatherWidget(services.Weather, Theme.Default);
         _centerModule = new CenterModule(
             services.Notifications,
+            services.Calendar,
             weatherWidget,
             services.Dialogs,
             services.Tabs,

@@ -36,6 +36,7 @@ internal sealed class CenterModule : IDrawableModule
 
     public CenterModule(
         NotificationService notificationService,
+        CalendarService calendar,
         WeatherWidget weather,
         DialogService dialogs,
         TabsService tabs,
@@ -48,7 +49,7 @@ internal sealed class CenterModule : IDrawableModule
         {
             HorizontalAlignment = ItemsAlignment.Center,
         };
-        _calendar = new CalendarWidget(theme);
+        _calendar = new CalendarWidget(calendar, theme);
         _worldClocks = new WorldClocksWidget(theme);
         _weather = weather;
         _dialogs = dialogs;
@@ -227,12 +228,20 @@ internal sealed class CenterModule : IDrawableModule
         [
             new BoxNode(new Style { Spacing = 12 }, verticalAlignment: ItemsAlignment.Stretch)
             {
-                _calendar.Draw(now), _worldClocks.Draw(now, OpenWorldClocks), _weather.Draw(OpenWeather)
+                _calendar.Draw(now, OpenCalendar, showTooltips: true),
+                _worldClocks.Draw(now, OpenWorldClocks),
+                _weather.Draw(OpenWeather)
             },
             ModulesCommon.BuildDivider(_theme.Border, height: 12),
             _notificationsWidget.Draw(snapshot),
         ],
     };
+
+    private void OpenCalendar()
+    {
+        _node.ClosePopup();
+        _dialogs.Open<CompositeWindow>([_tabs.Get<CalendarTab>()]);
+    }
 
     private void OpenWeather()
     {
