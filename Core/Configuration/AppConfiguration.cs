@@ -1,4 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace HyprNetShell.Core.Configuration;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true)]
+[JsonSerializable(typeof(AppConfiguration))]
+internal sealed partial class AppConfigurationJsonContext : JsonSerializerContext;
 
 internal sealed class AppConfiguration
 {

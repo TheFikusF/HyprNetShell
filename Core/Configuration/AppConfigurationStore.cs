@@ -1,19 +1,10 @@
+using System.Text.Json;
 using HyprNetShell.Core.Logging;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace HyprNetShell.Core.Configuration;
 
 internal sealed class AppConfigurationStore
 {
-    private static readonly ISerializer Serializer = new SerializerBuilder()
-        .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .Build();
-
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
-        .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .IgnoreUnmatchedProperties()
-        .Build();
 
     private readonly Lock _gate = new();
     private readonly string _path;
@@ -60,7 +51,10 @@ internal sealed class AppConfigurationStore
         try
         {
             return File.Exists(_path)
-                ? Deserializer.Deserialize<AppConfiguration>(File.ReadAllText(_path)) ?? new AppConfiguration()
+                ? JsonSerializer.Deserialize(
+                      File.ReadAllText(_path),
+                      AppConfigurationJsonContext.Default.AppConfiguration)
+                  ?? new AppConfiguration()
                 : new AppConfiguration();
         }
         catch (Exception exception)
@@ -78,7 +72,11 @@ internal sealed class AppConfigurationStore
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
                 var temporaryPath = _path + ".tmp";
-                File.WriteAllText(temporaryPath, Serializer.Serialize(_configuration));
+                File.WriteAllText(
+                    temporaryPath,
+                    JsonSerializer.Serialize(
+                        _configuration,
+                        AppConfigurationJsonContext.Default.AppConfiguration));
                 File.Move(temporaryPath, _path, overwrite: true);
             }
             catch (Exception exception)
@@ -96,6 +94,6 @@ internal sealed class AppConfigurationStore
             configRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
         }
 
-        return Path.Combine(configRoot, "hyprnetshell", "config.yaml");
+        return Path.Combine(configRoot, "hyprnetshell", "config.json");
     }
 }

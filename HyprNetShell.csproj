@@ -33,6 +33,7 @@
     </ItemGroup>
 
     <ItemGroup Condition="'$(PublishAot)' == 'true'">
+        <TrimmerRootAssembly Include="Ical.Net" />
         <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
         <DirectPInvoke Include="hypr_layer" />
         <LinkerArg Include="-lwayland-client" />
