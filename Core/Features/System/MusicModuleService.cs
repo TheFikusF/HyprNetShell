@@ -2,6 +2,7 @@ using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using HyprNetShell.Core.Features.Sni;
+using HyprNetShell.Core.Features.Spotify;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Tmds.DBus.Protocol;
@@ -16,8 +17,9 @@ internal sealed class MusicModuleService : IDisposable
 
     private static readonly HttpClient Http = new()
     {
-        Timeout = TimeSpan.FromMilliseconds(900),
+        Timeout = TimeSpan.FromSeconds(2),
     };
+    private readonly SpotifyPlaybackService _spotify;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private DBusConnection? _connection;
@@ -29,10 +31,18 @@ internal sealed class MusicModuleService : IDisposable
 
     public MusicSnapshot Snapshot => _cached;
 
-    public MusicModuleService()
+    internal Task RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshCachedAsync(cancellationToken, waitForGate: true);
+
+    public MusicModuleService(SpotifyPlaybackService spotify)
     {
+        _spotify = spotify;
+        _spotify.AvailabilityChanged += HandleSpotifyAvailabilityChanged;
         _ = EnsureInitializedAsync(CancellationToken.None);
     }
+
+    private void HandleSpotifyAvailabilityChanged() =>
+        _ = RefreshCachedAsync(CancellationToken.None, waitForGate: true);
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
@@ -105,7 +115,7 @@ internal sealed class MusicModuleService : IDisposable
                     var subscription = ((MusicModuleService Service, bool OnlyMprisOwnerChanges))notification.State!;
                     _ = subscription.Service.RefreshCachedAsync(
                         CancellationToken.None,
-                        waitForGate: false);
+                        waitForGate: true);
                 }
             },
             false,
@@ -132,10 +142,17 @@ internal sealed class MusicModuleService : IDisposable
             return;
         }
 
+            var spotify = info.IsSpotify
+                ? await _spotify.GetPlaybackAsync(cancellationToken)
+                : null;
             _cached = info with
             {
                 ImagePath = await LocalImagePathAsync(info.ArtUrl, cancellationToken),
                 PositionObservedAtUtc = DateTime.UtcNow,
+                Queue = spotify?.Queue ?? [],
+                SpotifyCurrentUri = spotify?.CurrentUri,
+                ShuffleEnabled = spotify?.ShuffleEnabled,
+                RepeatMode = spotify?.RepeatMode,
             };
         }
         catch
@@ -205,6 +222,86 @@ internal sealed class MusicModuleService : IDisposable
         }
 
         return best;
+    }
+
+    internal async Task ToggleSpotifyShuffleAsync(MusicSnapshot music, CancellationToken cancellationToken = default)
+    {
+        if (!music.IsSpotify || music.ShuffleEnabled is not bool enabled)
+        {
+            return;
+        }
+
+        if (await _spotify.ToggleShuffleAsync(enabled, cancellationToken))
+        {
+            _cached = _cached with { ShuffleEnabled = !enabled };
+            await RefreshCachedAsync(cancellationToken, waitForGate: true);
+        }
+    }
+
+    internal async Task CycleSpotifyRepeatAsync(MusicSnapshot music, CancellationToken cancellationToken = default)
+    {
+        if (!music.IsSpotify || music.RepeatMode is not MusicRepeatMode repeatMode)
+        {
+            return;
+        }
+
+        if (await _spotify.CycleRepeatAsync(repeatMode, cancellationToken) is { } next)
+        {
+            _cached = _cached with { RepeatMode = next };
+            await RefreshCachedAsync(cancellationToken, waitForGate: true);
+        }
+    }
+
+    internal async Task SkipToSpotifyQueuePositionAsync(
+        MusicSnapshot music,
+        int position,
+        CancellationToken cancellationToken = default)
+    {
+        if (!music.IsSpotify || position < 0 || position >= music.Queue.Count)
+        {
+            return;
+        }
+
+        if (await _spotify.SkipToQueuePositionAsync(position, cancellationToken))
+        {
+            await RefreshCachedAsync(cancellationToken, waitForGate: true);
+        }
+    }
+
+    internal async Task RemoveFromSpotifyQueueAsync(
+        MusicSnapshot music,
+        int position,
+        CancellationToken cancellationToken = default)
+    {
+        if (!music.IsSpotify ||
+            string.IsNullOrWhiteSpace(music.SpotifyCurrentUri) ||
+            position < 0 ||
+            position >= music.Queue.Count)
+        {
+            return;
+        }
+
+        if (await _spotify.RemoveFromQueueAsync(
+                music.SpotifyCurrentUri,
+                EffectivePosition(music),
+                music.Playing,
+                music.Queue,
+                position,
+                cancellationToken))
+        {
+            await RefreshCachedAsync(cancellationToken, waitForGate: true);
+        }
+    }
+
+    private static long EffectivePosition(MusicSnapshot music)
+    {
+        if (!music.Playing || music.LengthMicros <= 0)
+        {
+            return music.PositionMicros;
+        }
+
+        var elapsedMicros = Math.Max(0, (DateTime.UtcNow - music.PositionObservedAtUtc).Ticks / 10);
+        return Math.Min(music.LengthMicros, music.PositionMicros + elapsedMicros);
     }
 
     private static Task<string?> ReadMprisPropertyAsync(
@@ -345,6 +442,7 @@ internal sealed class MusicModuleService : IDisposable
 
     public void Dispose()
     {
+        _spotify.AvailabilityChanged -= HandleSpotifyAvailabilityChanged;
         DisposeConnection();
         _initializeGate.Dispose();
         _refreshGate.Dispose();
@@ -361,6 +459,8 @@ internal sealed class MusicModuleService : IDisposable
         _connection?.Dispose();
         _connection = null;
     }
+
+
 
     private sealed record MusicInfo(
         string Bus,

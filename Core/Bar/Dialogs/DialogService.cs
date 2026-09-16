@@ -53,10 +53,13 @@ public sealed class DialogService : IDisposable
         internal float Opacity { get; set; }
     }
 
-    private sealed record PendingCompositeOpen(Type WindowType, IReadOnlyList<IMainDialogTab> Tabs);
+    private sealed record PendingDialogRequest(
+        Type? WindowType = null,
+        IReadOnlyList<IMainDialogTab>? Tabs = null,
+        bool Close = false);
 
     private readonly Dictionary<Type, WindowState> _windows = [];
-    private readonly ConcurrentQueue<PendingCompositeOpen> _pendingCompositeOpens = new();
+    private readonly ConcurrentQueue<PendingDialogRequest> _pendingRequests = new();
     private WindowState? _activeWindow;
     private bool _disposed;
 
@@ -109,6 +112,18 @@ public sealed class DialogService : IDisposable
         ToggleState(state);
     }
 
+    internal void RequestOpen<T>() where T : class, IDialogWindow
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (typeof(T) == typeof(CompositeWindow))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(CompositeWindow)} must be opened with a non-empty tab collection.");
+        }
+
+        _pendingRequests.Enqueue(new PendingDialogRequest(typeof(T)));
+    }
+
     internal void RequestOpen<T>(IReadOnlyList<IMainDialogTab> tabs) where T : class, IDialogWindow
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -119,17 +134,33 @@ public sealed class DialogService : IDisposable
         }
 
         ArgumentOutOfRangeException.ThrowIfZero(tabs.Count);
-        _pendingCompositeOpens.Enqueue(new PendingCompositeOpen(typeof(T), tabs));
+        _pendingRequests.Enqueue(new PendingDialogRequest(typeof(T), tabs));
+    }
+
+    internal void RequestClose()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _pendingRequests.Enqueue(new PendingDialogRequest(Close: true));
     }
 
     public void ProcessPendingRequests()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        while (_pendingCompositeOpens.TryDequeue(out var request))
+        while (_pendingRequests.TryDequeue(out var request))
         {
-            var state = GetState(request.WindowType);
-            var compositeWindow = (CompositeWindow)state.Window;
-            compositeWindow.SetTabs(request.Tabs);
+            if (request.Close)
+            {
+                Close();
+                continue;
+            }
+
+            var state = GetState(request.WindowType!);
+            if (request.Tabs is { } tabs)
+            {
+                var compositeWindow = (CompositeWindow)state.Window;
+                compositeWindow.SetTabs(tabs);
+            }
+
             OpenState(state, restart: true);
         }
     }

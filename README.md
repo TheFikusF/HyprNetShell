@@ -39,6 +39,8 @@ The layer-shell protocol XML is vendored in `Native/protocols/`, so a separate `
 
 Runtime features additionally use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-clipboard`, `hyprpaper`, and `hyprsunset`. Media metadata and controls use MPRIS over the session D-Bus.
 
+Online account credentials require a Freedesktop Secret Service provider such as GNOME Keyring, KDE Wallet, or KeePassXC with Secret Service enabled. HyprNetShell does not fall back to plaintext credential files.
+
 ### Steps
 
 From the repository root, build the native library first:
@@ -62,7 +64,35 @@ dotnet run --project HyprNetShell.csproj
 
 The managed build copies `Native/build/libhypr_layer.so` into the executable output directory. If the native library is missing, the build emits a warning and the application cannot start.
 
-For a self-contained NativeAOT build:
+## Online account setup
+
+The Settings → Accounts tab supports Google, Spotify, and ChatGPT sign-in. Client IDs can be saved directly in that tab, supplied through the environment, or embedded during publishing. Resolution uses this priority:
+
+1. client ID embedded in the published build;
+2. environment variable;
+3. value saved in `config.json` through Settings → Accounts.
+
+The supported environment variables are:
+
+```bash
+export HYPRNETSHELL_GOOGLE_CLIENT_ID="your-google-desktop-client-id"
+export HYPRNETSHELL_SPOTIFY_CLIENT_ID="your-spotify-client-id"
+export HYPRNETSHELL_OPENAI_CLIENT_ID="your-openai-client-id"
+```
+
+Create the Google credential as a **Desktop app** OAuth client. For Spotify, use Authorization Code with PKCE and register the exact loopback redirect URI `http://127.0.0.1:5543/auth/callback`. Spotify permits HTTP for explicit loopback IP addresses, but not for ordinary remote hosts or `localhost`. Client IDs are public identifiers; no client secret should be placed in the configuration, environment, or binary.
+
+The initial Google connection requests identity scopes only, and the initial Spotify connection requests no optional scopes. Feature-specific permissions will be added alongside the features that need them.
+
+ChatGPT sign-in currently mirrors Zed's Codex OAuth flow. This uses OpenAI's first-party OAuth registration and is not published as a stable third-party integration API, so it may stop working if OpenAI changes that flow.
+
+For a self-contained NativeAOT build with embedded IDs, edit the local, gitignored `credentials.sh` and run:
+
+```bash
+./publish.sh
+```
+
+Only non-empty values from `credentials.sh` are embedded. `publish.sh` accepts additional `dotnet publish` arguments. A direct publish remains available when no embedding is wanted:
 
 ```bash
 dotnet publish HyprNetShell.csproj \

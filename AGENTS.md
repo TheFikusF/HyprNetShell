@@ -176,6 +176,8 @@ When XDG variables are unset, use the existing `~/.config` and `~/.local/state` 
 
 Use `AppLogger` for runtime failures in Core. Expected optional-feature failures should usually be warnings or empty states, while fatal startup/frame-loop failures are handled in `Program.cs`.
 
+Do not silently swallow runtime failures. Any caught exception or unsuccessful external HTTP/process result that causes a fallback, empty snapshot, preserved snapshot, or failed user action must be logged with the operation and actionable failure details. Expected cancellation and the normal absence of an optional account, service, or hardware do not require warnings. Never include access tokens, credentials, authorization headers, or other secrets in logs.
+
 ## Coding conventions
 
 - Target frameworks are .NET 10 for runtime projects and `netstandard2.0` for the generator.

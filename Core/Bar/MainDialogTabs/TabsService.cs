@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Platform;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
@@ -13,6 +14,7 @@ internal sealed class TabsService : IDisposable
     internal TabsService(
         ClipboardHistoryService clipboardHistory,
         IHyprctl hyprctl,
+        UrlLauncher urlLauncher,
         NetworkModuleService network,
         BluetoothModuleService bluetooth,
         WallpaperModuleService wallpapers,
@@ -24,7 +26,7 @@ internal sealed class TabsService : IDisposable
     {
         _tabs =
         [
-            new UnifiedSearchTab(hyprctl, closeDialog, theme),
+            new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, theme),
             new ApplicationLauncherTab(hyprctl, closeDialog, theme),
             new CalculatorTab(theme),
             new DictionaryTab(dictionary, theme),

@@ -3,9 +3,12 @@ using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.OnlineAccounts;
 using HyprNetShell.Core.Features.Sni;
+using HyprNetShell.Core.Features.Spotify;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
+using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using HyprNetShell.Rendering;
 
@@ -64,10 +67,12 @@ public sealed class StatusBarServices : IDisposable
     internal CompositeWindowService CompositeWindows { get; }
     internal IHyprctl Hyprctl { get; }
     internal HyprlandService Hyprland { get; }
+    internal UrlLauncher UrlLauncher { get; }
     internal KeyStateService SuperKey { get; }
     internal NotificationService Notifications { get; }
     internal ScreenshotService Screenshots { get; }
     internal MusicModuleService Music { get; }
+    internal SpotifyPlaybackService Spotify { get; }
     internal ClipboardHistoryService ClipboardHistory { get; }
     internal WallpaperModuleService Wallpapers { get; }
     internal SniTrayService Tray { get; }
@@ -81,6 +86,7 @@ public sealed class StatusBarServices : IDisposable
     internal WeatherService Weather { get; }
     internal CalendarService Calendar { get; }
     internal DictionaryService Dictionary { get; }
+    internal OnlineAccountsService OnlineAccounts { get; }
 
     public DialogService Dialogs { get; }
 
@@ -92,6 +98,8 @@ public sealed class StatusBarServices : IDisposable
         History = new HistoryStore();
         Hyprctl = new Hyprctl();
         Hyprland = new HyprlandService();
+        Dialogs = new DialogService();
+        UrlLauncher = new UrlLauncher(Hyprland, Hyprctl, Dialogs.RequestClose);
         Notifications = new NotificationService(Hyprland, Hyprctl, History);
         Screenshots = new ScreenshotService(Hyprctl);
         SuperKey = new KeyStateService(Hyprctl);
@@ -103,17 +111,19 @@ public sealed class StatusBarServices : IDisposable
         Bluetooth = new BluetoothModuleService();
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
-        Weather = new WeatherService();
+        Weather = new WeatherService(UrlLauncher);
         Calendar = new CalendarService();
         Dictionary = new DictionaryService();
-        Music = new MusicModuleService();
+        OnlineAccounts = new OnlineAccountsService(UrlLauncher);
+        Spotify = new SpotifyPlaybackService(OnlineAccounts);
+        Music = new MusicModuleService(Spotify);
         ClipboardHistory = new ClipboardHistoryService(History);
         Tray = new SniTrayService();
 
-        Dialogs = new DialogService();
         Tabs = new TabsService(
             ClipboardHistory,
             Hyprctl,
+            UrlLauncher,
             Network,
             Bluetooth,
             Wallpapers,
@@ -137,6 +147,8 @@ public sealed class StatusBarServices : IDisposable
             tabs => Dialogs.Open<CompositeWindow>(tabs),
             Theme.Default));
 
+        OnlineAccounts.AuthorizationCallbackReceived += HandleAuthorizationCallbackReceived;
+
         _scheduledServices =
         [
             new(Network, RecoveryInterval),
@@ -150,6 +162,16 @@ public sealed class StatusBarServices : IDisposable
             new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(15)),
         ];
     }
+
+
+    private void HandleAuthorizationCallbackReceived()
+    {
+        if (!_disposed)
+        {
+            Dialogs.RequestOpen<SettingsDialog>();
+        }
+    }
+
 
     internal void RequestLockScreen() => Interlocked.Exchange(ref _lockScreenRequested, 1);
 
@@ -320,12 +342,15 @@ public sealed class StatusBarServices : IDisposable
             AppLogger.Warning("StatusBar", "Bar service refresh did not stop cleanly", exception);
         }
 
+        OnlineAccounts.AuthorizationCallbackReceived -= HandleAuthorizationCallbackReceived;
         CompositeWindows.Dispose();
         Dialogs.Dispose();
         Tabs.Dispose();
         Tray.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();
+        Spotify.Dispose();
+        OnlineAccounts.Dispose();
         Calendar.Dispose();
         Weather.Dispose();
         Battery.Dispose();
@@ -336,6 +361,7 @@ public sealed class StatusBarServices : IDisposable
         SuperKey.Dispose();
         Screenshots.Dispose();
         Notifications.Dispose();
+        UrlLauncher.Dispose();
         Hyprland.Dispose();
         Hyprctl.Dispose();
         History.Dispose();

@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
+using HyprNetShell.Core.Platform;
 
 namespace HyprNetShell.Core.Features.System;
 
@@ -14,6 +14,7 @@ internal sealed class WeatherService : IDisposable
 
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly UrlLauncher _urlLauncher;
     private readonly double _latitude;
     private readonly double _longitude;
     private readonly string _browserUrl;
@@ -23,8 +24,9 @@ internal sealed class WeatherService : IDisposable
     private Task? _refreshTask;
     private bool _disposed;
 
-    internal WeatherService()
+    internal WeatherService(UrlLauncher urlLauncher)
     {
+        _urlLauncher = urlLauncher;
         _latitude = ReadCoordinate("HYPRNETSHELL_WEATHER_LATITUDE", 49.195278);
         _longitude = ReadCoordinate("HYPRNETSHELL_WEATHER_LONGITUDE", 16.608333);
         Location = Environment.GetEnvironmentVariable("HYPRNETSHELL_WEATHER_LOCATION")?.Trim() is { Length: > 0 } name
@@ -76,21 +78,7 @@ internal sealed class WeatherService : IDisposable
         _ => new("🌡️", "Weather"),
     };
 
-    internal void OpenInBrowser()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = _browserUrl,
-                UseShellExecute = true,
-            });
-        }
-        catch
-        {
-            // Browser integration is optional.
-        }
-    }
+    internal void OpenInBrowser() => _urlLauncher.TryOpen(_browserUrl);
 
     private void EnsureRefresh()
     {

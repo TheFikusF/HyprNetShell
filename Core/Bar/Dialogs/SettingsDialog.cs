@@ -33,6 +33,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         _tabs =
         [
             new Tab(new ConfigurationTab(services.Wallpapers, services.History, theme)),
+            new Tab(new OnlineAccountsConfigurationTab(services.OnlineAccounts, theme)),
             new Tab(new CalendarSourcesConfigurationTab(services.Calendar, theme)),
             new Tab(new CompositeWindowsConfigurationTab(configuration, tabs, openCompositeWindow, theme)),
         ];

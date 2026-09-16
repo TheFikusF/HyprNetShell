@@ -3,6 +3,7 @@ using System.Globalization;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Platform;
 
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -13,6 +14,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class UnifiedSearchTab(
     IHyprctl hyprctl,
+    UrlLauncher urlLauncher,
     Action closeDialog,
     Theme theme) : IMainDialogTab, IDisposable
 {
@@ -102,7 +104,6 @@ internal sealed class UnifiedSearchTab(
                 break;
             case ResultKind.BrowserSearch:
                 OpenBrowserSearch(result.Value);
-                closeDialog();
                 break;
         }
     }
@@ -312,21 +313,8 @@ internal sealed class UnifiedSearchTab(
         query.All(character => char.IsDigit(character) || char.IsWhiteSpace(character) ||
             character is '.' or ',' or '+' or '-' or '*' or '/' or '(' or ')');
 
-    private static void OpenBrowserSearch(string query)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = $"https://www.google.com/search?q={Uri.EscapeDataString(query)}",
-                UseShellExecute = true,
-            });
-        }
-        catch
-        {
-            // Browser integration is optional; keep the shell responsive if no handler exists.
-        }
-    }
+    private void OpenBrowserSearch(string query) =>
+        urlLauncher.TryOpen($"https://www.google.com/search?q={Uri.EscapeDataString(query)}");
 
     private static void CopyToClipboard(string text)
     {

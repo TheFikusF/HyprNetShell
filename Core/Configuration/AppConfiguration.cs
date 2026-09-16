@@ -16,6 +16,7 @@ internal sealed class AppConfiguration
     public BatteryConfiguration Battery { get; set; } = new();
     public WorldClocksConfiguration WorldClocks { get; set; } = new();
     public CalendarConfiguration Calendars { get; set; } = new();
+    public OnlineAccountsConfiguration OnlineAccounts { get; set; } = new();
     public List<CompositeWindowConfigurationValue> CompositeWindows { get; set; } = [];
 }
 
@@ -85,6 +86,13 @@ internal sealed class WorldClocksConfiguration
 internal sealed class CalendarConfiguration
 {
     public List<string> Urls { get; set; } = [];
+}
+
+internal sealed class OnlineAccountsConfiguration
+{
+    public string GoogleClientId { get; set; } = "";
+    public string SpotifyClientId { get; set; } = "";
+    public string OpenAiClientId { get; set; } = "";
 }
 
 internal sealed class CompositeWindowConfigurationValue

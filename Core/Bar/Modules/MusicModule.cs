@@ -22,12 +22,15 @@ internal sealed class MusicModule(
         PlayPause,
         Previous,
         Next,
+        Shuffle,
+        Repeat,
     }
 
     private const int VISIBLE_CHARACTERS = 35;
     private const int IMAGE_SIZE = 34;
     private const int POPUP_WIDTH = 512 + 64;
     private const int POPUP_IMAGE_SIZE = 128 + 64;
+    private const int QUEUE_IMAGE_SIZE = 42;
 
     private readonly NodeWithPopup _node = new(popupCoordinator, "music_module")
     {
@@ -35,6 +38,8 @@ internal sealed class MusicModule(
     };
 
     private readonly Dictionary<PlayerAction, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<(string Uri, int Position), ModulesCommon.BoxState> _queueCoverStates = [];
+    private readonly Dictionary<(string Uri, int Position), ModulesCommon.BoxState> _queueRemoveStates = [];
     private readonly Ref<bool> _progressDragging = new();
     private readonly ModulesCommon.BoxState _coverButton = new() { Background = Color.White with { A = 0 } };
     private readonly SeekUpdateQueue _seekQueue = new();
@@ -177,9 +182,19 @@ internal sealed class MusicModule(
 
     private BoxNode BuildPopup(MusicSnapshot music) => new(POPUP_WIDTH)
     {
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.PopupStyle(theme),
+        Children = music.IsSpotify
+            ? [BuildNowPlaying(music), BuildSpotifyQueue(music)]
+            : [BuildNowPlaying(music)]
+    };
+
+    private BoxNode BuildNowPlaying(MusicSnapshot music) => new(height: POPUP_IMAGE_SIZE)
+    {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = Style.Spacer,
         Children =
         [
             BuildPopupImage(music),
@@ -213,13 +228,22 @@ internal sealed class MusicModule(
                                 Direction = Direction.Horizontal,
                                 HorizontalAlignment = ItemsAlignment.Center,
                                 VerticalAlignment = ItemsAlignment.Center,
-                                Style = new Style { Spacing = 12 },
-                                Children =
-                                [
-                                    BuildControlButton(PlayerAction.Previous, music),
-                                    BuildControlButton(PlayerAction.PlayPause, music),
-                                    BuildControlButton(PlayerAction.Next, music),
-                                ]
+                                Style = new Style { Spacing = music.IsSpotify ? 9 : 12 },
+                                Children = music.IsSpotify
+                                    ?
+                                    [
+                                        BuildControlButton(PlayerAction.Shuffle, music),
+                                        BuildControlButton(PlayerAction.Previous, music),
+                                        BuildControlButton(PlayerAction.PlayPause, music),
+                                        BuildControlButton(PlayerAction.Next, music),
+                                        BuildControlButton(PlayerAction.Repeat, music),
+                                    ]
+                                    :
+                                    [
+                                        BuildControlButton(PlayerAction.Previous, music),
+                                        BuildControlButton(PlayerAction.PlayPause, music),
+                                        BuildControlButton(PlayerAction.Next, music),
+                                    ]
                             }
                         ]
                     },
@@ -227,6 +251,126 @@ internal sealed class MusicModule(
             }
         ]
     };
+
+    private BoxNode BuildSpotifyQueue(MusicSnapshot music) => new()
+    {
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = Style.Spacer,
+        Children =
+        [
+            ModulesCommon.BuildDivider(theme.Text, height: 0),
+            new TextNode("QUEUE", theme.Text, theme.Text),
+            ..BuildQueueRows(music)
+        ]
+    };
+
+    private IEnumerable<Node> BuildQueueRows(MusicSnapshot music)
+    {
+        if (music.Queue.Count == 0)
+        {
+            yield return new TextNode(
+                "Queue unavailable — reconnect Spotify in Accounts",
+                theme.Text,
+                theme.Text.MutedColor);
+            yield break;
+        }
+
+        foreach (var (song, index) in music.Queue.Take(3).Select((song, index) => (song, index)))
+        {
+            yield return BuildQueueRow(music, song, index);
+        }
+    }
+
+    private BoxNode BuildQueueRow(MusicSnapshot music, QueuedSong song, int position) => new(height: QUEUE_IMAGE_SIZE)
+    {
+        Direction = Direction.Horizontal,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = Style.Spacer,
+        Children =
+        [
+            BuildQueueCover(music, song, position),
+            new BoxNode
+            {
+                Direction = Direction.Vertical,
+                Style = new Style { Spacing = 2 },
+                Children =
+                [
+                    new MarqueeTextNode(song.Title, 44, theme.Text, theme.Text),
+                    new MarqueeTextNode(song.Artist, 50, 12.0f, theme.Text.MutedColor),
+                ]
+            },
+            // BuildQueueRemoveButton(music, song, position),
+        ]
+    };
+
+    private Node BuildQueueCover(MusicSnapshot music, QueuedSong song, int position)
+    {
+        var state = _queueCoverStates.GetState((song.Uri, position), Color.White with { A = 0 });
+        state.Background = Color.LerpSmooth(
+            state.Background,
+            state.Hovered || string.IsNullOrWhiteSpace(song.ImagePath)
+                ? Color.White
+                : Color.White with { A = 0 },
+            18.0f,
+            Renderer.DeltaTime);
+
+        return new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE)
+        {
+            OnClick = () => _ = service.SkipToSpotifyQueuePositionAsync(music, position),
+            Style = new Style { BorderRadius = 4 },
+            Children =
+            [
+                string.IsNullOrWhiteSpace(song.ImagePath)
+                    ? new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE)
+                    {
+                        HorizontalAlignment = ItemsAlignment.Center,
+                        VerticalAlignment = ItemsAlignment.Center,
+                        Style = new Style { BackgroundColor = theme.Panel, BorderRadius = 4 },
+                        Children = [new ImageNode(Icons.MusicNotes[0], 18, 18, theme.Text.MutedColor)]
+                    }
+                    : new ImageNode(song.ImagePath, QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE),
+                new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE)
+                {
+                    IgnoreLayout = true,
+                    HorizontalAlignment = ItemsAlignment.Center,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    IsHovered = state.Hovered,
+                    Style = new Style
+                    {
+                        BackgroundColor = Color.Black with
+                        {
+                            A = state.Background.A * (string.IsNullOrWhiteSpace(song.ImagePath) ? 0 : 0.6f)
+                        },
+                        BorderRadius = 4,
+                    },
+                    Children = [new ImageNode(Icons.Play, 18, 18, state.Background)]
+                }
+            ]
+        };
+    }
+
+    private Node BuildQueueRemoveButton(MusicSnapshot music, QueuedSong song, int position)
+    {
+        var transparent = Color.White with { A = 0 };
+        var state = _queueRemoveStates.GetState((song.Uri, position), transparent);
+        state.Background = Color.LerpSmooth(
+            state.Background,
+            state.Hovered ? Color.White with { A = 0.3f } : transparent,
+            18.0f,
+            Renderer.DeltaTime);
+
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            IsHovered = state.Hovered,
+            OnClick = () => _ = service.RemoveFromSpotifyQueueAsync(music, position),
+            Style = new Style { BackgroundColor = state.Background, BorderRadius = 8 },
+            Children = [new ImageNode(Icons.Delete, 16, 16, theme.Text)]
+        };
+    }
 
     private Node BuildPopupImage(MusicSnapshot music) =>
         string.IsNullOrWhiteSpace(music.ImagePath)
@@ -303,7 +447,13 @@ internal sealed class MusicModule(
         var size = action == PlayerAction.PlayPause ? 44 : 36;
         var iconSize = action == PlayerAction.PlayPause ? 20 : 14;
 
-        var defaultColor = action == PlayerAction.PlayPause ? theme.Active : theme.Panel;
+        var active = action switch
+        {
+            PlayerAction.Shuffle => music.ShuffleEnabled == true,
+            PlayerAction.Repeat => music.RepeatMode is not null and not MusicRepeatMode.Off,
+            _ => false,
+        };
+        var defaultColor = action == PlayerAction.PlayPause || active ? theme.Active : theme.Panel;
         var state = _buttonStates.GetState(action, defaultColor);
         var target = state.Hovered
             ? Color.Lighten(defaultColor, 0.16f)
@@ -328,6 +478,8 @@ internal sealed class MusicModule(
                     PlayerAction.PlayPause => music.Playing ? Icons.Pause : Icons.Play,
                     PlayerAction.Previous => Icons.SkipBack,
                     PlayerAction.Next => Icons.SkipForward,
+                    PlayerAction.Shuffle => Icons.Shuffle,
+                    PlayerAction.Repeat => music.RepeatMode == MusicRepeatMode.Track ? Icons.RepeatOne : Icons.Repeat,
                     _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
                 }, iconSize, iconSize, theme.Text)
             ]
@@ -358,18 +510,35 @@ internal sealed class MusicModule(
         return $"{minutes}:{seconds:00}";
     }
 
-    private static void Control(MusicSnapshot music, PlayerAction action)
+    private void Control(MusicSnapshot music, PlayerAction action)
     {
+        if (action == PlayerAction.Shuffle)
+        {
+            _ = service.ToggleSpotifyShuffleAsync(music);
+            return;
+        }
+
+        if (action == PlayerAction.Repeat)
+        {
+            _ = service.CycleSpotifyRepeatAsync(music);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(music.Bus))
         {
             return;
         }
 
-        _ = Task.Run(() => CommandRunner.TryReadAsync(
-            "gdbus",
-            $"call --session --dest {music.Bus} --object-path /org/mpris/MediaPlayer2 --method org.mpris.MediaPlayer2.Player.{action}",
-            TimeSpan.FromMilliseconds(500),
-            CancellationToken.None));
+        _ = Task.Run(async () =>
+        {
+            await CommandRunner.TryReadAsync(
+                "gdbus",
+                $"call --session --dest {music.Bus} --object-path /org/mpris/MediaPlayer2 --method org.mpris.MediaPlayer2.Player.{action}",
+                TimeSpan.FromMilliseconds(500),
+                CancellationToken.None);
+            await Task.Delay(150);
+            await service.RefreshAsync();
+        });
     }
 
     private sealed class SeekUpdateQueue
