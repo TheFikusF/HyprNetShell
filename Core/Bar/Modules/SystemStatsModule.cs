@@ -117,7 +117,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         {
             Module(Icons.CPU, FormatPercent(stats.CpuPercent), _currentCpuColor, true, false),
             Module(Icons.RAM, FormatPercent(stats.RamPercent), _currentRamColor, false, false),
-            Module(Icons.Temperature, FormatPercent(stats.TemperatureCelsius), _currentTempColor, false, true),
+            Module(Icons.Temperature, FormatTemperature(stats.TemperatureCelsius), _currentTempColor, false, true),
         },
     };
 

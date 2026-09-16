@@ -4,91 +4,16 @@ namespace HyprNetShell.Rendering;
 
 internal static class GlShaders
 {
-    public const string COLORED_VERTEX = """
-        #version 330 core
-        layout (location = 0) in vec2 aPosition;
-        layout (location = 1) in vec4 aColor;
+    private const string RESOURCE_PREFIX = "HyprNetShell.Shaders.";
 
-        uniform vec2 uViewport;
-        out vec4 vColor;
-
-        void main()
-        {
-            vec2 zeroToOne = aPosition / uViewport;
-            vec2 clip = zeroToOne * 2.0 - 1.0;
-            gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
-            vColor = aColor;
-        }
-        """;
-
-    public const string COLORED_FRAGMENT = """
-        #version 330 core
-        in vec4 vColor;
-        out vec4 FragColor;
-
-        void main()
-        {
-            FragColor = vColor;
-        }
-        """;
-
-    public const string TEXTURED_VERTEX = """
-        #version 330 core
-        layout (location = 0) in vec2 aPosition;
-        layout (location = 1) in vec2 aTexCoord;
-
-        uniform vec2 uViewport;
-        out vec2 vTexCoord;
-
-        void main()
-        {
-            vec2 zeroToOne = aPosition / uViewport;
-            vec2 clip = zeroToOne * 2.0 - 1.0;
-            gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
-            vTexCoord = aTexCoord;
-        }
-        """;
-
-    public const string TEXTURE_FRAGMENT = """
-        #version 330 core
-        in vec2 vTexCoord;
-        uniform sampler2D uTexture;
-        uniform vec4 uColor;
-        out vec4 FragColor;
-
-        void main()
-        {
-            FragColor = texture(uTexture, vTexCoord) * uColor;
-        }
-        """;
-
-    public const string SVG_TEXTURE_FRAGMENT = """
-        #version 330 core
-        in vec2 vTexCoord;
-        uniform sampler2D uTexture;
-        uniform vec4 uColor;
-        out vec4 FragColor;
-
-        void main()
-        {
-            float alpha = texture(uTexture, vTexCoord).a;
-            FragColor = vec4(uColor.rgb, uColor.a * alpha);
-        }
-        """;
-
-    public const string ALPHA_TEXTURE_FRAGMENT = """
-        #version 330 core
-        in vec2 vTexCoord;
-        uniform sampler2D uAtlas;
-        uniform vec4 uColor;
-        out vec4 FragColor;
-
-        void main()
-        {
-            float alpha = texture(uAtlas, vTexCoord).r;
-            FragColor = vec4(uColor.rgb, uColor.a * alpha);
-        }
-        """;
+    public static readonly string COLORED_VERTEX = Load("colored.vert.glsl");
+    public static readonly string COLORED_FRAGMENT = Load("colored.frag.glsl");
+    public static readonly string ROUNDED_VERTEX = Load("rounded.vert.glsl");
+    public static readonly string ROUNDED_FRAGMENT = Load("rounded.frag.glsl");
+    public static readonly string TEXTURED_VERTEX = Load("textured.vert.glsl");
+    public static readonly string TEXTURE_FRAGMENT = Load("texture.frag.glsl");
+    public static readonly string SVG_TEXTURE_FRAGMENT = Load("svg-texture.frag.glsl");
+    public static readonly string ALPHA_TEXTURE_FRAGMENT = Load("alpha-texture.frag.glsl");
 
     public static uint CreateProgram(GL gl, string vertexShader, string fragmentShader, string label)
     {
@@ -107,6 +32,15 @@ internal static class GlShaders
         gl.DeleteShader(vs);
         gl.DeleteShader(fs);
         return program;
+    }
+
+    private static string Load(string fileName)
+    {
+        var resourceName = RESOURCE_PREFIX + fileName;
+        using var stream = typeof(GlShaders).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded GLSL resource '{resourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     private static uint CompileShader(GL gl, ShaderType type, string source, string label)

@@ -7,18 +7,13 @@ namespace HyprNetShell.Rendering;
 
 public sealed unsafe class Renderer : IRenderApi, IDisposable
 {
-    private const int MAX_SHADOW_CACHE_ENTRIES = 256;
-    private const int MAX_SHADOW_CACHE_BYTES = 64 * 1024 * 1024;
+    private const int MAX_GRADIENT_STOPS = 64;
     private const float MAX_SHADOW_DISTANCE = 256.0f;
 
-    private readonly record struct ShadowTextureKey(
-        int Width,
-        int Height,
-        BorderRadius Radius,
-        float Distance,
-        int Spread);
-
-    private readonly record struct CachedShadow(Texture Texture, long LastAccess, int ByteSize);
+    private const int ROUNDED_MODE_SOLID = 0;
+    private const int ROUNDED_MODE_BORDER = 1;
+    private const int ROUNDED_MODE_GRADIENT = 2;
+    private const int ROUNDED_MODE_SHADOW = 3;
 
     private readonly GL _gl;
 
@@ -29,6 +24,23 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly List<float> _coloredVertices = new(6 * 6);
 
     private readonly int _viewportLocation;
+
+    private readonly uint _roundedProgram;
+    private readonly uint _roundedVao;
+    private readonly uint _roundedVbo;
+    private readonly int _roundedViewportLocation;
+    private readonly int _roundedSizeLocation;
+    private readonly int _roundedRadiiLocation;
+    private readonly int _roundedColorLocation;
+    private readonly int _roundedModeLocation;
+    private readonly int _roundedThicknessLocation;
+    private readonly int _roundedInnerRadiiLocation;
+    private readonly int _roundedShadowDistanceLocation;
+    private readonly int _roundedGradientDirectionLocation;
+    private readonly int _roundedGradientOffsetLocation;
+    private readonly int _roundedGradientStopCountLocation;
+    private readonly int _roundedGradientPositionsLocation;
+    private readonly int _roundedGradientColorsLocation;
 
     private readonly uint _textureProgram;
     private readonly uint _textureVao;
@@ -43,11 +55,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly int _svgTextureColorLocation;
 
     private readonly TextureRepository _textureRepository;
-    private readonly Dictionary<ShadowTextureKey, CachedShadow> _shadowTextures = [];
 
     private readonly FontRenderer _font;
-    private long _shadowAccessCounter;
-    private long _shadowCacheBytes;
 
     private bool _disposed;
     private bool _diagnosticsEnabled;
@@ -80,6 +89,23 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl = GL.GetApi(getProcAddress);
         _program = GlShaders.CreateProgram(_gl, GlShaders.COLORED_VERTEX, GlShaders.COLORED_FRAGMENT, "colored");
         _viewportLocation = _gl.GetUniformLocation(_program, "uViewport");
+
+        _roundedProgram = GlShaders.CreateProgram(
+            _gl, GlShaders.ROUNDED_VERTEX, GlShaders.ROUNDED_FRAGMENT, "rounded shape");
+        _roundedViewportLocation = _gl.GetUniformLocation(_roundedProgram, "uViewport");
+        _roundedSizeLocation = _gl.GetUniformLocation(_roundedProgram, "uSize");
+        _roundedRadiiLocation = _gl.GetUniformLocation(_roundedProgram, "uRadii");
+        _roundedColorLocation = _gl.GetUniformLocation(_roundedProgram, "uColor");
+        _roundedModeLocation = _gl.GetUniformLocation(_roundedProgram, "uMode");
+        _roundedThicknessLocation = _gl.GetUniformLocation(_roundedProgram, "uThickness");
+        _roundedInnerRadiiLocation = _gl.GetUniformLocation(_roundedProgram, "uInnerRadii");
+        _roundedShadowDistanceLocation = _gl.GetUniformLocation(_roundedProgram, "uShadowDistance");
+        _roundedGradientDirectionLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientDirection");
+        _roundedGradientOffsetLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientOffset");
+        _roundedGradientStopCountLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientStopCount");
+        _roundedGradientPositionsLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientPositions[0]");
+        _roundedGradientColorsLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientColors[0]");
+
         _textureProgram = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "texture");
         _textureViewportLocation = _gl.GetUniformLocation(_textureProgram, "uViewport");
         _textureLocation = _gl.GetUniformLocation(_textureProgram, "uTexture");
@@ -99,6 +125,16 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.EnableVertexAttribArray(0);
         _gl.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, 6 * sizeof(float),
             (void*)(2 * sizeof(float)));
+        _gl.EnableVertexAttribArray(1);
+
+        _roundedVao = _gl.GenVertexArray();
+        _roundedVbo = _gl.GenBuffer();
+        _gl.BindVertexArray(_roundedVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedVbo);
+        _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(6 * 4 * sizeof(float)), null, BufferUsageARB.DynamicDraw);
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
+        _gl.EnableVertexAttribArray(0);
+        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
         _gl.EnableVertexAttribArray(1);
 
         _textureVao = _gl.GenVertexArray();
@@ -189,32 +225,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
         RecordShadow();
         distance = MathF.Min(distance, MAX_SHADOW_DISTANCE);
-        var width = Math.Max(1, (int)MathF.Ceiling(rect.Width));
-        var height = Math.Max(1, (int)MathF.Ceiling(rect.Height));
-        var spread = Math.Max(1, (int)MathF.Ceiling(distance));
-        radius = ClampCornerRadius(radius, width, height);
-        var key = new ShadowTextureKey(width, height, radius, distance, spread);
-
-        if (!_shadowTextures.TryGetValue(key, out var cached))
-        {
-            var byteSize = checked((width + spread * 2) * (height + spread * 2) * 4);
-            cached = new CachedShadow(CreateShadowTexture(key), ++_shadowAccessCounter, byteSize);
-            CacheShadow(key, cached);
-        }
-        else
-        {
-            cached = cached with { LastAccess = ++_shadowAccessCounter };
-            _shadowTextures[key] = cached;
-        }
-
-        DrawTexture(
-            cached.Texture,
-            new Rect(rect.X - spread, rect.Y - spread, width + spread * 2, height + spread * 2),
-            color,
-            _textureProgram,
-            _textureViewportLocation,
-            _textureLocation,
-            _textureColorLocation);
+        radius = ClampCornerRadius(radius, rect.Width, rect.Height);
+        DrawRoundedShape(rect, radius, color, ROUNDED_MODE_SHADOW, default, default, null, distance);
     }
 
     public void FillRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
@@ -254,134 +266,19 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         DrawVertices(vertices, PrimitiveType.Triangles);
     }
 
-    private Texture CreateShadowTexture(ShadowTextureKey key)
-    {
-        var textureWidth = checked(key.Width + key.Spread * 2);
-        var textureHeight = checked(key.Height + key.Spread * 2);
-        var pixels = new byte[checked(textureWidth * textureHeight * 4)];
 
-        for (var y = 0; y < textureHeight; y++)
-        {
-            var boxY = y + 0.5f - key.Spread;
-            for (var x = 0; x < textureWidth; x++)
-            {
-                var offset = (y * textureWidth + x) * 4;
-                pixels[offset] = 255;
-                pixels[offset + 1] = 255;
-                pixels[offset + 2] = 255;
 
-                var boxX = x + 0.5f - key.Spread;
-                var outsideDistance = RoundedRectOutsideDistance(boxX, boxY, key.Width, key.Height, key.Radius);
-                if (outsideDistance <= 0.0f || outsideDistance >= key.Distance)
-                {
-                    continue;
-                }
 
-                var gradient = 1.0f - outsideDistance / key.Distance;
-                pixels[offset + 3] = (byte)Math.Clamp(
-                    (int)MathF.Round(gradient * gradient * 255.0f),
-                    0,
-                    255);
-            }
-        }
-
-        var id = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, id);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        fixed (byte* data = pixels)
-        {
-            _gl.TexImage2D(
-                TextureTarget.Texture2D,
-                0,
-                InternalFormat.Rgba,
-                (uint)textureWidth,
-                (uint)textureHeight,
-                0,
-                PixelFormat.Rgba,
-                PixelType.UnsignedByte,
-                data);
-        }
-
-        return new Texture(id);
-    }
-
-    private void CacheShadow(ShadowTextureKey key, CachedShadow shadow)
-    {
-        while (_shadowTextures.Count > 0 &&
-               (_shadowTextures.Count >= MAX_SHADOW_CACHE_ENTRIES ||
-                _shadowCacheBytes + shadow.ByteSize > MAX_SHADOW_CACHE_BYTES))
-        {
-            var oldest = _shadowTextures.MinBy(entry => entry.Value.LastAccess);
-            _gl.DeleteTexture(oldest.Value.Texture.Id);
-            _shadowTextures.Remove(oldest.Key);
-            _shadowCacheBytes -= oldest.Value.ByteSize;
-        }
-
-        _shadowTextures[key] = shadow;
-        _shadowCacheBytes += shadow.ByteSize;
-    }
-
-    private static float RoundedRectOutsideDistance(
-        float x,
-        float y,
-        float width,
-        float height,
-        BorderRadius radius)
-    {
-        if (x < radius.TopLeft && y < radius.TopLeft)
-        {
-            return MathF.Sqrt(MathF.Pow(x - radius.TopLeft, 2) + MathF.Pow(y - radius.TopLeft, 2)) - radius.TopLeft;
-        }
-
-        if (x > width - radius.TopRight && y < radius.TopRight)
-        {
-            return MathF.Sqrt(MathF.Pow(x - (width - radius.TopRight), 2) + MathF.Pow(y - radius.TopRight, 2)) - radius.TopRight;
-        }
-
-        if (x > width - radius.BottomRight && y > height - radius.BottomRight)
-        {
-            return MathF.Sqrt(MathF.Pow(x - (width - radius.BottomRight), 2) + MathF.Pow(y - (height - radius.BottomRight), 2)) - radius.BottomRight;
-        }
-
-        if (x < radius.BottomLeft && y > height - radius.BottomLeft)
-        {
-            return MathF.Sqrt(MathF.Pow(x - radius.BottomLeft, 2) + MathF.Pow(y - (height - radius.BottomLeft), 2)) - radius.BottomLeft;
-        }
-
-        var dx = MathF.Max(MathF.Max(-x, x - width), 0.0f);
-        var dy = MathF.Max(MathF.Max(-y, y - height), 0.0f);
-        return dx == 0.0f && dy == 0.0f ? -1.0f : MathF.Sqrt(dx * dx + dy * dy);
-    }
-
-    private const int ROUNDED_CONTOUR_SEGMENTS = 16;
-    private const int ROUNDED_CONTOUR_POINTS = 4 * (ROUNDED_CONTOUR_SEGMENTS + 1);
-    private static readonly Point[] RoundedRectContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
-    private static readonly Point[] InnerContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
-    private static readonly Point[] OuterContourBuffer = new Point[ROUNDED_CONTOUR_POINTS];
 
     private void DrawRoundedRect(float x, float y, float width, float height, BorderRadius radius, Color color)
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0.0f || height <= 0.0f)
         {
             return;
         }
 
         radius = ClampCornerRadius(radius, width, height);
-        var rect = new Rect(x, y, width, height);
-        var pointCount = BuildCompactRoundedContour(RoundedRectContourBuffer, rect, radius);
-        var center = new Point(x + width * 0.5f, y + height * 0.5f);
-        BeginColoredGeometry(pointCount * 3);
-        for (var i = 0; i < pointCount; i++)
-        {
-            AppendColoredTriangle(
-                center,
-                RoundedRectContourBuffer[i],
-                RoundedRectContourBuffer[(i + 1) % pointCount],
-                color);
-        }
+        DrawRoundedShape(new Rect(x, y, width, height), radius, color, ROUNDED_MODE_SOLID);
     }
 
     private void DrawRoundedBorder(Rect rect, BorderRadius radius, Insets thickness, Color color)
@@ -405,109 +302,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        BuildRoundedContour(OuterContourBuffer, rect, radius);
         var innerRadius = ClampCornerRadius(radius.Inset(thickness), innerRect.Width, innerRect.Height);
-        BuildRoundedContour(InnerContourBuffer, innerRect, innerRadius);
-        BeginColoredGeometry(ROUNDED_CONTOUR_POINTS * 6);
-
-        for (var i = 0; i < ROUNDED_CONTOUR_POINTS; i++)
-        {
-            var next = (i + 1) % ROUNDED_CONTOUR_POINTS;
-            AppendColoredTriangle(
-                OuterContourBuffer[i],
-                OuterContourBuffer[next],
-                InnerContourBuffer[next],
-                color);
-            AppendColoredTriangle(
-                OuterContourBuffer[i],
-                InnerContourBuffer[next],
-                InnerContourBuffer[i],
-                color);
-        }
-    }
-
-    private static int BuildCompactRoundedContour(Point[] points, Rect rect, BorderRadius radius)
-    {
-        var index = 0;
-
-        AddCompactContourCorner(points, ref index, rect.X + rect.Width - radius.TopRight,
-            rect.Y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, rect.X + rect.Width, rect.Y);
-        AddCompactContourCorner(points, ref index, rect.X + rect.Width - radius.BottomRight,
-            rect.Y + rect.Height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f,
-            rect.X + rect.Width, rect.Y + rect.Height);
-        AddCompactContourCorner(points, ref index, rect.X + radius.BottomLeft,
-            rect.Y + rect.Height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f,
-            rect.X, rect.Y + rect.Height);
-        AddCompactContourCorner(points, ref index, rect.X + radius.TopLeft,
-            rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
-
-        return index;
-    }
-
-    private static void BuildRoundedContour(Point[] points, Rect rect, BorderRadius radius)
-    {
-        var index = 0;
-
-        AddContourCorner(points, ref index, rect.X + rect.Width - radius.TopRight,
-            rect.Y + radius.TopRight, radius.TopRight, -90.0f, 0.0f, rect.X + rect.Width, rect.Y);
-        AddContourCorner(points, ref index, rect.X + rect.Width - radius.BottomRight,
-            rect.Y + rect.Height - radius.BottomRight, radius.BottomRight, 0.0f, 90.0f,
-            rect.X + rect.Width, rect.Y + rect.Height);
-        AddContourCorner(points, ref index, rect.X + radius.BottomLeft,
-            rect.Y + rect.Height - radius.BottomLeft, radius.BottomLeft, 90.0f, 180.0f,
-            rect.X, rect.Y + rect.Height);
-        AddContourCorner(points, ref index, rect.X + radius.TopLeft,
-            rect.Y + radius.TopLeft, radius.TopLeft, 180.0f, 270.0f, rect.X, rect.Y);
-    }
-
-    private static void AddCompactContourCorner(
-        Point[] points,
-        ref int index,
-        float cx,
-        float cy,
-        float radius,
-        float fromDegrees,
-        float toDegrees,
-        float sharpX,
-        float sharpY)
-    {
-        if (radius <= 0.0f)
-        {
-            points[index++] = new Point(sharpX, sharpY);
-            return;
-        }
-
-        for (var i = 0; i <= ROUNDED_CONTOUR_SEGMENTS; i++)
-        {
-            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / ROUNDED_CONTOUR_SEGMENTS;
-            var radians = degrees * MathF.PI / 180.0f;
-            points[index++] = new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
-        }
-    }
-
-    private static void AddContourCorner(
-        Point[] points,
-        ref int index,
-        float cx,
-        float cy,
-        float radius,
-        float fromDegrees,
-        float toDegrees,
-        float sharpX,
-        float sharpY)
-    {
-        for (var i = 0; i <= ROUNDED_CONTOUR_SEGMENTS; i++)
-        {
-            if (radius <= 0.0f)
-            {
-                points[index++] = new Point(sharpX, sharpY);
-                continue;
-            }
-
-            var degrees = fromDegrees + (toDegrees - fromDegrees) * i / ROUNDED_CONTOUR_SEGMENTS;
-            var radians = degrees * MathF.PI / 180.0f;
-            points[index++] = new Point(cx + MathF.Cos(radians) * radius, cy + MathF.Sin(radians) * radius);
-        }
+        DrawRoundedShape(rect, radius, color, ROUNDED_MODE_BORDER, thickness, innerRadius);
     }
 
     private void DrawRoundedGradient(
@@ -517,145 +313,118 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         GradientDirection direction,
         float offset)
     {
-        if (rect.Width <= 0 || rect.Height <= 0)
+        if (rect.Width <= 0.0f || rect.Height <= 0.0f)
         {
             return;
+        }
+
+        if (gradient.Stops.Count > MAX_GRADIENT_STOPS)
+        {
+            throw new ArgumentException(
+                $"Rounded gradients support at most {MAX_GRADIENT_STOPS} stops.",
+                nameof(gradient));
         }
 
         radius = ClampCornerRadius(radius, rect.Width, rect.Height);
         offset -= MathF.Floor(offset);
-
-        if (direction == GradientDirection.Vertical)
-        {
-            DrawVerticalGradient(rect, radius, gradient, offset);
-            return;
-        }
-
-        DrawHorizontalGradient(rect, radius, gradient, offset);
+        DrawRoundedShape(
+            rect,
+            radius,
+            Color.White,
+            ROUNDED_MODE_GRADIENT,
+            gradient: gradient,
+            gradientDirection: direction,
+            gradientOffset: offset);
     }
 
-    private void DrawHorizontalGradient(Rect rect, BorderRadius radius, Gradient gradient, float offset)
+    private void DrawRoundedShape(
+        Rect rect,
+        BorderRadius radius,
+        Color color,
+        int mode,
+        Insets thickness = default,
+        BorderRadius innerRadius = default,
+        Gradient? gradient = null,
+        float shadowDistance = 0.0f,
+        GradientDirection gradientDirection = GradientDirection.Horizontal,
+        float gradientOffset = 0.0f)
     {
-        var strips = Math.Max(16, Math.Min(150, (int)MathF.Ceiling(rect.Width)));
-        var stripWidth = rect.Width / strips;
+        FlushColoredGeometry();
 
-        for (var i = 0; i < strips; i++)
+        var padding = mode == ROUNDED_MODE_SHADOW ? MathF.Ceiling(shadowDistance) + 1.0f : 0.0f;
+        var left = rect.X - padding;
+        var top = rect.Y - padding;
+        var right = rect.X + rect.Width + padding;
+        var bottom = rect.Y + rect.Height + padding;
+        Span<float> vertices =
+        [
+            left, top, -padding, -padding,
+            right, top, rect.Width + padding, -padding,
+            right, bottom, rect.Width + padding, rect.Height + padding,
+            left, top, -padding, -padding,
+            right, bottom, rect.Width + padding, rect.Height + padding,
+            left, bottom, -padding, rect.Height + padding,
+        ];
+
+        _gl.UseProgram(_roundedProgram);
+        _gl.Uniform2(_roundedViewportLocation, (float)Width, (float)Height);
+        _gl.Uniform2(_roundedSizeLocation, rect.Width, rect.Height);
+        _gl.Uniform4(_roundedRadiiLocation, radius.TopLeft, radius.TopRight, radius.BottomRight, radius.BottomLeft);
+        _gl.Uniform4(_roundedColorLocation, color.R, color.G, color.B, color.A);
+        _gl.Uniform1(_roundedModeLocation, mode);
+        _gl.Uniform4(_roundedThicknessLocation, thickness.Top, thickness.Right, thickness.Bottom, thickness.Left);
+        _gl.Uniform4(
+            _roundedInnerRadiiLocation,
+            innerRadius.TopLeft,
+            innerRadius.TopRight,
+            innerRadius.BottomRight,
+            innerRadius.BottomLeft);
+        _gl.Uniform1(_roundedShadowDistanceLocation, MathF.Max(shadowDistance, 0.0001f));
+        _gl.Uniform1(_roundedGradientDirectionLocation, (int)gradientDirection);
+        _gl.Uniform1(_roundedGradientOffsetLocation, gradientOffset);
+
+        if (gradient is not null)
         {
-            var x0 = rect.X + i * stripWidth;
-            var x1 = i == strips - 1 ? rect.X + rect.Width : x0 + stripWidth;
-            var centerX = x0 + (x1 - x0) * 0.5f - rect.X;
-            var top = rect.Y + RoundedTopInset(centerX, rect.Width, radius);
-            var bottom = rect.Y + rect.Height - RoundedBottomInset(centerX, rect.Width, radius);
-            var height = bottom - top;
-            if (height <= 0)
+            var stopCount = gradient.Stops.Count;
+            Span<float> positions = stackalloc float[stopCount];
+            Span<float> colors = stackalloc float[stopCount * 4];
+            for (var i = 0; i < stopCount; i++)
             {
-                continue;
+                var stop = gradient.Stops[i];
+                positions[i] = stop.Percent;
+                colors[i * 4] = stop.Color.R;
+                colors[i * 4 + 1] = stop.Color.G;
+                colors[i * 4 + 2] = stop.Color.B;
+                colors[i * 4 + 3] = stop.Color.A;
             }
 
-            var position = GradientPosition(i, strips, offset);
-            DrawRect(x0, top, x1 - x0, height, gradient.Evaluate(position));
-        }
-    }
-
-    private void DrawVerticalGradient(Rect rect, BorderRadius radius, Gradient gradient, float offset)
-    {
-        var strips = Math.Max(16, Math.Min(150, (int)MathF.Ceiling(rect.Height)));
-        var stripHeight = rect.Height / strips;
-
-        for (var i = 0; i < strips; i++)
-        {
-            var y0 = rect.Y + i * stripHeight;
-            var y1 = i == strips - 1 ? rect.Y + rect.Height : y0 + stripHeight;
-            var centerY = y0 + (y1 - y0) * 0.5f - rect.Y;
-            var left = rect.X + RoundedLeftInset(centerY, rect.Height, radius);
-            var right = rect.X + rect.Width - RoundedRightInset(centerY, rect.Height, radius);
-            var width = right - left;
-            if (width <= 0)
+            _gl.Uniform1(_roundedGradientStopCountLocation, stopCount);
+            fixed (float* positionData = positions)
+            fixed (float* colorData = colors)
             {
-                continue;
+                _gl.Uniform1(_roundedGradientPositionsLocation, (uint)stopCount, positionData);
+                _gl.Uniform4(_roundedGradientColorsLocation, (uint)stopCount, colorData);
             }
-
-            var position = GradientPosition(i, strips, offset);
-            DrawRect(left, y0, width, y1 - y0, gradient.Evaluate(position));
         }
-    }
-
-    private static float GradientPosition(int strip, int stripCount, float offset)
-    {
-        var position = (float)strip / Math.Max(1, stripCount - 1);
-        if (offset == 0.0f)
+        else
         {
-            return position;
+            _gl.Uniform1(_roundedGradientStopCountLocation, 0);
         }
 
-        position += offset;
-        return position - MathF.Floor(position);
-    }
-
-    private static float RoundedTopInset(float x, float width, BorderRadius radius)
-    {
-        if (x < radius.TopLeft && radius.TopLeft > 0.0f)
+        _gl.BindVertexArray(_roundedVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedVbo);
+        fixed (float* data = vertices)
         {
-            return CircleInset(radius.TopLeft, radius.TopLeft - x);
+            _gl.BufferData(
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(vertices.Length * sizeof(float)),
+                data,
+                BufferUsageARB.DynamicDraw);
         }
 
-        if (x > width - radius.TopRight && radius.TopRight > 0.0f)
-        {
-            return CircleInset(radius.TopRight, x - (width - radius.TopRight));
-        }
-
-        return 0.0f;
-    }
-
-    private static float RoundedBottomInset(float x, float width, BorderRadius radius)
-    {
-        if (x < radius.BottomLeft && radius.BottomLeft > 0.0f)
-        {
-            return CircleInset(radius.BottomLeft, radius.BottomLeft - x);
-        }
-
-        if (x > width - radius.BottomRight && radius.BottomRight > 0.0f)
-        {
-            return CircleInset(radius.BottomRight, x - (width - radius.BottomRight));
-        }
-
-        return 0.0f;
-    }
-
-    private static float RoundedLeftInset(float y, float height, BorderRadius radius)
-    {
-        if (y < radius.TopLeft && radius.TopLeft > 0.0f)
-        {
-            return CircleInset(radius.TopLeft, radius.TopLeft - y);
-        }
-
-        if (y > height - radius.BottomLeft && radius.BottomLeft > 0.0f)
-        {
-            return CircleInset(radius.BottomLeft, y - (height - radius.BottomLeft));
-        }
-
-        return 0.0f;
-    }
-
-    private static float RoundedRightInset(float y, float height, BorderRadius radius)
-    {
-        if (y < radius.TopRight && radius.TopRight > 0.0f)
-        {
-            return CircleInset(radius.TopRight, radius.TopRight - y);
-        }
-
-        if (y > height - radius.BottomRight && radius.BottomRight > 0.0f)
-        {
-            return CircleInset(radius.BottomRight, y - (height - radius.BottomRight));
-        }
-
-        return 0.0f;
-    }
-
-    private static float CircleInset(float radius, float dx)
-    {
-        dx = MathF.Min(MathF.Abs(dx), radius);
-        return radius - MathF.Sqrt(MathF.Max(0.0f, radius * radius - dx * dx));
+        RecordColoredDraw(6);
+        RecordBufferUpload(vertices.Length * sizeof(float));
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
     }
 
     private void DrawBorder(float x, float y, float width, float height, float thickness, Color color)
@@ -1049,17 +818,14 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         FlushColoredGeometry();
         _gl.DeleteBuffer(_vbo);
         _gl.DeleteVertexArray(_vao);
+        _gl.DeleteBuffer(_roundedVbo);
+        _gl.DeleteVertexArray(_roundedVao);
         _gl.DeleteBuffer(_textureVbo);
         _gl.DeleteVertexArray(_textureVao);
         _gl.DeleteProgram(_program);
+        _gl.DeleteProgram(_roundedProgram);
         _gl.DeleteProgram(_textureProgram);
         _gl.DeleteProgram(_svgTextureProgram);
-        foreach (var shadow in _shadowTextures.Values)
-        {
-            _gl.DeleteTexture(shadow.Texture.Id);
-        }
-        _shadowTextures.Clear();
-        _shadowCacheBytes = 0;
         _textureRepository.Dispose();
         _font.Dispose();
         _disposed = true;

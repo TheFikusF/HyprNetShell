@@ -19,6 +19,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Shaders/*.glsl">
+            <LogicalName>HyprNetShell.Shaders.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
         <EmbeddedResource Include="../assets/fonts/0xProto-Regular-NL.ttf" LogicalName="HyprNetShell.Fonts.0xProto-Regular-NL.ttf" />
         <EmbeddedResource Include="../assets/fonts/LiberationMono-Regular.ttf" LogicalName="HyprNetShell.Fonts.LiberationMono-Regular.ttf" />
         <EmbeddedResource Include="../assets/fonts/NotoColorEmoji.ttf" LogicalName="HyprNetShell.Fonts.NotoColorEmoji.ttf" />

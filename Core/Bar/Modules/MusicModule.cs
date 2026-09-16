@@ -213,13 +213,13 @@ internal sealed class MusicModule(
                         [
                             new MarqueeTextNode(music.Title, 42, 16.0f, theme.Text),
                             new MarqueeTextNode(FormatSubtitle(music), 47, theme.Text, theme.Text),
-                            new MarqueeTextNode(music.Player, 47, theme.Text, theme.Text),
+                            new MarqueeTextNode(music.Player, 47, theme.Text, theme.Text.MutedColor),
                         ]
                     },
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
-                        Style = new Style { Spacing = 5 },
+                        Style = Style.Spacer,
                         Children =
                         [
                             BuildProgress(music),
@@ -228,7 +228,7 @@ internal sealed class MusicModule(
                                 Direction = Direction.Horizontal,
                                 HorizontalAlignment = ItemsAlignment.Center,
                                 VerticalAlignment = ItemsAlignment.Center,
-                                Style = new Style { Spacing = music.IsSpotify ? 9 : 12 },
+                                Style = new Style { Spacing = music.IsSpotify ? 8 : 12 },
                                 Children = music.IsSpotify
                                     ?
                                     [
