@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using HyprNetShell.Core.Features.OnlineAccounts;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
@@ -58,10 +60,12 @@ internal sealed class SpotifyPlaybackService : IDisposable
                 return null;
             }
 
-            var playback = await playbackResponse.Content.ReadFromJsonAsync(
+            var playback = await ReadJsonAsync(
+                playbackResponse,
                 SpotifyPlaybackJsonContext.Default.SpotifyPlaybackState,
                 cancellationToken);
-            var queue = await queueResponse.Content.ReadFromJsonAsync(
+            var queue = await ReadJsonAsync(
+                queueResponse,
                 SpotifyPlaybackJsonContext.Default.SpotifyQueueResponse,
                 cancellationToken);
             var songs = await Task.WhenAll(
@@ -273,6 +277,17 @@ internal sealed class SpotifyPlaybackService : IDisposable
         AppLogger.Warning(
             "Spotify",
             $"Failed to {operation}: status={(int)response.StatusCode} {response.ReasonPhrase}{suffix}");
+    }
+
+    private static async Task<T?> ReadJsonAsync<T>(
+        HttpResponseMessage response,
+        JsonTypeInfo<T> typeInfo,
+        CancellationToken cancellationToken)
+        where T : class
+    {
+        // Spotify replies 204 No Content with an empty body when nothing is playing.
+        var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        return payload.Length == 0 ? null : JsonSerializer.Deserialize(payload, typeInfo);
     }
 
     private static HttpRequestMessage CreateRequest(HttpMethod method, string uri, string token)

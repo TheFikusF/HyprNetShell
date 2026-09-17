@@ -516,10 +516,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         var y = rect.Y;
         var width = rect.Width;
         var height = rect.Height;
+
         var topLeft = RotatePoint(x, y, rect, rotationRadians);
         var topRight = RotatePoint(x + width, y, rect, rotationRadians);
         var bottomRight = RotatePoint(x + width, y + height, rect, rotationRadians);
         var bottomLeft = RotatePoint(x, y + height, rect, rotationRadians);
+
         Span<float> vertices =
         [
             topLeft.X, topLeft.Y, 0.0f, 0.0f,
