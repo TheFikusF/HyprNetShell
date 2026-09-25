@@ -18,6 +18,7 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
     private const string ServiceInterface = "org.freedesktop.Secret.Service";
     private const string CollectionInterface = "org.freedesktop.Secret.Collection";
     private const string ItemInterface = "org.freedesktop.Secret.Item";
+    private const string PromptInterface = "org.freedesktop.Secret.Prompt";
     private const string DefaultCollectionPath = "/org/freedesktop/secrets/aliases/default";
     private const string NoObjectPath = "/";
     private const string ApplicationAttribute = "application";
@@ -29,11 +30,17 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         using var connection = await ConnectAsync(cancellationToken);
         var sessionPath = await OpenSessionAsync(connection, cancellationToken);
         var (unlocked, locked) = await SearchAsync(connection, provider, cancellationToken);
+        if (unlocked.Length == 0 && locked.Length > 0)
+        {
+            await UnlockAsync(connection, locked, cancellationToken);
+            (unlocked, locked) = await SearchAsync(connection, provider, cancellationToken);
+        }
+
         if (unlocked.Length == 0)
         {
             if (locked.Length > 0)
             {
-                throw new InvalidOperationException("The desktop keyring is locked. Unlock it and try again.");
+                throw new InvalidOperationException("The desktop keyring remains locked.");
             }
 
             return null;
@@ -184,6 +191,77 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
                 "a{ss}",
                 (ref MessageWriter writer) => WriteAttributes(ref writer, provider)),
             cancellationToken);
+
+    private static async Task UnlockAsync(
+        DBusConnection connection,
+        ObjectPath[] locked,
+        CancellationToken cancellationToken)
+    {
+        var (_, promptPath) = await Dbus.WaitAsync(
+            Dbus.CallAsync(
+                connection,
+                ServiceName,
+                ServicePath,
+                ServiceInterface,
+                "Unlock",
+                static reader => (reader.ReadArrayOfObjectPath(), reader.ReadObjectPathAsString()),
+                "ao",
+                (ref MessageWriter writer) => writer.WriteArray(locked)),
+            cancellationToken);
+        if (string.Equals(promptPath, NoObjectPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await connection.AddMatchAsync(
+            new MatchRule
+            {
+                Type = MessageType.Signal,
+                Path = promptPath,
+                Interface = PromptInterface,
+                Member = "Completed",
+            },
+            static (message, _) =>
+            {
+                var reader = message.GetBodyReader();
+                var dismissed = reader.ReadBool();
+                _ = reader.ReadVariantValue();
+                return !dismissed;
+            },
+            static notification =>
+            {
+                var source = (TaskCompletionSource<bool>)notification.State!;
+                if (notification.HasValue)
+                {
+                    source.TrySetResult(notification.Value);
+                }
+                else
+                {
+                    source.TrySetException(new InvalidOperationException(
+                        "The Secret Service connection closed while waiting for the keyring prompt."));
+                }
+            },
+            false,
+            Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
+            completion);
+
+        await Dbus.WaitAsync(
+            Dbus.CallAsync(
+                connection,
+                ServiceName,
+                promptPath,
+                PromptInterface,
+                "Prompt",
+                "s",
+                static (ref MessageWriter writer) => writer.WriteString("")),
+            cancellationToken);
+
+        if (!await completion.Task.WaitAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("The desktop keyring unlock prompt was dismissed.");
+        }
+    }
 
     private static void WriteProperties(ref MessageWriter writer, string provider)
     {

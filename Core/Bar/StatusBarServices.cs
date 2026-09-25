@@ -47,6 +47,7 @@ public sealed class StatusBarServices : IDisposable
     private static readonly TimeSpan AudioFallbackInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan CalendarRefreshInterval = TimeSpan.FromHours(1);
+    private static readonly TimeSpan ChatGptUsageRefreshInterval = TimeSpan.FromMinutes(5);
 
     private readonly IReadOnlyCollection<ScheduledService> _scheduledServices;
     private readonly CancellationTokenSource _lifetime = new();
@@ -87,6 +88,7 @@ public sealed class StatusBarServices : IDisposable
     internal CalendarService Calendar { get; }
     internal DictionaryService Dictionary { get; }
     internal OnlineAccountsService OnlineAccounts { get; }
+    internal ChatGptUsageService ChatGptUsage { get; }
 
     public DialogService Dialogs { get; }
 
@@ -115,6 +117,7 @@ public sealed class StatusBarServices : IDisposable
         Calendar = new CalendarService();
         Dictionary = new DictionaryService();
         OnlineAccounts = new OnlineAccountsService(UrlLauncher);
+        ChatGptUsage = new ChatGptUsageService(OnlineAccounts);
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
         Music = new MusicModuleService(Spotify);
         ClipboardHistory = new ClipboardHistoryService(History);
@@ -148,6 +151,7 @@ public sealed class StatusBarServices : IDisposable
             Theme.Default));
 
         OnlineAccounts.AuthorizationCallbackReceived += HandleAuthorizationCallbackReceived;
+        OnlineAccounts.EnsureInitialized();
 
         _scheduledServices =
         [
@@ -160,6 +164,7 @@ public sealed class StatusBarServices : IDisposable
             new(SystemStats, FastSampleInterval),
             new(Tray, TrayRefreshInterval),
             new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(15)),
+            new(ChatGptUsage, ChatGptUsageRefreshInterval, TimeSpan.FromSeconds(10)),
         ];
     }
 
@@ -350,6 +355,7 @@ public sealed class StatusBarServices : IDisposable
         ClipboardHistory.Dispose();
         Music.Dispose();
         Spotify.Dispose();
+        ChatGptUsage.Dispose();
         OnlineAccounts.Dispose();
         Calendar.Dispose();
         Weather.Dispose();

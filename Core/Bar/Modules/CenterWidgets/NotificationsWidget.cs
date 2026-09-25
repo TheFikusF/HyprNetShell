@@ -13,7 +13,6 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
 {
     private const int VisibleNotificationCount = 5;
 
-    public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
     private readonly Ref<float> _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
     private readonly Dictionary<uint, NotificationCard.State> _cardStates = new();
     private readonly ModulesCommon.BoxState _clearButtonState = new();
@@ -34,37 +33,37 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             filteredItems.Length,
             VisibleNotificationCount);
 
-        return new BoxNode(WIDTH)
+        return new BoxNode(CenterModule.WIDTH + (28 + 12) * 2)
         {
-        Direction = Direction.Vertical,
-        VerticalAlignment = ItemsAlignment.Center,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = Style.Spacer,
-        Children =
-        [
-            new BoxNode(new Style(), ItemsAlignment.Spread, ItemsAlignment.Center)
-            {
-                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+            Direction = Direction.Vertical,
+            VerticalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = Style.Spacer,
+            Children =
+            [
+                new BoxNode(new Style(), ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
-                    new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, theme.Text),
-                    new TextNode("Notifications", 22, theme.Text),
-                },
-
-                new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
-                {
-                    BuildDateDropdown(),
-                    new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
-                    BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
-                    new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
                     new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                     {
-                        new TextNode($"{filteredItems.Length}", 22, theme.Text),
-                        BuildClearButton(snapshot.Count),
+                        new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, theme.Text),
+                        new TextNode("Notifications", 22, theme.Text),
+                    },
+
+                    new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
+                    {
+                        BuildDateDropdown(),
+                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                        BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
+                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                        new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                        {
+                            new TextNode($"{filteredItems.Length}", 22, theme.Text),
+                            BuildClearButton(snapshot.Count),
+                        }
                     }
-                }
-            },
-            ..BuildRows(filteredItems),
-        ],
+                },
+                ..BuildRows(filteredItems),
+            ],
         };
     }
 

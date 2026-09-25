@@ -90,6 +90,7 @@ public sealed class StatusBar
         _centerModule = new CenterModule(
             services.Notifications,
             services.Calendar,
+            services.ChatGptUsage,
             weatherWidget,
             services.Dialogs,
             services.Tabs,

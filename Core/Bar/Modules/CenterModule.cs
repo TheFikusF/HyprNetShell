@@ -4,6 +4,7 @@ using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
+using HyprNetShell.Core.Features.OnlineAccounts;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
@@ -17,6 +18,10 @@ internal sealed class CenterModule : IDrawableModule
 {
     private const string CLOCK_IMAGE_RESOURCE_NAME = "HyprNetShell.Assets.Clock_3.png";
     private const string SUN_MOON_IMAGE_RESOURCE_NAME = "HyprNetShell.Assets.Clock_4.png";
+    private const int CAROUSEL_PAGE_COUNT = 2;
+
+    public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
+
     private static readonly EncodedImageData ClockImage = LoadClockImage(CLOCK_IMAGE_RESOURCE_NAME);
     private static readonly EncodedImageData SunMoonImage = LoadClockImage(SUN_MOON_IMAGE_RESOURCE_NAME);
 
@@ -28,8 +33,13 @@ internal sealed class CenterModule : IDrawableModule
     private readonly DialogService _dialogs;
     private readonly TabsService _tabs;
     private readonly NotificationsWidget _notificationsWidget;
+    private readonly TodaysEventsWidget _todaysEvents;
+    private readonly ChatGptLimitsWidget _chatGptLimits;
+    private readonly ModulesCommon.BoxState _previousPageState = new();
+    private readonly ModulesCommon.BoxState _nextPageState = new();
 
     private float _clockRotation;
+    private int _activeCarouselPage;
     private Rect? _clockBounds;
 
     private readonly NodeWithPopup _node;
@@ -37,6 +47,7 @@ internal sealed class CenterModule : IDrawableModule
     public CenterModule(
         NotificationService notificationService,
         CalendarService calendar,
+        ChatGptUsageService chatGptUsage,
         WeatherWidget weather,
         DialogService dialogs,
         TabsService tabs,
@@ -55,6 +66,8 @@ internal sealed class CenterModule : IDrawableModule
         _dialogs = dialogs;
         _tabs = tabs;
         _notificationsWidget = new NotificationsWidget(notificationService, theme);
+        _todaysEvents = new TodaysEventsWidget(calendar, theme);
+        _chatGptLimits = new ChatGptLimitsWidget(chatGptUsage, theme);
     }
 
     public Node Draw()
@@ -226,15 +239,82 @@ internal sealed class CenterModule : IDrawableModule
         Style = ModulesCommon.PopupStyle(_theme),
         Children =
         [
-            new BoxNode(new Style { Spacing = 12 }, verticalAlignment: ItemsAlignment.Stretch)
-            {
-                _calendar.Draw(now, OpenCalendar, showTooltips: true),
-                _worldClocks.Draw(now, OpenWorldClocks),
-                _weather.Draw(OpenWeather)
-            },
+            BuildCarouselPage(now),
+            BuildCarouselNavigation(),
             ModulesCommon.BuildDivider(_theme.Border, height: 12),
             _notificationsWidget.Draw(snapshot),
         ],
+    };
+
+    private BoxNode BuildCarouselPage(DateTime now)
+    {
+        var previous = _previousPageState.UpdateColor(_theme.Panel);
+        var next = _nextPageState.UpdateColor(_theme.Panel);
+        return new BoxNode(new Style { Spacing = 12 })
+        {
+            VerticalAlignment = ItemsAlignment.Stretch,
+            OnScroll = (x) => ChangeCarouselPage((int)MathF.Max(MathF.Min(MathF.Floor(x), 1), -1)),
+            Children =
+            [
+                BuildPageButton(Icons.ChevronLeft, previous, () => ChangeCarouselPage(-1)),
+                .._activeCarouselPage switch
+                {
+                    0 =>
+                    [
+                        _calendar.Draw(now, OpenCalendar, showTooltips: true),
+                        _worldClocks.Draw(now, OpenWorldClocks),
+                        _weather.Draw(OpenWeather),
+                    ],
+                    1 =>
+                    [
+                        _todaysEvents.Draw(now, OpenCalendar),
+                        _chatGptLimits.Draw(),
+                    ],
+                    _ => Array.Empty<Node>()
+                },
+                BuildPageButton(Icons.ChevronRight, next, () => ChangeCarouselPage(1)),
+            ],
+        };
+    }
+
+    private BoxNode BuildCarouselNavigation() => new(height: 16)
+    {
+        HorizontalAlignment = ItemsAlignment.Center,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = Style.Spacer,
+        Children =
+        [
+            BuildPageIndicator(0),
+            BuildPageIndicator(1),
+        ],
+    };
+
+    private BoxNode BuildPageIndicator(int page) => new(8, 8)
+    {
+        OnClick = () => _activeCarouselPage = page,
+        Style = new Style
+        {
+            BackgroundColor = page == _activeCarouselPage ? _theme.Active : _theme.Text.MutedColor,
+            BorderRadius = 999,
+        },
+    };
+
+    private void ChangeCarouselPage(int direction) =>
+        _activeCarouselPage = (_activeCarouselPage + direction + CAROUSEL_PAGE_COUNT) % CAROUSEL_PAGE_COUNT;
+
+    private BoxNode BuildPageButton(SvgAsset icon, ModulesCommon.BoxState state, Action action) => new(28)
+    {
+        HorizontalAlignment = ItemsAlignment.Center,
+        VerticalAlignment = ItemsAlignment.Center,
+        OnClick = action,
+        IsHovered = state.Hovered,
+        Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+        {
+            Padding = 0,
+            BorderRadius = 8,
+            BorderWidth = 0,
+        },
+        Children = [new ImageNode(icon, 16, 16, _theme.Text)],
     };
 
     private void OpenCalendar()

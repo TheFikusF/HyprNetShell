@@ -535,12 +535,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.UseProgram(program);
         _gl.Uniform2(viewportLocation, (float)Width, (float)Height);
         _gl.Uniform1(textureLocation, 0);
-        _gl.Uniform4(
-            colorLocation,
-            color.R,
-            color.G,
-            color.B,
-            color.A);
+        _gl.Uniform4(colorLocation, color.R, color.G, color.B, color.A);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, texture.Id);
         _gl.BindVertexArray(_textureVao);

@@ -116,7 +116,23 @@ internal sealed class OnlineAccountsService : IDisposable
         }
     }
 
-    internal async Task<string?> GetSpotifyAccessTokenAsync(CancellationToken cancellationToken)
+    internal async Task<string?> GetSpotifyAccessTokenAsync(CancellationToken cancellationToken) =>
+        (await GetAccessCredentialAsync(OnlineAccountProvider.Spotify, SpotifyPlaybackScopes, cancellationToken))
+        ?.AccessToken;
+
+    internal async Task<ChatGptAccessCredential?> GetChatGptAccessCredentialAsync(
+        CancellationToken cancellationToken)
+    {
+        var credential = await GetAccessCredentialAsync(OnlineAccountProvider.ChatGpt, null, cancellationToken);
+        return credential is null
+            ? null
+            : new ChatGptAccessCredential(credential.AccessToken, credential.AccountId);
+    }
+
+    private async Task<StoredAccountCredential?> GetAccessCredentialAsync(
+        OnlineAccountProvider provider,
+        string? requiredScopes,
+        CancellationToken cancellationToken)
     {
         EnsureInitialized();
         Task? initializationTask;
@@ -136,20 +152,21 @@ internal sealed class OnlineAccountsService : IDisposable
             StoredAccountCredential? credential;
             lock (_stateLock)
             {
-                credential = _credentials[OnlineAccountProvider.Spotify];
+                credential = _credentials[provider];
             }
 
-            if (credential is null || !HasScopes(credential.Scopes, SpotifyPlaybackScopes))
+            if (credential is null ||
+                requiredScopes is { Length: > 0 } && !HasScopes(credential.Scopes, requiredScopes))
             {
                 return null;
             }
 
             if (credential.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1))
             {
-                return credential.AccessToken;
+                return credential;
             }
 
-            var definition = CreateDefinition(OnlineAccountProvider.Spotify);
+            var definition = CreateDefinition(provider);
             if (string.IsNullOrWhiteSpace(credential.RefreshToken) || string.IsNullOrWhiteSpace(definition.ClientId))
             {
                 return null;
@@ -169,7 +186,7 @@ internal sealed class OnlineAccountsService : IDisposable
             {
                 AppLogger.Warning(
                     "OnlineAccounts",
-                    $"Spotify token refresh failed ({(int)response.StatusCode})");
+                    $"{definition.Name} token refresh failed ({(int)response.StatusCode})");
                 return null;
             }
 
@@ -178,6 +195,7 @@ internal sealed class OnlineAccountsService : IDisposable
                 cancellationToken);
             if (token is null || string.IsNullOrWhiteSpace(token.AccessToken))
             {
+                AppLogger.Warning("OnlineAccounts", $"{definition.Name} token refresh returned no access token");
                 return null;
             }
 
@@ -188,13 +206,13 @@ internal sealed class OnlineAccountsService : IDisposable
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, token.ExpiresIn)),
             };
             var json = JsonSerializer.Serialize(updated, OnlineAccountsJsonContext.Default.StoredAccountCredential);
-            await _credentialStore.WriteAsync(StorageKey(OnlineAccountProvider.Spotify), json, cancellationToken);
+            await _credentialStore.WriteAsync(StorageKey(provider), json, cancellationToken);
             lock (_stateLock)
             {
-                _credentials[OnlineAccountProvider.Spotify] = updated;
+                _credentials[provider] = updated;
             }
 
-            return updated.AccessToken;
+            return updated;
         }
         finally
         {
@@ -270,6 +288,7 @@ internal sealed class OnlineAccountsService : IDisposable
 
     private async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        var loadedProviders = new List<OnlineAccountProvider>();
         foreach (var provider in Enum.GetValues<OnlineAccountProvider>())
         {
             try
@@ -282,6 +301,10 @@ internal sealed class OnlineAccountsService : IDisposable
                 {
                     _credentials[provider] = credential;
                     _statuses[provider] = null;
+                }
+                if (credential is not null)
+                {
+                    loadedProviders.Add(provider);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -296,6 +319,11 @@ internal sealed class OnlineAccountsService : IDisposable
                     _statuses[provider] = FriendlySecretServiceError(exception);
                 }
             }
+        }
+
+        foreach (var provider in loadedProviders)
+        {
+            AccountChanged?.Invoke(provider);
         }
     }
 
@@ -793,6 +821,8 @@ internal sealed class OnlineAccountsService : IDisposable
 
     private sealed record AccountIdentity(string AccountId, string AccountName);
 }
+
+internal sealed record ChatGptAccessCredential(string AccessToken, string AccountId);
 
 internal sealed record StoredAccountCredential(
     string Provider,
