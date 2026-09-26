@@ -98,8 +98,8 @@ internal sealed class CalendarTab : IMainDialogTab
         var status = _calendar.IsRefreshing
             ? "Refreshing…"
             : snapshot.UpdatedAt is { } updated
-                ? $"Updated {updated:g} · {_calendar.Urls.Count} source{(_calendar.Urls.Count == 1 ? "" : "s")}"
-                : _calendar.Urls.Count == 0 ? "Add calendar URLs in Settings" : "Not refreshed yet";
+                ? $"Updated {updated:g} · {_calendar.ConfiguredSourceCount} source{(_calendar.ConfiguredSourceCount == 1 ? "" : "s")}"
+                : _calendar.ConfiguredSourceCount == 0 ? "Enable calendar sources in Settings" : "Not refreshed yet";
 
         return new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
         {

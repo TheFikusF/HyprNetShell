@@ -28,46 +28,24 @@ internal sealed class WorldClocksWidget
         _clocks = clocks;
     }
 
-    public Node Draw(DateTime now, Action? openClocks = null)
+    public Node Draw(DateTime now, Action? openClocks = null) => new BoxNode(WIDTH)
     {
-        var state = _titleState.UpdateColor(_theme.Panel);
-        return new BoxNode(WIDTH)
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Start,
+        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
         {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
-            {
-                BorderRadius = 8,
-                Spacing = 8,
-            },
-            Children =
+            BorderRadius = 8,
+            Spacing = 8,
+        },
+        Children =
         [
-            new BoxNode(height: 34)
-            {
-                VerticalAlignment = ItemsAlignment.Center,
-                HorizontalAlignment = ItemsAlignment.Center,
-                OnClick = openClocks,
-                IsHovered = _titleState,
-                Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
-                {
-                    Padding = 0,
-                    BorderRadius = 8,
-                    BorderWidth = 0,
-                    Spacing = 8,
-                },
-                Children =
-                [
-                    new ImageNode(Icons.Clock, 22, 22, _theme.Text),
-                    new TextNode("World clocks", 22, _theme.Text)
-                ]
-            },
+            ModulesCommon.CentralWidgetHeader(Icons.Clock, "World clocks", openClocks, _titleState, _theme),
             BuildRow("Local", now),
             .. _clocks.SelectedClocks.Select(clock =>
                 BuildRow(clock.DisplayName, WorldClockService.GetTime(clock, now.ToUniversalTime()))),
         ],
-        };
-    }
+    };
 
     private BoxNode BuildRow(string label, DateTime time)
     {

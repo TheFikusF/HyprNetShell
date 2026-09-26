@@ -86,6 +86,7 @@ internal sealed class WorldClocksConfiguration
 internal sealed class CalendarConfiguration
 {
     public List<string> Urls { get; set; } = [];
+    public Dictionary<string, List<string>> GoogleCalendarIdsByAccount { get; set; } = [];
 }
 
 internal sealed class OnlineAccountsConfiguration

@@ -35,40 +35,8 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             },
             Children =
             [
-                BuildHeader(events.Count, openCalendar),
+                ModulesCommon.CentralWidgetHeader(Icons.Calendar, "Today's events", openCalendar, _titleState, theme),
                 ..BuildEvents(events),
-            ],
-        };
-    }
-
-    private Node BuildHeader(int count, Action openCalendar)
-    {
-        var state = _titleState.UpdateColor(theme.Panel);
-        return new BoxNode(height: 34)
-        {
-            HorizontalAlignment = ItemsAlignment.Spread,
-            VerticalAlignment = ItemsAlignment.Center,
-            Children =
-            [
-                new BoxNode
-                {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    OnClick = openCalendar,
-                    IsHovered = state.Hovered,
-                    Style = ModulesCommon.ModuleStyle(theme, state.Background) with
-                    {
-                        Padding = new Insets(8, 0),
-                        BorderRadius = 8,
-                        BorderWidth = 0,
-                        Spacing = 8,
-                    },
-                    Children =
-                    [
-                        new ImageNode(Icons.Calendar, 20, 20, theme.Text),
-                        new TextNode("Today's events", 20, theme.Text),
-                    ],
-                },
-                new TextNode($"{count} event{(count == 1 ? "" : "s")}", theme.Text, theme.Text.MutedColor),
             ],
         };
     }
@@ -86,13 +54,18 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             yield break;
         }
 
+        yield return new BoxNode(Style.Empty, ItemsAlignment.End)
+        {
+            new TextNode($"{events.Count} event{(events.Count == 1 ? "" : "s")}", theme.Text, theme.Text.MutedColor),
+        };
+
         foreach (var item in events.VisibleItems(_firstEventIndex, VisibleEventCount))
         {
             yield return BuildEvent(item.Item);
         }
     }
 
-    private Node BuildEvent(CalendarOccurrence occurrence)
+    private BoxNode BuildEvent(CalendarOccurrence occurrence)
     {
         var time = occurrence.IsAllDay
             ? "All day"

@@ -114,9 +114,9 @@ public sealed class StatusBarServices : IDisposable
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
         Weather = new WeatherService(UrlLauncher);
-        Calendar = new CalendarService();
-        Dictionary = new DictionaryService();
         OnlineAccounts = new OnlineAccountsService(UrlLauncher);
+        Calendar = new CalendarService(OnlineAccounts);
+        Dictionary = new DictionaryService();
         ChatGptUsage = new ChatGptUsageService(OnlineAccounts);
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
         Music = new MusicModuleService(Spotify);
@@ -163,7 +163,7 @@ public sealed class StatusBarServices : IDisposable
             new(Battery, RecoveryInterval),
             new(SystemStats, FastSampleInterval),
             new(Tray, TrayRefreshInterval),
-            new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(15)),
+            new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(40)),
             new(ChatGptUsage, ChatGptUsageRefreshInterval, TimeSpan.FromSeconds(10)),
         ];
     }
@@ -356,8 +356,8 @@ public sealed class StatusBarServices : IDisposable
         Music.Dispose();
         Spotify.Dispose();
         ChatGptUsage.Dispose();
-        OnlineAccounts.Dispose();
         Calendar.Dispose();
+        OnlineAccounts.Dispose();
         Weather.Dispose();
         Battery.Dispose();
         Bluetooth.Dispose();

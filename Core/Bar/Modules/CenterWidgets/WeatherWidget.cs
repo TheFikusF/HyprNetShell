@@ -27,11 +27,11 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
                 BorderRadius = 8,
-                Spacing = 7,
+                Spacing = 8,
             },
             Children =
             [
-                BuildTitleButton(openExpanded),
+                ModulesCommon.CentralWidgetHeader(Icons.CloudSun, "Weather", openExpanded, _titleState, theme),
                 new BoxNode(Style.Spacer, ItemsAlignment.End, ItemsAlignment.Center)
                 {
                     new TextNode(weather.Location, theme.Text, theme.Text.MutedColor),
@@ -42,30 +42,6 @@ internal sealed class WeatherWidget(WeatherService weather, Theme theme)
                         theme.Text.MutedColor),
                 },
                 ..BuildWeatherContent(state, refreshing),
-            ],
-        };
-    }
-
-    private BoxNode BuildTitleButton(Action openExpanded)
-    {
-        var state = _titleState.UpdateColor(theme.Panel);
-        return new BoxNode(height: 34)
-        {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = openExpanded,
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
-            {
-                Padding = 0,
-                BorderRadius = 8,
-                BorderWidth = 0,
-                Spacing = 8,
-            },
-            Children =
-            [
-                new ImageNode(Icons.CloudSun, 20, 20, theme.Text),
-                new TextNode("Weather", 20, theme.Text),
             ],
         };
     }

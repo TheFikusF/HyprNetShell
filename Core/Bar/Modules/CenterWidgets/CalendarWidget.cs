@@ -6,7 +6,6 @@ using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
-using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
@@ -73,36 +72,14 @@ internal sealed class CalendarWidget
 
     internal void ShowDate(DateOnly date) => _displayedMonth = new DateTime(date.Year, date.Month, 1);
 
-    private Node BuildMonthHeader(DateTime month, Action? openCalendar)
+    private BoxNode BuildMonthHeader(DateTime month, Action? openCalendar) => new (Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Center)
     {
-        var titleState = _titleState.UpdateColor(_theme.Panel);
-        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Center)
-        {
-            BuildMonthButton(Icons.ChevronLeft, -1, _previousMonthState),
-            new BoxNode(height: 34)
-            {
-                VerticalAlignment = ItemsAlignment.Center,
-                HorizontalAlignment = ItemsAlignment.Center,
-                OnClick = openCalendar,
-                IsHovered = openCalendar is null ? null : titleState.Hovered,
-                Style = ModulesCommon.ModuleStyle(_theme, titleState.Background) with
-                {
-                    Padding = new Insets(10, 0),
-                    BorderRadius = 8,
-                    BorderWidth = 0,
-                    Spacing = 8,
-                },
-                Children =
-                [
-                    new ImageNode(Icons.Calendar, 22, 22, _theme.Text),
-                    new TextNode(month.ToString("MMMM yyyy"), 22, _theme.Text),
-                ],
-            },
-            BuildMonthButton(Icons.ChevronRight, 1, _nextMonthState),
-        };
-    }
+        BuildMonthButton(Icons.ChevronLeft, -1, _previousMonthState),
+        ModulesCommon.CentralWidgetHeader(Icons.Calendar, month.ToString("MMMM yyyy"), openCalendar, _titleState, _theme),
+        BuildMonthButton(Icons.ChevronRight, 1, _nextMonthState),
+    };
 
-    private Node BuildMonthButton(SvgAsset icon, int monthDelta, ModulesCommon.BoxState buttonState)
+    private BoxNode BuildMonthButton(SvgAsset icon, int monthDelta, ModulesCommon.BoxState buttonState)
     {
         var state = buttonState.UpdateColor(_theme.Panel);
         return new BoxNode(34, 34)

@@ -23,6 +23,13 @@ internal sealed record CalendarSourceStatus(
     string? Error,
     DateTime? UpdatedAt);
 
+internal sealed record GoogleCalendarSource(
+    string Id,
+    string Name,
+    bool Primary,
+    bool Hidden,
+    bool Enabled);
+
 internal sealed record CalendarSnapshot(
     ImmutableArray<CalendarOccurrence> Occurrences,
     ImmutableArray<CalendarSourceStatus> Sources,

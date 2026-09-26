@@ -34,12 +34,15 @@ internal sealed record OnlineAccountSnapshot(
 internal sealed class OnlineAccountsService : IDisposable
 {
     private const string GoogleClientIdVariable = "HYPRNETSHELL_GOOGLE_CLIENT_ID";
+    private const string GoogleClientSecretVariable = "HYPRNETSHELL_GOOGLE_CLIENT_SECRET";
     private const string SpotifyClientIdVariable = "HYPRNETSHELL_SPOTIFY_CLIENT_ID";
     private const string OpenAiClientIdVariable = "HYPRNETSHELL_OPENAI_CLIENT_ID";
     private const string GoogleClientIdMetadata = "HyprNetShellGoogleClientId";
+    private const string GoogleClientSecretMetadata = "HyprNetShellGoogleClientSecret";
     private const string SpotifyClientIdMetadata = "HyprNetShellSpotifyClientId";
     private const string OpenAiClientIdMetadata = "HyprNetShellOpenAiClientId";
     private const int SpotifyCallbackPort = 5543;
+    private const string GoogleCalendarScopes = "https://www.googleapis.com/auth/calendar.readonly";
     private const string SpotifyPlaybackScopes =
         "user-read-playback-state user-read-currently-playing user-modify-playback-state";
 
@@ -116,6 +119,18 @@ internal sealed class OnlineAccountsService : IDisposable
         }
     }
 
+    internal async Task<GoogleCalendarAccessCredential?> GetGoogleCalendarAccessCredentialAsync(
+        CancellationToken cancellationToken)
+    {
+        var credential = await GetAccessCredentialAsync(
+            OnlineAccountProvider.Google,
+            GoogleCalendarScopes,
+            cancellationToken);
+        return credential is null
+            ? null
+            : new GoogleCalendarAccessCredential(credential.AccessToken, credential.AccountId);
+    }
+
     internal async Task<string?> GetSpotifyAccessTokenAsync(CancellationToken cancellationToken) =>
         (await GetAccessCredentialAsync(OnlineAccountProvider.Spotify, SpotifyPlaybackScopes, cancellationToken))
         ?.AccessToken;
@@ -172,14 +187,16 @@ internal sealed class OnlineAccountsService : IDisposable
                 return null;
             }
 
+            var parameters = new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["client_id"] = definition.ClientId,
+                ["refresh_token"] = credential.RefreshToken,
+            };
+            AddClientSecret(parameters, definition.ClientSecret);
             using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint)
             {
-                Content = new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["grant_type"] = "refresh_token",
-                    ["client_id"] = definition.ClientId,
-                    ["refresh_token"] = credential.RefreshToken,
-                }),
+                Content = new FormUrlEncodedContent(parameters),
             };
             using var response = await SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -204,6 +221,7 @@ internal sealed class OnlineAccountsService : IDisposable
                 AccessToken = token.AccessToken,
                 RefreshToken = token.RefreshToken ?? credential.RefreshToken,
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, token.ExpiresIn)),
+                Scopes = token.Scope ?? credential.Scopes,
             };
             var json = JsonSerializer.Serialize(updated, OnlineAccountsJsonContext.Default.StoredAccountCredential);
             await _credentialStore.WriteAsync(StorageKey(provider), json, cancellationToken);
@@ -440,7 +458,7 @@ internal sealed class OnlineAccountsService : IDisposable
             token.AccessToken,
             token.RefreshToken,
             DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, token.ExpiresIn)),
-            definition.Scopes);
+            token.Scope ?? definition.Scopes);
     }
 
     private async Task<OAuthTokenResponse> ExchangeCodeAsync(
@@ -450,23 +468,33 @@ internal sealed class OnlineAccountsService : IDisposable
         string verifier,
         CancellationToken cancellationToken)
     {
+        var parameters = new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["client_id"] = definition.ClientId,
+            ["code"] = code,
+            ["redirect_uri"] = redirectUri,
+            ["code_verifier"] = verifier,
+        };
+        AddClientSecret(parameters, definition.ClientSecret);
         using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint)
         {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["client_id"] = definition.ClientId,
-                ["code"] = code,
-                ["redirect_uri"] = redirectUri,
-                ["code_verifier"] = verifier,
-            }),
+            Content = new FormUrlEncodedContent(parameters),
         };
         using var response = await SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             var providerError = ReadOAuthError(responseBody);
-            var detail = providerError is null ? "" : $": {providerError}";
+            if (definition.Provider == OnlineAccountProvider.Google &&
+                definition.ClientSecret is null &&
+                providerError?.Contains("client_secret is missing", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                providerError =
+                    $"client_secret is missing — set {GoogleClientSecretVariable} from the Desktop app credential JSON";
+            }
+
+            var detail = providerError is null ? "" : $": {providerError.TrimEnd().TrimEnd('.')}";
             throw new InvalidOperationException(
                 $"{definition.Name} rejected the sign-in ({(int)response.StatusCode}){detail}.");
         }
@@ -559,20 +587,23 @@ internal sealed class OnlineAccountsService : IDisposable
             "Google",
             "Connect Google Calendar with read-only access.",
             ResolveClientId(provider).ClientId,
+            ResolveGoogleClientSecret(),
             "https://accounts.google.com/o/oauth2/v2/auth",
             "https://oauth2.googleapis.com/token",
-            "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+            $"openid email profile {GoogleCalendarScopes}",
             [],
             "127.0.0.1",
             new Dictionary<string, string>
             {
                 ["access_type"] = "offline",
+                ["prompt"] = "consent",
             }),
         OnlineAccountProvider.Spotify => new(
             provider,
             "Spotify",
             "Connect Spotify playback to show the queue and control shuffle and repeat.",
             ResolveClientId(provider).ClientId,
+            null,
             "https://accounts.spotify.com/authorize",
             "https://accounts.spotify.com/api/token",
             SpotifyPlaybackScopes,
@@ -584,6 +615,7 @@ internal sealed class OnlineAccountsService : IDisposable
             "ChatGPT",
             "Connect a ChatGPT subscription using the same OAuth flow currently used by Zed.",
             ResolveClientId(provider).ClientId,
+            null,
             "https://auth.openai.com/oauth/authorize",
             "https://auth.openai.com/oauth/token",
             "openid profile email offline_access",
@@ -628,6 +660,18 @@ internal sealed class OnlineAccountsService : IDisposable
         return configured.Length > 0 ? (configured, "Configuration") : ("", null);
     }
 
+    private static string? ResolveGoogleClientSecret()
+    {
+        if (EmbeddedClientIds.GetValueOrDefault(GoogleClientSecretMetadata)?.Trim() is { Length: > 0 } embedded)
+        {
+            return embedded;
+        }
+
+        return Environment.GetEnvironmentVariable(GoogleClientSecretVariable)?.Trim() is { Length: > 0 } environment
+            ? environment
+            : null;
+    }
+
     private string ConfiguredClientId(OnlineAccountProvider provider)
     {
         var accounts = _configuration.Snapshot.OnlineAccounts;
@@ -668,6 +712,14 @@ internal sealed class OnlineAccountsService : IDisposable
         return definition.AuthorizationEndpoint + "?" + string.Join(
             "&",
             parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+    }
+
+    private static void AddClientSecret(Dictionary<string, string> parameters, string? clientSecret)
+    {
+        if (!string.IsNullOrEmpty(clientSecret))
+        {
+            parameters["client_secret"] = clientSecret;
+        }
     }
 
     private static string? ReadOAuthError(string responseBody)
@@ -812,6 +864,7 @@ internal sealed class OnlineAccountsService : IDisposable
         string Name,
         string Description,
         string ClientId,
+        string? ClientSecret,
         string AuthorizationEndpoint,
         string TokenEndpoint,
         string Scopes,
@@ -821,6 +874,8 @@ internal sealed class OnlineAccountsService : IDisposable
 
     private sealed record AccountIdentity(string AccountId, string AccountName);
 }
+
+internal sealed record GoogleCalendarAccessCredential(string AccessToken, string AccountId);
 
 internal sealed record ChatGptAccessCredential(string AccessToken, string AccountId);
 
@@ -837,7 +892,8 @@ internal sealed record OAuthTokenResponse(
     [property: JsonPropertyName("access_token")] string AccessToken,
     [property: JsonPropertyName("refresh_token")] string? RefreshToken,
     [property: JsonPropertyName("id_token")] string? IdToken,
-    [property: JsonPropertyName("expires_in")] int ExpiresIn = 3600);
+    [property: JsonPropertyName("expires_in")] int ExpiresIn = 3600,
+    [property: JsonPropertyName("scope")] string? Scope = null);
 
 internal sealed record GoogleUserInfo(
     [property: JsonPropertyName("sub")] string Subject,

@@ -10,6 +10,9 @@
     <ItemGroup Condition="'$(HyprNetShellGoogleClientId)' != ''">
         <AssemblyMetadata Include="HyprNetShellGoogleClientId" Value="$(HyprNetShellGoogleClientId)" />
     </ItemGroup>
+    <ItemGroup Condition="'$(HyprNetShellGoogleClientSecret)' != ''">
+        <AssemblyMetadata Include="HyprNetShellGoogleClientSecret" Value="$(HyprNetShellGoogleClientSecret)" />
+    </ItemGroup>
     <ItemGroup Condition="'$(HyprNetShellSpotifyClientId)' != ''">
         <AssemblyMetadata Include="HyprNetShellSpotifyClientId" Value="$(HyprNetShellSpotifyClientId)" />
     </ItemGroup>

@@ -71,12 +71,12 @@
         <Delete Files="@(PublishDebugArtifact)" />
     </Target>
 
-    <Target Name="CreateGentooBinaryArchive"
+    <!-- <Target Name="CreateGentooBinaryArchive"
             AfterTargets="Publish"
             DependsOnTargets="CopyOptionalAudioNativeLibrary;RemovePublishDebugArtifacts"
             Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' == 'linux-x64'">
         <Exec Command="&quot;$(MSBuildProjectDirectory)/scripts/package-gentoo-bin.sh&quot; &quot;$(Version)&quot; &quot;$(PublishDir)&quot; &quot;$(PublishDir)&quot;" />
-    </Target>
+    </Target> -->
 
     <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
         <ItemGroup>

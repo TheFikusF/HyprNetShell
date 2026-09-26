@@ -80,6 +80,30 @@ public static class ModulesCommon
         return string.IsNullOrWhiteSpace(className) ? "?" : className[..1].ToUpperInvariant();
     }
 
+    public static BoxNode CentralWidgetHeader(SvgAsset icon, string text, Action? onClick, BoxState state, Theme theme)
+    {
+        state.UpdateColor(theme.Panel);
+        return new(height: 34)
+        {
+            VerticalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Center,
+            OnClick = onClick,
+            IsHovered = onClick is null ? null : state.Hovered,
+            Style = ModuleStyle(theme, state.Background) with
+            {
+                Padding = new Insets(10, 0),
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Spacing = 8,
+            },
+            Children =
+            [
+                new ImageNode(icon, 22, 22, theme.Text),
+                new TextNode(text, 22, theme.Text),
+            ],
+        };
+    }
+
     public static TState GetState<TKey, TState>(this IDictionary<TKey, TState> stateDictionary, TKey key,
         Color initialColor)
         where TState : BoxState, new()

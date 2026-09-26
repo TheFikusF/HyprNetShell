@@ -2,7 +2,9 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Features.System;
+using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
+using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -14,12 +16,15 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
 {
     private const int URL_MAX_LENGTH = 2048;
     private const int URL_TEXT_MAX_WIDTH = 780;
+    private const int VISIBLE_SOURCE_COUNT = 6;
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, Ref<float>> _googleSwitchAnimations = [];
     private string _url = "";
     private string _message = "";
     private bool _messageIsError;
     private bool _isEditing;
+    private int _firstSourceIndex;
 
     public string Id => "calendar-sources";
     public string Title => "Calendar sources";
@@ -92,9 +97,12 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
     public Node Draw()
     {
         var urls = calendar.Urls;
+        var googleCalendars = calendar.GoogleCalendars;
+        var sourceCount = urls.Count + googleCalendars.Count;
+        BoundedListUi.NormalizeViewport(ref _firstSourceIndex, sourceCount, VISIBLE_SOURCE_COUNT);
         var status = calendar.IsRefreshing
             ? "Refreshing…"
-            : calendar.Status ?? $"{urls.Count} configured";
+            : calendar.Status ?? $"{calendar.ConfiguredSourceCount} enabled";
 
         return new BoxNode
         {
@@ -106,15 +114,7 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
                 BuildHeader(status),
                 BuildUrlEditor(),
                 BuildStatus(),
-                urls.Count == 0
-                    ? MainDialogTabUi.BuildMessage(theme, "No calendar sources configured.")
-                    : new BoxNode
-                    {
-                        Direction = Direction.Vertical,
-                        HorizontalAlignment = ItemsAlignment.Stretch,
-                        Style = new Style { Spacing = 8 },
-                        Children = [..urls.Select(BuildUrlRow)],
-                    },
+                BuildSources(urls, googleCalendars),
             ],
         };
     }
@@ -142,6 +142,88 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
                 calendar.IsRefreshing ? null : ForceRefresh),
         ],
     };
+
+    private Node BuildSources(
+        IReadOnlyList<string> urls,
+        IReadOnlyList<GoogleCalendarSource> googleCalendars)
+    {
+        var sourceRows = googleCalendars
+            .Select(source => (Func<Node>)(() => BuildGoogleCalendarRow(source)))
+            .Concat(urls.Select(url => (Func<Node>)(() => BuildUrlRow(url))))
+            .ToArray();
+        if (sourceRows.Length == 0)
+        {
+            var message = calendar.GoogleAccountConnected
+                ? calendar.IsRefreshing
+                    ? "Loading Google calendars…"
+                    : "No calendars available. Add a calendar URL or select Refresh."
+                : "No calendars available. Connect a Google account or add a calendar URL.";
+            return MainDialogTabUi.BuildMessage(theme, message);
+        }
+
+        var content = new BoxNode
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = new Style { Spacing = 8 },
+            Children = sourceRows
+                .VisibleItems(_firstSourceIndex, VISIBLE_SOURCE_COUNT)
+                .Select(item => item.Item())
+                .ToArray(),
+        };
+
+        return BoundedListUi.BuildScrollableResults(
+            content,
+            _firstSourceIndex,
+            sourceRows.Length,
+            VISIBLE_SOURCE_COUNT,
+            theme,
+            delta => ScrollSources(delta, sourceRows.Length));
+    }
+
+    private Node BuildGoogleCalendarRow(GoogleCalendarSource source)
+    {
+        if (!_googleSwitchAnimations.TryGetValue(source.Id, out var animation))
+        {
+            animation = new Ref<float>();
+            _googleSwitchAnimations[source.Id] = animation;
+        }
+
+        return new BoxNode(height: 58)
+        {
+            HorizontalAlignment = ItemsAlignment.Spread,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = () => calendar.SetGoogleCalendarEnabled(source.Id, !source.Enabled),
+            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            {
+                Padding = new Insets(16, 8),
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children =
+            [
+                new BoxNode
+                {
+                    Direction = Direction.Vertical,
+                    Style = new Style { Spacing = 2 },
+                    Children =
+                    [
+                        new TextNode(source.Name, 16, theme.Text, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
+                        new TextNode(
+                            source.Primary ? "Primary Google calendar" : source.Hidden ? "Hidden Google calendar" : "Google calendar",
+                            12,
+                            theme.Text.MutedColor),
+                    ],
+                },
+                new SwitchNode(source.Enabled, animation)
+                {
+                    OffTrackColor = theme.Text.MutedColor,
+                    OnTrackColor = theme.Active,
+                    KnobColor = theme.Text,
+                },
+            ],
+        };
+    }
 
     private Node BuildUrlEditor()
     {
@@ -294,6 +376,13 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
         ClearMessage();
         _ = calendar.ForceRefreshAsync();
     }
+
+    private void ScrollSources(float delta, int sourceCount) =>
+        BoundedListUi.MoveViewport(
+            ref _firstSourceIndex,
+            delta > 0 ? 1 : -1,
+            sourceCount,
+            VISIBLE_SOURCE_COUNT);
 
     private void SetMessage(string message, bool isError)
     {

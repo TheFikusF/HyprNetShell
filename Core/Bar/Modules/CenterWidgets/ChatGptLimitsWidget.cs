@@ -11,41 +11,39 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage, Theme theme)
 {
     public const int WIDTH = CenterModule.WIDTH - TodaysEventsWidget.WIDTH - 12;
+    private readonly ModulesCommon.BoxState _titleState = new();
 
-    internal Node Draw()
+    internal Node Draw() => new BoxNode(WIDTH)
     {
-        var snapshot = usage.Snapshot;
-        return new BoxNode(WIDTH)
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Start,
+        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
         {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
-            {
-                BorderRadius = 8,
-                Spacing = 14,
-            },
-            Children =
-            [
-                BuildHeader(snapshot),
-                ..BuildContent(snapshot),
-            ],
-        };
-    }
-
-    private Node BuildHeader(ChatGptUsageSnapshot snapshot) => new BoxNode(height: 34)
-    {
-        HorizontalAlignment = ItemsAlignment.Spread,
-        VerticalAlignment = ItemsAlignment.Center,
+            BorderRadius = 8,
+            Spacing = 16,
+        },
         Children =
         [
-            new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-            {
-                new ImageNode(Icons.Bot, 20, 20, theme.Text),
-                new TextNode("ChatGPT limits", 20, theme.Text),
-            },
-            new TextNode(snapshot.Plan?.ToUpperInvariant() ?? "", theme.Text.SmallSize, theme.Text.MutedColor),
+            BuildHeader(usage.Snapshot),
+            ..BuildContent(usage.Snapshot),
         ],
+    };
+
+    private BoxNode BuildHeader(ChatGptUsageSnapshot snapshot) => new (Style.Spacer, ItemsAlignment.Stretch)
+    {
+        Direction = Direction.Vertical,
+        Children = [
+            ModulesCommon.CentralWidgetHeader(Icons.Bot, "ChatGPT limits", null, _titleState, theme),
+            new BoxNode(Style.Spacer, ItemsAlignment.Spread)
+            {
+                new TextNode(snapshot.Plan?.ToUpperInvariant() ?? "", theme.Text, theme.Text.MutedColor),
+                new TextNode(
+                    snapshot.Status ?? (snapshot.UpdatedAt is { } updated ? $"Updated {updated:t}" : ""),
+                    theme.Text,
+                    theme.Text.MutedColor),
+            }
+        ]
     };
 
     private IEnumerable<Node> BuildContent(ChatGptUsageSnapshot snapshot)
@@ -73,16 +71,11 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage, Theme theme
         {
             yield return BuildWindow(window);
         }
-
-        yield return new TextNode(
-            snapshot.Status ?? (snapshot.UpdatedAt is { } updated ? $"Updated {updated:t}" : ""),
-            theme.Text.SmallSize,
-            theme.Text.MutedColor);
     }
 
-    private Node BuildWindow(ChatGptLimitWindow window)
+    private BoxNode BuildWindow(ChatGptLimitWindow window)
     {
-        const int BarWidth = WIDTH - 32;
+        const int BarWidth = WIDTH - 24;
         var used = Math.Clamp(window.UsedPercent, 0, 100);
         var color = used >= 90 ? theme.Critical : used >= 70 ? theme.Warning : theme.Active;
         var reset = window.ResetsAt is { } resetsAt ? $"Resets {FormatReset(resetsAt)}" : "Reset unknown";
@@ -90,7 +83,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage, Theme theme
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 7 },
+            Style = Style.Spacer,
             Children =
             [
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)

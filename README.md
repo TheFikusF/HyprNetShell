@@ -76,11 +76,14 @@ The supported environment variables are:
 
 ```bash
 export HYPRNETSHELL_GOOGLE_CLIENT_ID="your-google-desktop-client-id"
+export HYPRNETSHELL_GOOGLE_CLIENT_SECRET="your-google-desktop-client-secret"
 export HYPRNETSHELL_SPOTIFY_CLIENT_ID="your-spotify-client-id"
 export HYPRNETSHELL_OPENAI_CLIENT_ID="your-openai-client-id"
 ```
 
-Create the Google credential as a **Desktop app** OAuth client. For Spotify, use Authorization Code with PKCE and register the exact loopback redirect URI `http://127.0.0.1:5543/auth/callback`. Spotify permits HTTP for explicit loopback IP addresses, but not for ordinary remote hosts or `localhost`. Client IDs are public identifiers; no client secret should be placed in the configuration, environment, or binary.
+Create the Google credential as a **Desktop app** OAuth client and supply both values from its downloaded credential JSON. Google assumes installed apps cannot keep the desktop `client_secret` confidential; PKCE protects each authorization-code exchange, while the static value may still be required by Google's token endpoint. The secret is intentionally excluded from `config.json`, the settings UI, status snapshots, and logs. Supply it through `HYPRNETSHELL_GOOGLE_CLIENT_SECRET` for local runs or the gitignored publish credentials when embedding it in a distributed build.
+
+For Spotify, use Authorization Code with PKCE and register the exact loopback redirect URI `http://127.0.0.1:5543/auth/callback`. Spotify permits HTTP for explicit loopback IP addresses, but not for ordinary remote hosts or `localhost`. Do not configure client secrets for Spotify or ChatGPT.
 
 The initial Google connection requests identity scopes only, and the initial Spotify connection requests no optional scopes. Feature-specific permissions will be added alongside the features that need them.
 
