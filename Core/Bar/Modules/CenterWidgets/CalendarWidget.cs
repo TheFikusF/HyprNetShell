@@ -37,6 +37,7 @@ internal sealed class CalendarWidget
         Action? openCalendar = null,
         DateOnly? selectedDate = null,
         Action<DateOnly>? onDateSelected = null,
+        bool handleScroll = true,
         bool showTooltips = false)
     {
         var currentMonth = new DateTime(now.Year, now.Month, 1);
@@ -55,6 +56,7 @@ internal sealed class CalendarWidget
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
+            OnScroll = handleScroll ? delta => ChangeMonth(delta > 0 ? 1 : -1) : null,
             Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
             {
                 BorderRadius = 8,
@@ -86,7 +88,7 @@ internal sealed class CalendarWidget
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            OnClick = () => _displayedMonth = (_displayedMonth ?? DateTime.Today).AddMonths(monthDelta),
+            OnClick = () => ChangeMonth(monthDelta),
             IsHovered = state.Hovered,
             Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
             {
@@ -97,6 +99,9 @@ internal sealed class CalendarWidget
             Children = [new ImageNode(icon, 20, 20, _theme.Text)],
         };
     }
+
+    private void ChangeMonth(int delta) =>
+        _displayedMonth = (_displayedMonth ?? DateTime.Today).AddMonths(Math.Sign(delta));
 
     private BoxNode BuildWeekHeader() => new(Style.Spacer)
     {
@@ -159,7 +164,7 @@ internal sealed class CalendarWidget
         {
             children.Add(new BoxNode(new Style { Spacing = 2 }, ItemsAlignment.Center, ItemsAlignment.Center)
             {
-                Children = [.. Enumerable.Range(0, Math.Min(3, events.Count)).Select(_ => BuildDot())],
+                Children = [.. Enumerable.Range(0, Math.Min(3, events.Count)).Select(_ => BuildDot(selected || active))],
             });
         }
 
@@ -198,22 +203,22 @@ internal sealed class CalendarWidget
         Children = [new TextNode(text, 16, _theme.Text)],
     };
 
-    private BoxNode BuildDot() => new(4, 4)
+    private BoxNode BuildDot(bool selected) => new(4, 4)
     {
-        Style = new Style { BackgroundColor = _theme.Active, BorderRadius = 999 },
+        Style = new Style { BackgroundColor = selected ? _theme.Text : _theme.Active, BorderRadius = 4308 },
     };
 
-    private Node BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new BoxNode(280)
+    private BoxNode BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new (280)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 12, Spacing = 6 },
+        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 12, Spacing = 8 },
         Children =
         [
-            new TextNode(date.ToString("dddd, MMMM d"), 15, _theme.Text),
+            new TextNode(date.ToString("dddd, MMMM d"), _theme.Text, _theme.Text.MutedColor),
             ..events.Take(5).Select(occurrence => new TextNode(
                 occurrence.IsAllDay ? $"All day · {occurrence.Title}" : $"{occurrence.Start:HH:mm} · {occurrence.Title}",
-                13,
+                _theme.Text,
                 _theme.Text,
                 maxWidth: 256,
                 wrapping: TextWrapping.Ellipsis)),

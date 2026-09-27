@@ -65,7 +65,7 @@ internal static class BoundedListUi
     }
 
     public static IEnumerable<(T Item, int Index)> VisibleItems<T>(
-        this IReadOnlyList<T> items,
+        this IReadOnlyCollection<T> items,
         int firstIndex,
         int visibleItemCount = DefaultVisibleItemCount)
     {
@@ -77,7 +77,7 @@ internal static class BoundedListUi
     }
 
     public static Node BuildScrollableResults(
-        BoxNode content,
+        Node content,
         int firstItem,
         int totalItems,
         int visibleItems,
@@ -94,7 +94,7 @@ internal static class BoundedListUi
             HorizontalAlignment = ItemsAlignment.Stretch,
             OnScroll = onScroll,
             VerticalAlignment = ItemsAlignment.Start,
-            Style = new Style { Spacing = 8 },
+            Style = Style.Spacer,
             Children =
             [
                 content,
@@ -108,6 +108,21 @@ internal static class BoundedListUi
             ],
         };
     }
+
+    public static Node BuildList<T>(
+        IReadOnlyCollection<T> items,
+        Func<T, int, Node> renderItem,
+        int firstItem,
+        int visibleItems,
+        Theme theme,
+        Action<float>? onScroll = null) => BuildScrollableResults(new BoxNode
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = Style.Spacer,
+            Children = [..items.VisibleItems(firstItem, visibleItems)
+                .Select(item => renderItem(item.Item, item.Index))],
+        }, firstItem, items.Count, visibleItems, theme, onScroll);
 
     private static void AlignViewport(
         ref int firstIndex,

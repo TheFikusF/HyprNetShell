@@ -261,7 +261,7 @@ internal sealed class CenterModule : IDrawableModule
                 {
                     0 =>
                     [
-                        _calendar.Draw(now, OpenCalendar, showTooltips: true),
+                        _calendar.Draw(now, OpenCalendar, showTooltips: true, handleScroll: false),
                         _worldClocks.Draw(now, OpenWorldClocks),
                         _weather.Draw(OpenWeather),
                     ],

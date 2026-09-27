@@ -25,6 +25,7 @@ internal sealed class CompositeWindow : IDialogWindow
         public string Id => _tab.Id;
         public string Title => _tab.Title;
         public SvgAsset Icon => _tab.Icon;
+        public bool HandleScroll => _tab.HandleScroll;
 
         public void Activate() => _tab.Activate();
 
@@ -105,7 +106,7 @@ internal sealed class CompositeWindow : IDialogWindow
             ActiveTab.HandleTextInput(input.Text);
         }
 
-        if (input.ScrollDelta != 0)
+        if (ActiveTab.HandleScroll && input.ScrollDelta != 0)
         {
             ActiveTab.MoveSelection(input.ScrollDelta > 0 ? SelectionDirection.Down : SelectionDirection.Up);
         }

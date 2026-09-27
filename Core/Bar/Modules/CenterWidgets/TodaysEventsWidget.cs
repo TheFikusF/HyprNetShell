@@ -15,6 +15,7 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
     private const int VisibleEventCount = 5;
 
     private readonly ModulesCommon.BoxState _titleState = new();
+    private readonly Dictionary<string, ModulesCommon.BoxState> _eventStates = [];
     private int _firstEventIndex;
 
     internal Node Draw(DateTime now, Action openCalendar)
@@ -27,7 +28,6 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
-            OnScroll = delta => Scroll(delta, events.Count),
             Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
             {
                 BorderRadius = 8,
@@ -59,48 +59,11 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             new TextNode($"{events.Count} event{(events.Count == 1 ? "" : "s")}", theme.Text, theme.Text.MutedColor),
         };
 
-        foreach (var item in events.VisibleItems(_firstEventIndex, VisibleEventCount))
-        {
-            yield return BuildEvent(item.Item);
-        }
-    }
-
-    private BoxNode BuildEvent(CalendarOccurrence occurrence)
-    {
-        var time = occurrence.IsAllDay
-            ? "All day"
-            : occurrence.End > occurrence.Start
-                ? $"{occurrence.Start:HH:mm}–{occurrence.End:HH:mm}"
-                : occurrence.Start.ToString("HH:mm");
-        return new BoxNode(height: occurrence.Location is { Length: > 0 } ? 52 : 40)
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style
-            {
-                BackgroundColor = Color.Lighten(theme.Panel, 0.08f),
-                BorderRadius = 8,
-                Padding = new Insets(10, 5),
-                Spacing = 3,
-            },
-            Children =
-            [
-                new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
-                {
-                    new TextNode(occurrence.Title, theme.Text.HeaderSize, theme.Text, 380, TextWrapping.Ellipsis),
-                    new TextNode(time, theme.Text, theme.Text.MutedColor),
-                },
-                ..(occurrence.Location is { Length: > 0 } location
-                    ? new Node[] { new TextNode(location, theme.Text.SmallSize, theme.Text.MutedColor, 490, TextWrapping.Ellipsis) }
-                    : []),
-            ],
-        };
+        yield return CalendarTab.BuildEventsList(events, _firstEventIndex, VisibleEventCount,
+            theme, _eventStates, delta => Scroll(delta, events.Count));
     }
 
     private void Scroll(float delta, int eventCount) => BoundedListUi.MoveViewport(
-        ref _firstEventIndex,
-        delta > 0 ? 1 : -1,
-        eventCount,
-        VisibleEventCount);
+        ref _firstEventIndex, delta > 0 ? 1 : -1,
+        eventCount, VisibleEventCount);
 }

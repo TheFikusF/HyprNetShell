@@ -193,32 +193,29 @@ Do not silently swallow runtime failures. Any caught exception or unsuccessful e
 
 ## Build and validation
 
-Build native code before managed code:
+Use the project script to build native code before managed code:
 
 ```bash
-meson setup Native/build Native
-meson compile -C Native/build
-dotnet build HyprNetShell.slnx
+./build.sh build
 ```
 
-For an existing native build after Meson changes:
+The native and managed sides can be built independently:
 
 ```bash
-meson setup Native/build Native --reconfigure
-meson compile -C Native/build
+./build.sh native
+./build.sh managed
 ```
 
 NativeAOT validation:
 
 ```bash
-dotnet publish HyprNetShell.csproj \
-  -p:PublishProfile=Properties/PublishProfiles/NativeAotOneFile.pubxml
+./build.sh publish
 ```
 
 There is currently no automated test project. At minimum:
 
-- managed-only changes: run `dotnet build HyprNetShell.slnx`;
-- native-only changes: run `meson compile -C Native/build`, then rebuild the executable;
+- managed-only changes: run `./build.sh managed`;
+- native-only changes: run `./build.sh native`, then rebuild the executable;
 - ABI changes: run both builds and verify the copied shared library;
 - generator/asset changes: run the managed build and check generator diagnostics;
 - trimming/reflection/serialization changes: also run the NativeAOT publish;

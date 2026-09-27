@@ -21,16 +21,18 @@ internal sealed class CalendarTab : IMainDialogTab
     private DateOnly _selectedDate = DateOnly.FromDateTime(DateTime.Today);
     private int _firstEventIndex;
 
+    public string Id => "calendar";
+    public string Title => "Calendar";
+    public SvgAsset Icon => Icons.Calendar;
+
+    public bool HandleScroll => false;
+
     internal CalendarTab(CalendarService calendar, Theme theme)
     {
         _calendar = calendar;
         _theme = theme;
         _month = new CalendarWidget(calendar, theme, 400);
     }
-
-    public string Id => "calendar";
-    public string Title => "Calendar";
-    public SvgAsset Icon => Icons.Calendar;
 
     public void Activate()
     {
@@ -109,73 +111,54 @@ internal sealed class CalendarTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events)
+    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events) => new (420)
     {
-        var content = events.Count == 0
-            ? new BoxNode
-            {
-                Direction = Direction.Vertical,
-                HorizontalAlignment = ItemsAlignment.Stretch,
-                Style = new Style { Spacing = 12 },
-                Children =
-                [
-                    MainDialogTabUi.BuildSectionHeader(_selectedDate.ToString("dddd, MMMM d"), "No events"),
-                    MainDialogTabUi.BuildMessage(_theme, "Nothing scheduled for this day."),
-                ],
-            }
-            : new BoxNode
-            {
-                Direction = Direction.Vertical,
-                HorizontalAlignment = ItemsAlignment.Stretch,
-                Style = Style.Spacer,
-                Children =
-                [
-                    MainDialogTabUi.BuildSectionHeader(
-                        _selectedDate.ToString("dddd, MMMM d"),
-                        $"{events.Count} event{(events.Count == 1 ? "" : "s")}"),
-                    ..events.VisibleItems(_firstEventIndex, VisibleEventCount)
-                        .Select(item => BuildEvent(item.Item, item.Index)),
-                ],
-            };
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = Style.Spacer,
+        Children = [
+            MainDialogTabUi.BuildSectionHeader(_selectedDate.ToString("dddd, MMMM d"),
+                events.Count == 0 ? "No events" : $"{events.Count} event{(events.Count == 1 ? "" : "s")}"),
 
-        return new BoxNode(420)
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            OnScroll = delta => ScrollEvents(delta, events.Count),
-            Children =
-            [
-                events.Count > VisibleEventCount
-                    ? BoundedListUi.BuildScrollableResults(
-                        content,
-                        _firstEventIndex,
-                        events.Count,
-                        VisibleEventCount,
-                        _theme,
-                        delta => ScrollEvents(delta, events.Count))
-                    : content,
-            ],
-        };
-    }
+            BuildEventsList(events, _firstEventIndex, VisibleEventCount,
+                _theme, _buttonStates, delta => ScrollEvents(delta, events.Count))
+        ],
+    };
 
-    private BoxNode BuildEvent(CalendarOccurrence occurrence, int index)
+    internal static Node BuildEventsList(
+        IReadOnlyList<CalendarOccurrence> events,
+        int firstIndex,
+        int visibleEvents,
+        Theme theme,
+        Dictionary<string, ModulesCommon.BoxState> buttonStates,
+        Action<float> onScroll) => events.Count == 0
+            ? MainDialogTabUi.BuildMessage(theme, "Nothing scheduled for this day.")
+            : BoundedListUi.BuildList(events,
+                (occurrence, index) => BuildEvent(occurrence, index, theme, buttonStates),
+                firstIndex, visibleEvents, theme, onScroll);
+
+    private static BoxNode BuildEvent(
+        CalendarOccurrence occurrence,
+        int index,
+        Theme theme,
+        Dictionary<string, ModulesCommon.BoxState> buttonStates)
     {
-        var state = _buttonStates.GetState("event-" + index, _theme.Panel).UpdateColor(_theme.Panel);
+        var state = buttonStates.GetState("event-" + index, theme.Panel).UpdateColor(theme.Panel);
         var time = occurrence.IsAllDay
             ? "All day"
             : occurrence.End > occurrence.Start
                 ? $"{occurrence.Start:HH:mm}–{occurrence.End:HH:mm}"
                 : occurrence.Start.ToString("HH:mm");
 
-        return new BoxNode(height: occurrence.Location is null ? 62 : 78)
+        return new BoxNode()
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
-                Padding = new Insets(14, 8),
+                Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 4,
@@ -184,11 +167,11 @@ internal sealed class CalendarTab : IMainDialogTab
             [
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
-                    new TextNode(occurrence.Title, _theme.Text.HeaderSize, _theme.Text, maxWidth: 275, wrapping: TextWrapping.Ellipsis),
-                    new TextNode(time, _theme.Text, _theme.Text.MutedColor),
+                    new TextNode(occurrence.Title, theme.Text.HeaderSize, theme.Text, maxWidth: 275, maxLines: 3, wrapping: TextWrapping.Wrap),
+                    new TextNode(time, theme.Text, theme.Text.MutedColor),
                 },
                 ..(occurrence.Location is { Length: > 0 } location
-                    ? new Node[] { new TextNode(location, _theme.Text, _theme.Text.MutedColor, maxWidth: 380,
+                    ? new Node[] { new TextNode(location, theme.Text, theme.Text.MutedColor, maxWidth: 380,
                         wrapping: TextWrapping.Ellipsis) }
                     : []),
             ],

@@ -1,7 +1,7 @@
 [
   {
     "label": "Build: Native",
-    "command": "meson setup Native/build Native && meson compile -C Native/build",
+    "command": "./build.sh native",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -12,7 +12,7 @@
   },
   {
     "label": "Build: Managed",
-    "command": "dotnet build HyprNetShell.slnx",
+    "command": "./build.sh managed",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -23,7 +23,7 @@
   },
   {
     "label": "Build: HyprNetShell",
-    "command": "meson setup Native/build Native && meson compile -C Native/build && dotnet build HyprNetShell.slnx",
+    "command": "./build.sh build",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
@@ -34,7 +34,7 @@
   },
   {
     "label": "Run: HyprNetShell",
-    "command": "dotnet run --project HyprNetShell.csproj --no-restore",
+    "command": "./build.sh run",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true,
     "allow_concurrent_runs": false,
@@ -45,18 +45,7 @@
   },
   {
     "label": "Publish: NativeAOT",
-    "command": "dotnet publish HyprNetShell.csproj -p:PublishProfile=Properties/PublishProfiles/NativeAotOneFile.pubxml",
-    "cwd": "$ZED_WORKTREE_ROOT",
-    "use_new_terminal": false,
-    "allow_concurrent_runs": false,
-    "reveal": "always",
-    "hide": "on_success",
-    "shell": "system",
-    "tags": ["build", "publish"]
-  },
-  {
-    "label": "Publish: Script",
-    "command": "./publish.sh",
+    "command": "./build.sh publish",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,

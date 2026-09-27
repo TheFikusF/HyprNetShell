@@ -43,24 +43,26 @@ Online account credentials require a Freedesktop Secret Service provider such as
 
 ### Steps
 
-From the repository root, build the native library first:
+From the repository root, build the native libraries and managed solution through the project script:
 
 ```bash
-meson setup Native/build Native
-meson compile -C Native/build
+./build.sh build
 ```
 
-Then build the managed solution:
+The native and managed sides can also be built independently:
 
 ```bash
-dotnet build HyprNetShell.slnx
+./build.sh native
+./build.sh managed
 ```
 
-Run HyprNetShell from inside a compatible Wayland session:
+Build and run HyprNetShell from inside a compatible Wayland session:
 
 ```bash
-dotnet run --project HyprNetShell.csproj
+./build.sh run
 ```
+
+Run `./build.sh help` for the complete command list and argument-forwarding behavior.
 
 The managed build copies `Native/build/libhypr_layer.so` into the executable output directory. If the native library is missing, the build emits a warning and the application cannot start.
 
@@ -68,7 +70,7 @@ The managed build copies `Native/build/libhypr_layer.so` into the executable out
 
 The Settings → Accounts tab supports Google, Spotify, and ChatGPT sign-in. Client IDs can be saved directly in that tab, supplied through the environment, or embedded during publishing. Resolution uses this priority:
 
-1. client ID embedded in the published build;
+1. client ID embedded by `build.sh`;
 2. environment variable;
 3. value saved in `config.json` through Settings → Accounts.
 
@@ -81,7 +83,7 @@ export HYPRNETSHELL_SPOTIFY_CLIENT_ID="your-spotify-client-id"
 export HYPRNETSHELL_OPENAI_CLIENT_ID="your-openai-client-id"
 ```
 
-Create the Google credential as a **Desktop app** OAuth client and supply both values from its downloaded credential JSON. Google assumes installed apps cannot keep the desktop `client_secret` confidential; PKCE protects each authorization-code exchange, while the static value may still be required by Google's token endpoint. The secret is intentionally excluded from `config.json`, the settings UI, status snapshots, and logs. Supply it through `HYPRNETSHELL_GOOGLE_CLIENT_SECRET` for local runs or the gitignored publish credentials when embedding it in a distributed build.
+Create the Google credential as a **Desktop app** OAuth client and supply both values from its downloaded credential JSON. Google assumes installed apps cannot keep the desktop `client_secret` confidential; PKCE protects each authorization-code exchange, while the static value may still be required by Google's token endpoint. The secret is intentionally excluded from `config.json`, the settings UI, status snapshots, and logs. Supply it through `HYPRNETSHELL_GOOGLE_CLIENT_SECRET` or the gitignored `credentials.sh` when building or running through `build.sh`.
 
 For Spotify, use Authorization Code with PKCE and register the exact loopback redirect URI `http://127.0.0.1:5543/auth/callback`. Spotify permits HTTP for explicit loopback IP addresses, but not for ordinary remote hosts or `localhost`. Do not configure client secrets for Spotify or ChatGPT.
 
@@ -89,18 +91,13 @@ The initial Google connection requests identity scopes only, and the initial Spo
 
 ChatGPT sign-in currently mirrors Zed's Codex OAuth flow. This uses OpenAI's first-party OAuth registration and is not published as a stable third-party integration API, so it may stop working if OpenAI changes that flow.
 
-For a self-contained NativeAOT build with embedded IDs, edit the local, gitignored `credentials.sh` and run:
+The script embeds non-empty values from the environment or the local, gitignored `credentials.sh` in every managed build. For a self-contained NativeAOT build, run:
 
 ```bash
-./publish.sh
+./build.sh publish
 ```
 
-Only non-empty values from `credentials.sh` are embedded. `publish.sh` accepts additional `dotnet publish` arguments. A direct publish remains available when no embedding is wanted:
-
-```bash
-dotnet publish HyprNetShell.csproj \
-  -p:PublishProfile=Properties/PublishProfiles/NativeAotOneFile.pubxml
-```
+`build.sh publish` accepts additional `dotnet publish` arguments.
 
 The profile also creates
 `bin/Release/net10.0/linux-x64/publish/HyprNetShell-0.1.0-linux-x64.tar.xz`,
