@@ -70,6 +70,7 @@ public sealed class HyprLayer : IDisposable
         public int Height { get; internal set; }
         public LayoutInput Input { get; internal set; } = LayoutInput.None;
         public int PressedKey { get; internal set; } = -1;
+        public bool ControlPressed { get; internal set; }
         public string TextInput { get; internal set; } = "";
 
         internal void UpdateInput(IntPtr layer)
@@ -88,6 +89,7 @@ public sealed class HyprLayer : IDisposable
                     scrollDelta)
                 : LayoutInput.None with { ScrollDelta = scrollDelta };
             PressedKey = NativeMethods.hypr_layer_take_key(layer, Id);
+            ControlPressed = NativeMethods.hypr_layer_take_key_control(layer, Id) != 0;
 
             var textBuffer = new byte[128];
             var textLength = NativeMethods.hypr_layer_take_text(layer, Id, textBuffer, textBuffer.Length);

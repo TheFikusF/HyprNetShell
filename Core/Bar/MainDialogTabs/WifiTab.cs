@@ -11,16 +11,20 @@ using QRCoder;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class WifiTab : IMainDialogTab, IDisposable
 {
     private const int VisibleNetworkCount = 7;
     private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(5);
 
+    private readonly NetworkModuleService service;
+    private readonly TextInputCoordinator inputs;
+    private readonly Theme theme;
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private readonly Ref<float> _wifiSwitchAnimation = new();
+    private readonly TextInputCoordinator.Input _passwordInput;
     private IReadOnlyList<WifiNetworkSnapshot> _networks = [];
     private Task? _scanTask;
     private Task? _operationTask;
@@ -36,6 +40,24 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
     private bool? _wifiEnabledOverride;
     private bool _disposed;
 
+    internal WifiTab(
+        NetworkModuleService service,
+        TextInputCoordinator inputs,
+        Theme theme)
+    {
+        this.service = service;
+        this.inputs = inputs;
+        this.theme = theme;
+        _passwordInput = inputs.Create(
+            "",
+            "",
+            "Password",
+            int.MaxValue,
+            transform: TransformPasswordInput,
+            alwaysActive: true,
+            textSize: 16);
+    }
+
     public string Id => "wifi";
     public string Title => "Wi-Fi";
     public SvgAsset Icon => Icons.WifiStrength[^1];
@@ -43,6 +65,11 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
     public void Activate()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (inputs.IsActive(_passwordInput))
+        {
+            inputs.Deactivate();
+        }
+
         lock (_stateLock)
         {
             _passwordNetwork = null;
@@ -50,31 +77,10 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
             _qrImage = null;
             _password = "";
             _status = null;
+            inputs.SetValue(_passwordInput, "");
         }
 
         ScheduleScan(force: true);
-    }
-
-    public void HandleTextInput(string text)
-    {
-        lock (_stateLock)
-        {
-            if (_passwordNetwork is not null)
-            {
-                _password += text;
-            }
-        }
-    }
-
-    public void HandleBackspace()
-    {
-        lock (_stateLock)
-        {
-            if (_passwordNetwork is not null)
-            {
-                _password = MainDialogTabUi.RemoveLastTextElement(_password);
-            }
-        }
     }
 
     public bool HandleEscape()
@@ -344,7 +350,7 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         [
             ModulesCommon.BuildTextWithIcon(theme, Icons.Lock, $"Connect to {network.Ssid}", maxTextWidth: 360),
             new TextNode("Enter the network password", theme.Text, theme.Text.MutedColor),
-            MainDialogTabUi.BuildInput(new string('•', password.Length), "Password"),
+            inputs.Build(_passwordInput),
             new BoxNode
             {
                 HorizontalAlignment = ItemsAlignment.End,
@@ -422,6 +428,13 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
                 _passwordNetwork = network;
                 _password = "";
                 _status = null;
+                inputs.SetValue(_passwordInput, "");
+                inputs.Configure(_passwordInput, submit: _ =>
+                {
+                    ConnectWithPassword();
+                    return false;
+                });
+                inputs.Activate(_passwordInput);
             }
             return;
         }
@@ -614,6 +627,11 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
             {
                 _passwordNetwork = null;
                 _password = "";
+                inputs.SetValue(_passwordInput, "");
+                if (inputs.IsActive(_passwordInput))
+                {
+                    inputs.Deactivate();
+                }
             }
         }
 
@@ -635,6 +653,11 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
             _passwordNetwork = null;
             _password = "";
             _status = null;
+            inputs.SetValue(_passwordInput, "");
+            if (inputs.IsActive(_passwordInput))
+            {
+                inputs.Deactivate();
+            }
         }
     }
 
@@ -687,6 +710,28 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         return network.WifiEnabled;
     }
 
+    private string TransformPasswordInput(string value)
+    {
+        lock (_stateLock)
+        {
+            var previousMaskLength = _password.Length;
+            if (value.Length >= previousMaskLength &&
+                value.AsSpan(0, previousMaskLength).IndexOfAnyExcept('•') < 0)
+            {
+                _password += value[previousMaskLength..];
+            }
+            else
+            {
+                while (_password.Length > value.Length)
+                {
+                    _password = MainDialogTabUi.RemoveLastTextElement(_password);
+                }
+            }
+
+            return new string('•', _password.Length);
+        }
+    }
+
     private static bool IsSecured(WifiNetworkSnapshot network) =>
         !string.IsNullOrWhiteSpace(network.Security) && network.Security != "--";
 
@@ -695,6 +740,11 @@ internal sealed class WifiTab(NetworkModuleService service, Theme theme) : IMain
         if (_disposed)
         {
             return;
+        }
+
+        if (inputs.IsActive(_passwordInput))
+        {
+            inputs.Deactivate();
         }
 
         Task? scanTask;

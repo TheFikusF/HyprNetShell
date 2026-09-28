@@ -22,6 +22,7 @@ internal sealed class AppConfiguration
 
 internal sealed class WallpaperConfiguration
 {
+    public string Directory { get; set; } = "";
     public bool SlideshowEnabled { get; set; } = true;
     public int DurationMinutes { get; set; } = 10;
 }

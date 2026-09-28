@@ -45,20 +45,20 @@ internal sealed class CompositeWindow : IDialogWindow
     }
 
     private Tab[] _tabs = [];
+    private readonly TextInputCoordinator _textInputs;
     private readonly Theme _theme;
     private readonly IReadOnlyDictionary<DialogKey, Action> _actions;
 
     private int _activeTabIndex;
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex];
 
-    internal CompositeWindow(Theme theme)
+    internal CompositeWindow(TextInputCoordinator textInputs, Theme theme)
     {
+        _textInputs = textInputs;
         _theme = theme;
 
         _actions = new Dictionary<DialogKey, Action>
         {
-            [DialogKey.Backspace] = () => ActiveTab.HandleBackspace(),
-            [DialogKey.Enter] = () => ActiveTab.ActivateSelection(),
             [DialogKey.Tab] = () => SelectTab((_activeTabIndex + 1) % _tabs.Length),
             [DialogKey.Up] = () => ActiveTab.MoveSelection(SelectionDirection.Up),
             [DialogKey.Left] = () => ActiveTab.MoveSelection(SelectionDirection.Left),
@@ -81,18 +81,39 @@ internal sealed class CompositeWindow : IDialogWindow
 
     public void OnClosed()
     {
+        _textInputs.Deactivate();
     }
 
     public DialogInputResult HandleInput(DialogInput input)
     {
-        if (ActiveTab.HandleKey(input.Key))
+        if (_textInputs.HandleKey(input.Key) || ActiveTab.HandleKey(input.Key))
         {
             return DialogInputResult.None;
         }
 
         if (input.Key == DialogKey.Escape)
         {
-            return ActiveTab.HandleEscape() ? DialogInputResult.None : DialogInputResult.Close;
+            return _textInputs.HandleEscape() || ActiveTab.HandleEscape()
+                ? DialogInputResult.None
+                : DialogInputResult.Close;
+        }
+
+        if (input.Key == DialogKey.Backspace)
+        {
+            if (!_textInputs.HandleBackspace(input.ControlPressed))
+            {
+                ActiveTab.HandleBackspace();
+            }
+            return DialogInputResult.None;
+        }
+
+        if (input.Key == DialogKey.Enter)
+        {
+            if (!_textInputs.HandleEnter())
+            {
+                ActiveTab.ActivateSelection();
+            }
+            return DialogInputResult.None;
         }
 
         if (_actions.TryGetValue(input.Key, out var action))
@@ -101,7 +122,7 @@ internal sealed class CompositeWindow : IDialogWindow
             return DialogInputResult.None;
         }
 
-        if (!string.IsNullOrEmpty(input.Text))
+        if (!string.IsNullOrEmpty(input.Text) && !_textInputs.HandleTextInput(input.Text))
         {
             ActiveTab.HandleTextInput(input.Text);
         }
@@ -156,6 +177,7 @@ internal sealed class CompositeWindow : IDialogWindow
 
     private void SelectTab(int index)
     {
+        _textInputs.Deactivate();
         _activeTabIndex = index;
         ActiveTab.Activate();
     }

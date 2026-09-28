@@ -29,7 +29,7 @@ internal enum DialogKey
     Space,
 }
 
-internal readonly record struct DialogInput(DialogKey Key, string Text, float ScrollDelta);
+internal readonly record struct DialogInput(DialogKey Key, string Text, float ScrollDelta, bool ControlPressed);
 
 internal enum DialogInputResult
 {
@@ -177,7 +177,7 @@ public sealed class DialogService : IDisposable
         state.Window.OnClosed();
     }
 
-    public void HandleInput(int pressedKey, string textInput, float scrollDelta)
+    public void HandleInput(int pressedKey, string textInput, float scrollDelta, bool controlPressed)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_activeWindow is not { IsOpen: true } state)
@@ -185,7 +185,7 @@ public sealed class DialogService : IDisposable
             return;
         }
 
-        var input = new DialogInput(ToDialogKey(pressedKey, textInput), textInput, scrollDelta);
+        var input = new DialogInput(ToDialogKey(pressedKey, textInput), textInput, scrollDelta, controlPressed);
         if (state.Window.HandleInput(input) == DialogInputResult.Close)
         {
             Close();

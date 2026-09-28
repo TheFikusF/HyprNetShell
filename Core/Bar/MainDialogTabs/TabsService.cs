@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Platform;
@@ -10,6 +11,7 @@ internal sealed class TabsService : IDisposable
     private readonly IReadOnlyDictionary<string, IMainDialogTab> _tabsById;
 
     internal IReadOnlyList<IMainDialogTab> Tabs => _tabs;
+    internal TextInputCoordinator Inputs { get; }
 
     internal TabsService(
         ClipboardHistoryService clipboardHistory,
@@ -24,18 +26,19 @@ internal sealed class TabsService : IDisposable
         Action closeDialog,
         Theme theme)
     {
+        Inputs = new TextInputCoordinator(clipboardHistory, theme);
         _tabs =
         [
-            new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, theme),
-            new ApplicationLauncherTab(hyprctl, closeDialog, theme),
-            new CalculatorTab(theme),
-            new DictionaryTab(dictionary, theme),
-            new WorldClockTab(theme),
+            new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, clipboardHistory, Inputs, theme),
+            new ApplicationLauncherTab(hyprctl, closeDialog, Inputs, theme),
+            new CalculatorTab(clipboardHistory, Inputs, theme),
+            new DictionaryTab(dictionary, clipboardHistory, Inputs, theme),
+            new WorldClockTab(Inputs, theme),
             new CalendarTab(calendar, theme),
             new TetrisTab(theme),
-            new ClipboardManagerTab(clipboardHistory, closeDialog, theme),
-            new WallpapersTab(wallpapers, closeDialog, theme),
-            new WifiTab(network, theme),
+            new ClipboardManagerTab(clipboardHistory, closeDialog, Inputs, theme),
+            new WallpapersTab(wallpapers, closeDialog, Inputs, theme),
+            new WifiTab(network, Inputs, theme),
             new BluetoothTab(bluetooth, theme),
             new WeatherTab(weather, theme),
         ];

@@ -59,6 +59,7 @@ struct hypr_bar {
     int pointer_button_down;
     double pending_scroll;
     int pending_key;
+    int pending_key_control;
     char pending_text[128];
     int pending_text_length;
 };
@@ -1176,6 +1177,11 @@ static void queue_keyboard_input(struct hypr_layer* layer, struct hypr_bar* bar,
         return;
     }
     bar->pending_key = (int)key;
+    bar->pending_key_control = layer->xkb_state != NULL &&
+        xkb_state_mod_name_is_active(
+            layer->xkb_state,
+            XKB_MOD_NAME_CTRL,
+            XKB_STATE_MODS_EFFECTIVE) > 0;
     if (layer->xkb_state == NULL) {
         return;
     }
@@ -2080,6 +2086,16 @@ int hypr_layer_take_key(hypr_layer* layer, uint64_t id) {
     int key = bar->pending_key;
     bar->pending_key = -1;
     return key;
+}
+
+int hypr_layer_take_key_control(hypr_layer* layer, uint64_t id) {
+    struct hypr_bar* bar = find_bar(layer, id);
+    if (bar == NULL) {
+        return 0;
+    }
+    int control = bar->pending_key_control;
+    bar->pending_key_control = 0;
+    return control;
 }
 
 int hypr_layer_take_text(

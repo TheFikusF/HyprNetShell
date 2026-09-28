@@ -1,8 +1,9 @@
-using System.Diagnostics;
+
 using System.Globalization;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Platform;
 
 using HyprNetShell.GUI.Layout;
@@ -16,6 +17,8 @@ internal sealed class UnifiedSearchTab(
     IHyprctl hyprctl,
     UrlLauncher urlLauncher,
     Action closeDialog,
+    ClipboardHistoryService clipboard,
+    TextInputCoordinator inputs,
     Theme theme) : IMainDialogTab, IDisposable
 {
     private const int FuzzyScoreCutoff = 35;
@@ -24,9 +27,14 @@ internal sealed class UnifiedSearchTab(
     private readonly DesktopApplicationCatalog _catalog = new();
     private readonly Dictionary<int, ModulesCommon.BoxState> _buttonStates = [];
     private readonly ApplicationResultInteraction _applicationResults = new(theme);
+    private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
+        "",
+        "",
+        "Search apps, type =1+2, or ?web search...",
+        4096,
+        alwaysActive: true);
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<SearchResult> _results = [];
-    private string _query = "";
     private int _firstIndex;
     private int _selectedIndex;
     private bool _activating;
@@ -37,25 +45,10 @@ internal sealed class UnifiedSearchTab(
 
     public void Activate()
     {
+        inputs.Configure(_queryInput, _ => RebuildResults());
+        inputs.Activate(_queryInput);
         _catalog.RefreshSoon();
         UpdateApplications();
-        RebuildResults();
-    }
-
-    public void HandleTextInput(string text)
-    {
-        _query += text;
-        RebuildResults();
-    }
-
-    public void HandleBackspace()
-    {
-        if (_query.Length == 0)
-        {
-            return;
-        }
-
-        _query = MainDialogTabUi.RemoveLastTextElement(_query);
         RebuildResults();
     }
 
@@ -100,7 +93,7 @@ internal sealed class UnifiedSearchTab(
                 _ = LaunchApplicationAsync(application, action);
                 break;
             case ResultKind.Calculation:
-                _ = Task.Run(() => CopyToClipboard(result.Value));
+                _ = clipboard.CopyTextAsync(result.Value);
                 break;
             case ResultKind.BrowserSearch:
                 OpenBrowserSearch(result.Value);
@@ -120,10 +113,10 @@ internal sealed class UnifiedSearchTab(
             [
                 MainDialogTabUi.BuildSectionHeader(
                     "Search",
-                    _query.Length == 0
+                    _queryInput.Value.Length == 0
                         ? "Apps, calculations, and the web"
                         : MainDialogTabUi.ResultCount(_selectedIndex, _results.Count, "No results")),
-                MainDialogTabUi.BuildInput(_query, "Search apps, type =1+2, or ?web search..."),
+                inputs.Build(_queryInput),
                 BoundedListUi.BuildScrollableResults(
                     new BoxNode
                     {
@@ -221,7 +214,7 @@ internal sealed class UnifiedSearchTab(
 
     private void RebuildResults()
     {
-        var query = _query.Trim();
+        var query = _queryInput.Value.Trim();
         if (query.Length == 0)
         {
             _results = [];
@@ -296,8 +289,7 @@ internal sealed class UnifiedSearchTab(
                     action,
                     "UnifiedSearch"))
             {
-                _query = "";
-                RebuildResults();
+                inputs.SetValue(_queryInput, "", notify: true);
                 closeDialog();
             }
         }
@@ -316,33 +308,6 @@ internal sealed class UnifiedSearchTab(
     private void OpenBrowserSearch(string query) =>
         urlLauncher.TryOpen($"https://www.google.com/search?q={Uri.EscapeDataString(query)}");
 
-    private static void CopyToClipboard(string text)
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "wl-copy",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-            if (process is null)
-            {
-                return;
-            }
-
-            process.StandardInput.Write(text);
-            process.StandardInput.Close();
-            process.WaitForExit(800);
-        }
-        catch
-        {
-            // Clipboard integration is optional; the calculated result remains visible.
-        }
-    }
 
     public void Dispose() => _catalog.Dispose();
 

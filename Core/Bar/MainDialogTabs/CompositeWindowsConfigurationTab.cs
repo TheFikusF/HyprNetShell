@@ -12,23 +12,25 @@ internal sealed class CompositeWindowsConfigurationTab(
     CompositeWindowConfiguration configuration,
     TabsService tabs,
     Action<IReadOnlyList<IMainDialogTab>> openWindow,
+    TextInputCoordinator inputs,
     Theme theme) : IMainDialogTab
 {
-    private enum EditedField
-    {
-        None,
-        Name,
-        Hotkey,
-    }
-
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private int _selectedIndex;
     private bool _isNew;
     private string _id = "";
-    private string _name = "";
-    private string _hotkey = "";
+    private readonly TextInputCoordinator.Input _nameInput = inputs.Create(
+        "Name",
+        "",
+        "Window name",
+        48);
+    private readonly TextInputCoordinator.Input _hotkeyInput = inputs.Create(
+        "Hotkey",
+        "",
+        "Example: SUPER + SPACE",
+        80,
+        transform: value => value.ToUpperInvariant());
     private List<string> _tabs = [];
-    private EditedField _editedField;
     private string _message = "";
 
     public string Id => "composite-windows";
@@ -47,51 +49,10 @@ internal sealed class CompositeWindowsConfigurationTab(
         }
     }
 
-    public void HandleTextInput(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        switch (_editedField)
-        {
-            case EditedField.Name when _name.Length < 48:
-                _name += text;
-                break;
-            case EditedField.Hotkey when _hotkey.Length < 80:
-                _hotkey += text.ToUpperInvariant();
-                break;
-        }
-    }
-
-    public void HandleBackspace()
-    {
-        switch (_editedField)
-        {
-            case EditedField.Name:
-                _name = MainDialogTabUi.RemoveLastTextElement(_name);
-                break;
-            case EditedField.Hotkey:
-                _hotkey = MainDialogTabUi.RemoveLastTextElement(_hotkey);
-                break;
-        }
-    }
-
-    public bool HandleEscape()
-    {
-        if (_editedField != EditedField.None)
-        {
-            _editedField = EditedField.None;
-            return true;
-        }
-
-        return false;
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
-        if (_editedField != EditedField.None || configuration.Windows.Count == 0)
+        if (inputs.HasActiveInput || configuration.Windows.Count == 0)
         {
             return;
         }
@@ -127,8 +88,8 @@ internal sealed class CompositeWindowsConfigurationTab(
                     MainDialogTabUi.BuildSectionHeader(
                         _isNew ? "New composite window" : "Edit composite window",
                         "Choose its tabs and an optional Hyprland hotkey"),
-                    BuildInput("Name", _name, "Window name", EditedField.Name),
-                    BuildInput("Hotkey", _hotkey, "Example: SUPER + SPACE", EditedField.Hotkey),
+                    inputs.Build(_nameInput),
+                    inputs.Build(_hotkeyInput),
                     new TextNode("Tabs", theme.Text, theme.Text),
                     BuildTabGrid(),
                     new TextNode(
@@ -180,33 +141,6 @@ internal sealed class CompositeWindowsConfigurationTab(
         };
     }
 
-    private BoxNode BuildInput(string label, string value, string placeholder, EditedField field)
-    {
-        var active = _editedField == field;
-        var caret = active && Math.Sin(Environment.TickCount64 / 200.0) > 0 ? "|" : "";
-        var displayedValue = active
-            ? value + caret
-            : value.Length == 0 ? placeholder : value;
-
-        return new BoxNode
-        {
-            Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            OnClick = () => _editedField = field,
-            Style = ModulesCommon.ModuleStyle(theme, active ? theme.Active : theme.Panel) with
-            {
-                Padding = 12,
-                BorderRadius = 8,
-                BorderWidth = active ? theme.Border.Width : 0,
-                Spacing = 5,
-            },
-            Children =
-            [
-                new TextNode(label, theme.Text.SmallSize, active ? theme.Text : theme.Text.MutedColor),
-                new TextNode(displayedValue, theme.Text, active || value.Length > 0 ? theme.Text : theme.Text.MutedColor),
-            ],
-        };
-    }
 
     private BoxNode BuildTabGrid()
     {
@@ -376,10 +310,10 @@ internal sealed class CompositeWindowsConfigurationTab(
     {
         _isNew = true;
         _id = Guid.NewGuid().ToString("N");
-        _name = $"Composite {configuration.Windows.Count + 1}";
-        _hotkey = "";
+        inputs.SetValue(_nameInput, $"Composite {configuration.Windows.Count + 1}");
+        inputs.SetValue(_hotkeyInput, "");
         _tabs = tabs.Tabs.Count > 0 ? [tabs.Tabs[0].Id] : [];
-        _editedField = EditedField.Name;
+        inputs.Activate(_nameInput);
         _message = "";
     }
 
@@ -395,17 +329,17 @@ internal sealed class CompositeWindowsConfigurationTab(
         var window = configuration.Windows[_selectedIndex];
         _isNew = false;
         _id = window.Id;
-        _name = window.Name;
-        _hotkey = window.Hotkey;
+        inputs.SetValue(_nameInput, window.Name);
+        inputs.SetValue(_hotkeyInput, window.Hotkey);
         _tabs = [.. window.TabIds];
-        _editedField = EditedField.None;
+        inputs.Deactivate();
         _message = "";
     }
 
     private void Save()
     {
         if (!configuration.TryUpsert(
-                new CompositeWindowDefinition(_id, _name, _hotkey, [.. _tabs]),
+                new CompositeWindowDefinition(_id, _nameInput.Value, _hotkeyInput.Value, [.. _tabs]),
                 out var error))
         {
             _message = error;
@@ -414,7 +348,7 @@ internal sealed class CompositeWindowsConfigurationTab(
 
         _selectedIndex = configuration.Windows.ToList().FindIndex(window => window.Id == _id);
         _isNew = false;
-        _editedField = EditedField.None;
+        inputs.Deactivate();
         _message = "Saved. Hotkey bindings were refreshed.";
     }
 

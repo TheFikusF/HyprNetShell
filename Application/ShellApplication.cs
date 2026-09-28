@@ -206,7 +206,8 @@ internal sealed class ShellLoop : IDisposable
                 dialogs.HandleInput(
                     ownerOutput.PressedKey,
                     ownerOutput.TextInput,
-                    ownerOutput.Input.ScrollDelta);
+                    ownerOutput.Input.ScrollDelta,
+                    ownerOutput.ControlPressed);
             }
         }
 

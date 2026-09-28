@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace HyprNetShell;
+namespace HyprNetShell.Application.Screenshots;
 
 internal static partial class OcrService
 {

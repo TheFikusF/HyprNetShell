@@ -2,7 +2,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
-using HyprNetShell.Core.Platform;
+
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -10,7 +10,11 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class DictionaryTab(
+    DictionaryService dictionary,
+    ClipboardHistoryService clipboard,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab, IDisposable
 {
     private sealed class ResultState : ModulesCommon.BoxState
     {
@@ -24,6 +28,12 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
     private readonly Lock _stateLock = new();
     private readonly Dictionary<int, ResultState> _resultStates = [];
     private readonly ModulesCommon.BoxState _searchState = new();
+    private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
+        "",
+        "",
+        "Type an English word or phrase...",
+        MaximumQueryLength,
+        alwaysActive: true);
     private DictionaryLookupResult _result = DictionaryLookupResult.Empty;
     private CancellationTokenSource? _lookupCancellation;
     private string _query = "";
@@ -32,12 +42,15 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
     private bool _isLookingUp;
     private bool _disposed;
 
+
     public string Id => "dictionary";
     public string Title => "Dictionary";
     public SvgAsset Icon => Icons.Dictionary;
 
     public void Activate()
     {
+        inputs.Configure(_queryInput, UpdateQuery);
+        inputs.Activate(_queryInput);
         lock (_stateLock)
         {
             _selectedIndex = SearchSelectionIndex;
@@ -45,39 +58,6 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
         }
     }
 
-    public void HandleTextInput(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        lock (_stateLock)
-        {
-            var available = MaximumQueryLength - _query.Length;
-            if (available <= 0)
-            {
-                return;
-            }
-
-            _query += text[..Math.Min(text.Length, available)];
-            InvalidateLookup();
-        }
-    }
-
-    public void HandleBackspace()
-    {
-        lock (_stateLock)
-        {
-            if (_query.Length == 0)
-            {
-                return;
-            }
-
-            _query = MainDialogTabUi.RemoveLastTextElement(_query);
-            InvalidateLookup();
-        }
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -154,7 +134,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
 
         if (textToCopy is not null)
         {
-            Utils.CopyToClipboard(textToCopy);
+            _ = clipboard.CopyTextAsync(textToCopy);
         }
         else if (cancellation is not null)
         {
@@ -202,7 +182,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
                 Style = Style.Spacer,
                 Children =
                 [
-                    MainDialogTabUi.BuildInput(query, "Type an English word or phrase..."),
+                    inputs.Build(_queryInput),
                     BuildSearchButton(selectedIndex == SearchSelectionIndex, isLookingUp),
                 ],
             },
@@ -351,7 +331,7 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            OnClick = () => Utils.CopyToClipboard(GetTextToCopy(item)),
+            OnClick = () => _ = clipboard.CopyTextAsync(GetTextToCopy(item)),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 BorderRadius = 8,
@@ -392,6 +372,15 @@ internal sealed class DictionaryTab(DictionaryService dictionary, Theme theme) :
                 ref _firstIndex,
                 _result.Items.Count,
                 VisibleResultCount);
+        }
+    }
+
+    private void UpdateQuery(string query)
+    {
+        lock (_stateLock)
+        {
+            _query = query;
+            InvalidateLookup();
         }
     }
 

@@ -50,6 +50,7 @@ int hypr_layer_pointer_inside(const hypr_layer* layer, uint64_t id);
 int hypr_layer_pointer_button(const hypr_layer* layer, uint64_t id);
 double hypr_layer_take_scroll(hypr_layer* layer, uint64_t id);
 int hypr_layer_take_key(hypr_layer* layer, uint64_t id);
+int hypr_layer_take_key_control(hypr_layer* layer, uint64_t id);
 int hypr_layer_take_text(hypr_layer* layer, uint64_t id, char* buffer, int buffer_size);
 
 void* hypr_layer_get_proc_address(const char* name);

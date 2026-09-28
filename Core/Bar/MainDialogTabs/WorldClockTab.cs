@@ -12,21 +12,29 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class WorldClockTab : IMainDialogTab
 {
     private readonly WorldClockService _clocks;
+    private readonly TextInputCoordinator _inputs;
+    private readonly TextInputCoordinator.Input _queryInput;
     private readonly Theme _theme;
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private IReadOnlyList<WorldClock> _filteredClocks = [];
-    private string _query = "";
     private int _firstIndex;
     private int _selectedIndex;
 
-    public WorldClockTab(Theme theme)
-        : this(WorldClockService.Shared, theme)
+    public WorldClockTab(TextInputCoordinator inputs, Theme theme)
+        : this(WorldClockService.Shared, inputs, theme)
     {
     }
 
-    public WorldClockTab(WorldClockService clocks, Theme theme)
+    public WorldClockTab(WorldClockService clocks, TextInputCoordinator inputs, Theme theme)
     {
         _clocks = clocks;
+        _inputs = inputs;
+        _queryInput = inputs.Create(
+            "",
+            "",
+            "Search cities or time zones...",
+            4096,
+            alwaysActive: true);
         _theme = theme;
         ApplyFilter();
     }
@@ -37,28 +45,14 @@ internal sealed class WorldClockTab : IMainDialogTab
 
     public void Activate()
     {
-        _query = "";
+        _inputs.Configure(_queryInput, _ => ApplyFilter());
+        _inputs.SetValue(_queryInput, "");
+        _inputs.Activate(_queryInput);
         _firstIndex = 0;
         _selectedIndex = 0;
         ApplyFilter();
     }
 
-    public void HandleTextInput(string text)
-    {
-        _query += text;
-        ApplyFilter();
-    }
-
-    public void HandleBackspace()
-    {
-        if (_query.Length == 0)
-        {
-            return;
-        }
-
-        _query = MainDialogTabUi.RemoveLastTextElement(_query);
-        ApplyFilter();
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -96,7 +90,7 @@ internal sealed class WorldClockTab : IMainDialogTab
                 MainDialogTabUi.BuildSectionHeader(
                     "World clocks",
                     $"{selectedCount} selected · Enter or click to toggle"),
-                MainDialogTabUi.BuildInput(_query, "Search cities or time zones..."),
+                _inputs.Build(_queryInput),
                 BoundedListUi.BuildScrollableResults(
                     new BoxNode
                     {
@@ -162,7 +156,7 @@ internal sealed class WorldClockTab : IMainDialogTab
 
     private void ApplyFilter()
     {
-        var terms = _query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var terms = _queryInput.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         _filteredClocks = terms.Length == 0
             ? _clocks.AvailableClocks
             : _clocks.AvailableClocks

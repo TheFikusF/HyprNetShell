@@ -9,8 +9,11 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, HistoryStore history, Theme theme)
-    : IMainDialogTab
+internal sealed class ConfigurationTab(
+    WallpaperModuleService wallpapers,
+    HistoryStore history,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab
 {
     private readonly Ref<float> _slideshowSwitchAnimation = new(wallpapers.SlideshowEnabled ? 1.0f : 0.0f);
     private readonly ModulesCommon.BoxState _decreaseState = new();
@@ -19,6 +22,12 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
     private readonly ModulesCommon.BoxState _notificationIncreaseState = new();
     private readonly ModulesCommon.BoxState _clipboardDecreaseState = new();
     private readonly ModulesCommon.BoxState _clipboardIncreaseState = new();
+    private readonly TextInputCoordinator.Input _wallpaperDirectoryInput = inputs.Create(
+        "Wallpaper directory",
+        wallpapers.WallpaperDirectory,
+        "Directory containing wallpaper images",
+        4096,
+        wallpapers.SetWallpaperDirectory);
 
     public string Id => "general";
     public string Title => "General";
@@ -26,14 +35,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
 
     public void Activate()
     {
-    }
-
-    public void HandleTextInput(string text)
-    {
-    }
-
-    public void HandleBackspace()
-    {
+        inputs.SetValue(_wallpaperDirectoryInput, wallpapers.WallpaperDirectory);
     }
 
     public void MoveSelection(SelectionDirection direction)
@@ -54,7 +56,7 @@ internal sealed class ConfigurationTab(WallpaperModuleService wallpapers, Histor
             MainDialogTabUi.BuildSectionHeader("Wallpaper settings", "Saved automatically"),
             BuildSlideshowToggle(),
             BuildDurationControl(),
-            new TextNode($"Wallpaper directory: {wallpapers.WallpaperDirectory}", theme.Text, theme.Text.MutedColor),
+            inputs.Build(_wallpaperDirectoryInput),
             MainDialogTabUi.BuildSectionHeader("History settings", "Saved automatically"),
             BuildHistoryControl(
                 "Notification history",

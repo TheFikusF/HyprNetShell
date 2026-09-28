@@ -1,7 +1,6 @@
 using System.Text;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Features.System;
-using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 

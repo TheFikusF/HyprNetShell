@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace HyprNetShell;
+namespace HyprNetShell.Application.DesktopEntry;
 
 internal static partial class DesktopEntryLauncher
 {

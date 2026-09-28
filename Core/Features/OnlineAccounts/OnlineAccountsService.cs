@@ -27,8 +27,6 @@ internal sealed record OnlineAccountSnapshot(
     bool Configured,
     bool Connected,
     string? AccountName,
-    string ConfiguredClientId,
-    string? ClientIdSource,
     string? Status);
 
 internal sealed class OnlineAccountsService : IDisposable
@@ -107,6 +105,8 @@ internal sealed class OnlineAccountsService : IDisposable
             }
         }
     }
+
+    internal bool HasConfiguredProviders => Snapshot.Any(snapshot => snapshot.Configured);
 
     internal void EnsureInitialized()
     {
@@ -238,39 +238,6 @@ internal sealed class OnlineAccountsService : IDisposable
         }
     }
 
-    internal void SetConfiguredClientId(OnlineAccountProvider provider, string clientId)
-    {
-        clientId = clientId.Trim();
-        _configuration.Update(configuration =>
-        {
-            var accounts = configuration.OnlineAccounts;
-            switch (provider)
-            {
-                case OnlineAccountProvider.Google:
-                    accounts.GoogleClientId = clientId;
-                    break;
-                case OnlineAccountProvider.Spotify:
-                    accounts.SpotifyClientId = clientId;
-                    break;
-                case OnlineAccountProvider.ChatGpt:
-                    accounts.OpenAiClientId = clientId;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(provider));
-            }
-        });
-
-        lock (_stateLock)
-        {
-            var (_, source) = ResolveClientId(provider);
-            _statuses[provider] = source switch
-            {
-                "Configuration" => "Client ID saved.",
-                null => "Configured client ID cleared.",
-                _ => $"Client ID saved; the {source.ToLowerInvariant()} value still takes precedence.",
-            };
-        }
-    }
 
     internal void Connect(OnlineAccountProvider provider)
     {
@@ -567,18 +534,19 @@ internal sealed class OnlineAccountsService : IDisposable
     {
         var definition = CreateDefinition(provider);
         var credential = _credentials[provider];
-        var clientId = ResolveClientId(provider);
         return new OnlineAccountSnapshot(
             provider,
             definition.Name,
             definition.Description,
-            !string.IsNullOrWhiteSpace(definition.ClientId),
+            IsConfigured(definition),
             credential is not null,
             credential?.AccountName,
-            ConfiguredClientId(provider),
-            clientId.Source,
             _statuses[provider]);
     }
+
+    private static bool IsConfigured(OAuthProviderDefinition definition) =>
+        !string.IsNullOrWhiteSpace(definition.ClientId) &&
+        (definition.Provider != OnlineAccountProvider.Google || !string.IsNullOrWhiteSpace(definition.ClientSecret));
 
     private OAuthProviderDefinition CreateDefinition(OnlineAccountProvider provider) => provider switch
     {

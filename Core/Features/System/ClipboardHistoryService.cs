@@ -89,35 +89,54 @@ internal sealed class ClipboardHistoryService : IDisposable
         }
     }
 
-    public async Task CopyAsync(ClipboardHistoryEntry entry)
+    public async Task CopyAsync(ClipboardHistoryEntry entry, CancellationToken cancellationToken = default)
     {
-        Process? process = null;
-        try
+        if (!await TryWriteProcessAsync(
+                "wl-copy",
+                ["--type", entry.MimeType],
+                entry.Data,
+                cancellationToken) &&
+            !cancellationToken.IsCancellationRequested)
         {
-            process = Process.Start(CreateProcess("wl-copy", "--type", entry.MimeType));
-            if (process is null)
-            {
-                return;
-            }
+            AppLogger.Warning("Clipboard", $"Could not copy clipboard history entry as {entry.MimeType}");
+        }
+    }
 
-            await process.StandardInput.BaseStream.WriteAsync(entry.Data);
-            process.StandardInput.Close();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (Exception exception)
+    public async Task<bool> CopyTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var data = Encoding.UTF8.GetBytes(text);
+        var copied = await TryWriteProcessAsync(
+                "wl-copy",
+                ["--type", "text/plain;charset=utf-8"],
+                data,
+                cancellationToken) ||
+            await TryWriteProcessAsync(
+                "xclip",
+                ["-selection", "clipboard"],
+                data,
+                cancellationToken);
+        if (!copied && !cancellationToken.IsCancellationRequested)
         {
-            AppLogger.Warning("ClipboardHistory", "Could not terminate the clipboard watcher", exception);
-            // Clipboard transport is optional; history remains available if copying fails.
+            AppLogger.Warning("Clipboard", "Could not copy text with wl-copy or xclip");
         }
-        finally
+
+        return copied;
+    }
+
+    public async Task<string?> ReadTextAsync(CancellationToken cancellationToken = default)
+    {
+        var text = await ReadProcessTextAsync(
+            cancellationToken,
+            "wl-paste",
+            "--no-newline",
+            "--type",
+            "text");
+        if (text is null && !cancellationToken.IsCancellationRequested)
         {
-            if (process is not null)
-            {
-                TryKill(process);
-                process.Dispose();
-            }
+            AppLogger.Warning("Clipboard", "Could not read text with wl-paste");
         }
+
+        return text;
     }
 
     private async Task WatchAsync(CancellationToken cancellationToken)
@@ -295,6 +314,45 @@ internal sealed class ClipboardHistoryService : IDisposable
             ? $"{byteCount / (1024.0 * 1024.0):0.#} MiB"
             : $"{Math.Max(1, byteCount / 1024.0):0.#} KiB";
         return $"Image · {format} · {size}";
+    }
+
+    private static async Task<bool> TryWriteProcessAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        ReadOnlyMemory<byte> data,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(3));
+        Process? process = null;
+        try
+        {
+            process = Process.Start(CreateProcess(fileName, [.. arguments]));
+            if (process is null)
+            {
+                return false;
+            }
+
+            var drainOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var drainErrors = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.StandardInput.BaseStream.WriteAsync(data, timeout.Token);
+            process.StandardInput.Close();
+            await process.WaitForExitAsync(timeout.Token);
+            await Task.WhenAll(drainOutput, drainErrors);
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            if (process is not null)
+            {
+                TryKill(process);
+                process.Dispose();
+            }
+        }
     }
 
     private static async Task<string?> ReadProcessTextAsync(

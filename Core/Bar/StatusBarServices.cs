@@ -136,7 +136,7 @@ public sealed class StatusBarServices : IDisposable
             Dialogs.Close,
             Theme.Default);
         CompositeWindowConfiguration = new CompositeWindowConfiguration(Tabs.Tabs);
-        Dialogs.Register(new CompositeWindow(Theme.Default));
+        Dialogs.Register(new CompositeWindow(Tabs.Inputs, Theme.Default));
         CompositeWindows = new CompositeWindowService(
             CompositeWindowConfiguration,
             Tabs,

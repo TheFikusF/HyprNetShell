@@ -1,7 +1,7 @@
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
-using HyprNetShell.Core.Platform;
+
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;
@@ -15,17 +15,22 @@ internal sealed class WorldClocksWidget
     private readonly Theme _theme;
     private readonly ModulesCommon.BoxState _titleState = new();
     private readonly WorldClockService _clocks;
+    private readonly ClipboardHistoryService _clipboard;
     private readonly Dictionary<string, ModulesCommon.BoxState> _dateCopyButtons = new();
 
-    public WorldClocksWidget(Theme theme)
-        : this(theme, WorldClockService.Shared)
+    public WorldClocksWidget(Theme theme, ClipboardHistoryService clipboard)
+        : this(theme, WorldClockService.Shared, clipboard)
     {
     }
 
-    public WorldClocksWidget(Theme theme, WorldClockService clocks)
+    public WorldClocksWidget(
+        Theme theme,
+        WorldClockService clocks,
+        ClipboardHistoryService clipboard)
     {
         _theme = theme;
         _clocks = clocks;
+        _clipboard = clipboard;
     }
 
     public Node Draw(DateTime now, Action? openClocks = null) => new BoxNode(WIDTH)
@@ -61,7 +66,7 @@ internal sealed class WorldClocksWidget
                     IsHovered = state.Hovered,
                     HorizontalAlignment = ItemsAlignment.Center,
                     VerticalAlignment = ItemsAlignment.Center,
-                    OnClick = () => Utils.CopyToClipboard($"{label} - {time:HH:mm}"),
+                    OnClick = () => _ = _clipboard.CopyTextAsync($"{label} - {time:HH:mm}"),
                     Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
                     {
                         Padding = 4,

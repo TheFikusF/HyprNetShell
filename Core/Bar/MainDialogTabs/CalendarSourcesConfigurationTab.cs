@@ -3,7 +3,7 @@ using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
-using HyprNetShell.Core.Platform;
+
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -12,7 +12,10 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, Theme theme) : IMainDialogTab
+internal sealed class CalendarSourcesConfigurationTab(
+    CalendarService calendar,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab
 {
     private const int URL_MAX_LENGTH = 2048;
     private const int URL_TEXT_MAX_WIDTH = 780;
@@ -20,10 +23,16 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private readonly Dictionary<string, Ref<float>> _googleSwitchAnimations = [];
-    private string _url = "";
+    private readonly TextInputCoordinator.Input _urlInput = inputs.Create(
+        "Calendar URL",
+        "",
+        "https://example.com/calendar.ics",
+        URL_MAX_LENGTH,
+        transform: value => value.Trim(),
+        clearOnEscape: true,
+        pasteReplacesValue: true);
     private string _message = "";
     private bool _messageIsError;
-    private bool _isEditing;
     private int _firstSourceIndex;
 
     public string Id => "calendar-sources";
@@ -32,55 +41,11 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
 
     public void Activate()
     {
-        _isEditing = true;
+        inputs.Configure(_urlInput, _ => ClearMessage(), AddUrl);
+        inputs.Activate(_urlInput);
     }
 
-    public bool HandleKey(DialogKey key)
-    {
-        if (key != DialogKey.PhysicalV || !_isEditing)
-        {
-            return false;
-        }
 
-        _ = PasteUrlAsync();
-        return true;
-    }
-
-    public void HandleTextInput(string text)
-    {
-        if (!_isEditing || string.IsNullOrEmpty(text) || _url.Length >= URL_MAX_LENGTH)
-        {
-            return;
-        }
-
-        var remainingLength = URL_MAX_LENGTH - _url.Length;
-        _url += text.Length <= remainingLength ? text : text[..remainingLength];
-        ClearMessage();
-    }
-
-    public void HandleBackspace()
-    {
-        if (!_isEditing || _url.Length == 0)
-        {
-            return;
-        }
-
-        _url = MainDialogTabUi.RemoveLastTextElement(_url);
-        ClearMessage();
-    }
-
-    public bool HandleEscape()
-    {
-        if (!_isEditing && _url.Length == 0)
-        {
-            return false;
-        }
-
-        _url = "";
-        _isEditing = false;
-        ClearMessage();
-        return true;
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -88,10 +53,6 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
 
     public void ActivateSelection()
     {
-        if (_isEditing)
-        {
-            AddUrl();
-        }
     }
 
     public Node Draw()
@@ -225,46 +186,21 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
         };
     }
 
-    private Node BuildUrlEditor()
+    private Node BuildUrlEditor() => new BoxNode
     {
-        var caret = _isEditing && Math.Sin(Environment.TickCount64 / 200.0) > 0 ? "|" : "";
-        var displayedValue = _url.Length == 0 ? "https://example.com/calendar.ics" : _url + caret;
-
-        return new BoxNode
-        {
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style { Spacing = 8 },
-            Children =
-            [
-                new BoxNode(width: 820, height: 52)
-                {
-                    VerticalAlignment = ItemsAlignment.Center,
-                    OnClick = () => _isEditing = true,
-                    Style = ModulesCommon.ModuleStyle(theme, _isEditing ? theme.Active : theme.Panel) with
-                    {
-                        Padding = new Insets(14, 8),
-                        BorderRadius = 8,
-                        BorderWidth = _isEditing ? theme.Border.Width : 0,
-                    },
-                    Children =
-                    [
-                        new TextNode(
-                            displayedValue,
-                            16,
-                            _url.Length == 0 ? theme.Text.MutedColor : theme.Text,
-                            maxWidth: URL_TEXT_MAX_WIDTH,
-                            wrapping: TextWrapping.Ellipsis),
-                    ],
-                },
-                BuildActionButton(
-                    "Add",
-                    Icons.Add,
-                    "add",
-                    string.IsNullOrWhiteSpace(_url) ? null : AddUrl),
-            ],
-        };
-    }
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = new Style { Spacing = 8 },
+        Children =
+        [
+            inputs.Build(_urlInput),
+            BuildActionButton(
+                "Add",
+                Icons.Add,
+                "add",
+                string.IsNullOrWhiteSpace(_urlInput.Value) ? null : () => AddUrl()),
+        ],
+    };
 
     private Node BuildStatus() => string.IsNullOrWhiteSpace(_message)
         ? new TextNode("Paste or type one HTTP(S) calendar URL, then select Add.", theme.Text, theme.Text.MutedColor)
@@ -325,39 +261,19 @@ internal sealed class CalendarSourcesConfigurationTab(CalendarService calendar, 
         };
     }
 
-    private async Task PasteUrlAsync()
+
+    private bool AddUrl(string? value = null)
     {
-        var text = await CommandRunner.TryReadAsync(
-            "wl-paste",
-            "--no-newline --type text",
-            TimeSpan.FromSeconds(2),
-            CancellationToken.None);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            SetMessage("Clipboard does not contain text, or no clipboard reader is available.", isError: true);
-            return;
-        }
-
-        _url = text.Trim();
-        if (_url.Length > URL_MAX_LENGTH)
-        {
-            _url = _url[..URL_MAX_LENGTH];
-        }
-
-        ClearMessage();
-    }
-
-    private void AddUrl()
-    {
-        var url = _url.Trim();
+        var url = (value ?? _urlInput.Value).Trim();
         if (!calendar.AddUrl(url, out var error))
         {
             SetMessage(error, isError: true);
-            return;
+            return false;
         }
 
-        _url = "";
+        inputs.SetValue(_urlInput, "");
         SetMessage("Calendar source added.", isError: false);
+        return true;
     }
 
     private void RemoveUrl(string url)

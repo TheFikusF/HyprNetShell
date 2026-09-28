@@ -7,7 +7,11 @@ using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action closeDialog, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class WallpapersTab(
+    WallpaperModuleService wallpapers,
+    Action closeDialog,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab, IDisposable
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
@@ -16,6 +20,12 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
 
     private readonly Lock _stateLock = new();
     private readonly Dictionary<int, ModulesCommon.BoxState> _buttonsState = new();
+    private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
+        "",
+        "",
+        "Search wallpapers...",
+        4096,
+        alwaysActive: true);
     private IReadOnlyList<Wallpaper> _wallpapers = [];
     private IReadOnlyList<Wallpaper> _filteredWallpapers = [];
     private CancellationTokenSource? _loadCancellation;
@@ -30,6 +40,16 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
 
     public void Activate()
     {
+        inputs.Configure(_queryInput, query =>
+        {
+            lock (_stateLock)
+            {
+                _query = query;
+                ApplyFilterLocked();
+            }
+        });
+        inputs.Activate(_queryInput);
+
         CancellationTokenSource cancellation;
         lock (_stateLock)
         {
@@ -45,28 +65,6 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
         _ = LoadWallpapersAsync(cancellation);
     }
 
-    public void HandleTextInput(string text)
-    {
-        lock (_stateLock)
-        {
-            _query += text;
-            ApplyFilterLocked();
-        }
-    }
-
-    public void HandleBackspace()
-    {
-        lock (_stateLock)
-        {
-            if (_query.Length == 0)
-            {
-                return;
-            }
-
-            _query = MainDialogTabUi.RemoveLastTextElement(_query);
-            ApplyFilterLocked();
-        }
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -163,7 +161,7 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
                 : MainDialogTabUi.ResultCount(
                     _selectedIndex,
                     _filteredWallpapers.Count,
-                    _query.Length == 0 ? "No wallpapers in ~/Pictures/wp" : "No matching wallpapers");
+                    query.Length == 0 ? "No wallpapers in ~/Pictures/wp" : "No matching wallpapers");
         }
 
         var grid = new BoxNode
@@ -186,7 +184,7 @@ internal sealed class WallpapersTab(WallpaperModuleService wallpapers, Action cl
                 MainDialogTabUi.BuildSectionHeader(
                     "Wallpapers",
                     status),
-                MainDialogTabUi.BuildInput(query, "Search wallpapers..."),
+                inputs.Build(_queryInput),
                 BoundedListUi.BuildScrollableResults(
                     grid,
                     firstIndex / COLUMNS,

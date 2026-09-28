@@ -9,8 +9,11 @@ using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Action closeDialog, Theme theme)
-    : IMainDialogTab
+internal sealed class ClipboardManagerTab(
+    ClipboardHistoryService history,
+    Action closeDialog,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab
 {
     private sealed class ActionButtonState : ModulesCommon.BoxState
     {
@@ -26,6 +29,12 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int PREVIEW_MAX_WIDTH = 700;
     private readonly Dictionary<string, ClipboardButtonState> _buttonsState = new();
+    private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
+        "",
+        "",
+        "Search clipboard history...",
+        4096,
+        alwaysActive: true);
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -39,21 +48,15 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
     public string Title => "Clipboard";
     public SvgAsset Icon => Icons.Clipboard;
 
-    public void Activate() => RefreshEntries();
-
-    public void HandleTextInput(string text)
+    public void Activate()
     {
-        _query += text;
-        ApplyFilter();
-    }
-
-    public void HandleBackspace()
-    {
-        if (_query.Length > 0)
+        inputs.Configure(_queryInput, query =>
         {
-            _query = MainDialogTabUi.RemoveLastTextElement(_query);
+            _query = query;
             ApplyFilter();
-        }
+        });
+        inputs.Activate(_queryInput);
+        RefreshEntries();
     }
 
     public void MoveSelection(SelectionDirection direction)
@@ -106,7 +109,7 @@ internal sealed class ClipboardManagerTab(ClipboardHistoryService history, Actio
                     Style = new Style { Spacing = 8 },
                     Children =
                     [
-                        MainDialogTabUi.BuildInput(_query, "Search clipboard history..."),
+                        inputs.Build(_queryInput),
                         BuildDateDropdown(),
                     ],
                 },

@@ -1,5 +1,5 @@
-﻿using HyprNetShell;
-using HyprNetShell.Application;
+﻿using HyprNetShell.Application;
+using HyprNetShell.Application.DesktopEntry;
 using HyprNetShell.Application.LockScreen;
 
 return args switch

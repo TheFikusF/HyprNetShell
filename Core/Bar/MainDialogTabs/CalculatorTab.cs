@@ -1,7 +1,8 @@
-using System.Diagnostics;
+
 using System.Globalization;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -9,10 +10,20 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
+internal sealed class CalculatorTab(
+    ClipboardHistoryService clipboard,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab
 {
-    private string _expression = "";
+    private readonly TextInputCoordinator.Input _expressionInput = inputs.Create(
+        "",
+        "",
+        "e.g. (12 + 4) * 3",
+        4096,
+        transform: FilterExpression,
+        alwaysActive: true);
     private string _result = "";
+
 
     public string Id => "calculator";
     public string Title => "Calculator";
@@ -20,26 +31,10 @@ internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
 
     public void Activate()
     {
+        inputs.Configure(_expressionInput, UpdateResult);
+        inputs.Activate(_expressionInput);
     }
 
-    public void HandleTextInput(string text)
-    {
-        _expression += new string(text.Where(IsCalculatorCharacter).ToArray());
-        _result = ExpressionEvaluator.TryEvaluate(_expression, out var value)
-            ? value.ToString("G15", CultureInfo.InvariantCulture)
-            : "Invalid expression";
-    }
-
-    public void HandleBackspace()
-    {
-        if (_expression.Length > 0)
-        {
-            _expression = MainDialogTabUi.RemoveLastTextElement(_expression);
-            _result = ExpressionEvaluator.TryEvaluate(_expression, out var value)
-                ? value.ToString("G15", CultureInfo.InvariantCulture)
-                : "Invalid expression";
-        }
-    }
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -47,15 +42,14 @@ internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
 
     public void ActivateSelection()
     {
-        if (!ExpressionEvaluator.TryEvaluate(_expression, out var value))
+        if (!ExpressionEvaluator.TryEvaluate(_expressionInput.Value, out var value))
         {
             _result = "Invalid expression";
             return;
         }
 
         _result = value.ToString("G15", CultureInfo.InvariantCulture);
-        var result = _result;
-        _ = Task.Run(() => CopyToClipboard(result));
+        _ = clipboard.CopyTextAsync(_result);
     }
 
     public Node Draw() => new BoxNode
@@ -66,7 +60,7 @@ internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
         Children =
         [
             MainDialogTabUi.BuildSectionHeader("Calculator", "Type an expression and press Enter"),
-            MainDialogTabUi.BuildInput(_expression, "e.g. (12 + 4) * 3"),
+            inputs.Build(_expressionInput),
             new BoxNode
             {
                 VerticalAlignment = ItemsAlignment.Center,
@@ -88,7 +82,7 @@ internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
                         Style = new Style { Spacing = 10 },
                         Children =
                         [
-                            new TextNode(_expression.Length == 0 ? "0" : _expression, 24,
+                            new TextNode(_expressionInput.Value.Length == 0 ? "0" : _expressionInput.Value, 24,
                                 theme.Text.MutedColor),
                             new TextNode(_result.Length == 0 ? "=" : "= " + _result, 34,
                                 theme.Text),
@@ -101,35 +95,18 @@ internal sealed class CalculatorTab(Theme theme) : IMainDialogTab
         ],
     };
 
+    private void UpdateResult(string expression)
+    {
+        _result = ExpressionEvaluator.TryEvaluate(expression, out var value)
+            ? value.ToString("G15", CultureInfo.InvariantCulture)
+            : "Invalid expression";
+    }
+
+    private static string FilterExpression(string expression) =>
+        new(expression.Where(IsCalculatorCharacter).ToArray());
+
     private static bool IsCalculatorCharacter(char character) =>
         char.IsDigit(character) || character is '.' or ',' or '+' or '-' or '*' or '/' or '(' or ')' or ' ';
 
-    private static void CopyToClipboard(string text)
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "wl-copy",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-            if (process is null)
-            {
-                return;
-            }
-
-            process.StandardInput.Write(text);
-            process.StandardInput.Close();
-            process.WaitForExit(800);
-        }
-        catch
-        {
-            // wl-copy is optional; calculator evaluation still succeeds without it.
-        }
-    }
 
 }

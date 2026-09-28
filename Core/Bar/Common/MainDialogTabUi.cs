@@ -13,20 +13,6 @@ internal static class MainDialogTabUi
         new TextNode(status, Theme.Default.Text.Size, Theme.Default.Text.MutedColor),
     };
 
-    public static Node BuildInput(string value, string placeholder) => new BoxNode(height: 46)
-    {
-        VerticalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(Theme.Default, Theme.Default.Panel) with
-        {
-            BorderRadius = 8,
-            Padding = new Insets(Theme.Default.Text.Size, 8),
-        },
-        Children =
-        [
-            new TextNode(value.Length == 0 ? placeholder : value + (Math.Sin(Environment.TickCount64 / 200) > 0 ? "|" : ""),
-                16, value.Length == 0 ? Theme.Default.Text.MutedColor : Theme.Default.Text),
-        ],
-    };
 
     public static BoxNode BuildButton(
         Theme theme,

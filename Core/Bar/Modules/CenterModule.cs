@@ -47,6 +47,7 @@ internal sealed class CenterModule : IDrawableModule
     public CenterModule(
         NotificationService notificationService,
         CalendarService calendar,
+        ClipboardHistoryService clipboard,
         ChatGptUsageService chatGptUsage,
         WeatherWidget weather,
         DialogService dialogs,
@@ -61,7 +62,7 @@ internal sealed class CenterModule : IDrawableModule
             HorizontalAlignment = ItemsAlignment.Center,
         };
         _calendar = new CalendarWidget(calendar, theme);
-        _worldClocks = new WorldClocksWidget(theme);
+        _worldClocks = new WorldClocksWidget(theme, clipboard);
         _weather = weather;
         _dialogs = dialogs;
         _tabs = tabs;

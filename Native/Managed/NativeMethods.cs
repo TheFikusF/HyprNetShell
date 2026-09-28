@@ -105,6 +105,9 @@ internal static partial class NativeMethods
     internal static partial int hypr_layer_take_key(IntPtr layer, ulong outputId);
 
     [LibraryImport(HyprLayerLibrary)]
+    internal static partial int hypr_layer_take_key_control(IntPtr layer, ulong outputId);
+
+    [LibraryImport(HyprLayerLibrary)]
     internal static partial int hypr_layer_take_text(
         IntPtr layer,
         ulong outputId,

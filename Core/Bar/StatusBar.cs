@@ -54,6 +54,7 @@ public sealed class StatusBar
             services.Network,
             services.Dialogs,
             services.Tabs,
+            services.ClipboardHistory,
             Theme.Default,
             _popupCoordinator);
         var audioModule = new AudioModule(services.Audio, services.Bluetooth, Theme.Default, _popupCoordinator);
@@ -90,6 +91,7 @@ public sealed class StatusBar
         _centerModule = new CenterModule(
             services.Notifications,
             services.Calendar,
+            services.ClipboardHistory,
             services.ChatGptUsage,
             weatherWidget,
             services.Dialogs,

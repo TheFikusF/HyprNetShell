@@ -23,6 +23,7 @@ internal sealed class WallpaperModuleService : IDisposable
     private readonly SemaphoreSlim _settingsChanged = new(0, 1);
     private readonly Task _slideshowTask;
     private Process? _hyprpaperProcess;
+    private string _wallpaperDirectory;
     private bool _slideshowEnabled;
     private int _durationMinutes;
     private string? _currentWallpaper;
@@ -32,6 +33,9 @@ internal sealed class WallpaperModuleService : IDisposable
     {
         _hyprctl = hyprctl;
         var config = _configuration.Snapshot.Wallpaper;
+        _wallpaperDirectory = string.IsNullOrWhiteSpace(config.Directory)
+            ? DefaultWallpaperDirectory()
+            : config.Directory;
         _slideshowEnabled = config.SlideshowEnabled;
         _durationMinutes = NormalizeDuration(config.DurationMinutes);
 
@@ -39,10 +43,16 @@ internal sealed class WallpaperModuleService : IDisposable
         _slideshowTask = Task.Run(() => RunSlideshowAsync(_lifetime.Token));
     }
 
-    internal string WallpaperDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "Pictures",
-        "wp");
+    internal string WallpaperDirectory
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _wallpaperDirectory;
+            }
+        }
+    }
 
     internal bool SlideshowEnabled
     {
@@ -111,6 +121,22 @@ internal sealed class WallpaperModuleService : IDisposable
                 _currentWallpaper = path;
             }
         }
+    }
+
+    internal void SetWallpaperDirectory(string directory)
+    {
+        lock (_stateLock)
+        {
+            if (_wallpaperDirectory == directory)
+            {
+                return;
+            }
+
+            _wallpaperDirectory = directory;
+            _currentWallpaper = null;
+        }
+
+        SettingsWereChanged();
     }
 
     internal void SetSlideshowEnabled(bool enabled)
@@ -232,16 +258,19 @@ internal sealed class WallpaperModuleService : IDisposable
 
     private void PersistConfig()
     {
+        string wallpaperDirectory;
         bool slideshowEnabled;
         int durationMinutes;
         lock (_stateLock)
         {
+            wallpaperDirectory = _wallpaperDirectory;
             slideshowEnabled = _slideshowEnabled;
             durationMinutes = _durationMinutes;
         }
 
         _configuration.Update(configuration =>
         {
+            configuration.Wallpaper.Directory = wallpaperDirectory;
             configuration.Wallpaper.SlideshowEnabled = slideshowEnabled;
             configuration.Wallpaper.DurationMinutes = durationMinutes;
         });
@@ -249,6 +278,11 @@ internal sealed class WallpaperModuleService : IDisposable
 
     private static int NormalizeDuration(int durationMinutes) =>
         Math.Clamp(durationMinutes, MINIMUM_DURATION_MINUTES, MAXIMUM_DURATION_MINUTES);
+
+    private static string DefaultWallpaperDirectory() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Pictures",
+        "wp");
 
     private void StartHyprpaper()
     {

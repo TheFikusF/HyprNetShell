@@ -4,7 +4,7 @@ using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
-using HyprNetShell.Core.Platform;
+
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -16,6 +16,7 @@ internal sealed class NetworkModule(
     NetworkModuleService service,
     DialogService dialogs,
     TabsService tabs,
+    ClipboardHistoryService clipboard,
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
@@ -239,7 +240,7 @@ internal sealed class NetworkModule(
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            OnClick = () => Utils.CopyToClipboard(ipAddress),
+            OnClick = () => _ = clipboard.CopyTextAsync(ipAddress),
             Style = ModulesCommon.ModuleStyle(theme, state.Background) with
             {
                 Spacing = 8,

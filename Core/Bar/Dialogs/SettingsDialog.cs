@@ -18,6 +18,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
 
     private readonly Tab[] _tabs;
     private readonly Theme _theme;
+    private readonly TextInputCoordinator _textInputs;
     private int _activeTabIndex;
 
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex].Content;
@@ -30,12 +31,20 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         Theme theme)
     {
         _theme = theme;
+        _textInputs = new TextInputCoordinator(services.ClipboardHistory, theme);
         _tabs =
         [
-            new Tab(new ConfigurationTab(services.Wallpapers, services.History, theme)),
-            new Tab(new OnlineAccountsConfigurationTab(services.OnlineAccounts, theme)),
-            new Tab(new CalendarSourcesConfigurationTab(services.Calendar, theme)),
-            new Tab(new CompositeWindowsConfigurationTab(configuration, tabs, openCompositeWindow, theme)),
+            new Tab(new ConfigurationTab(services.Wallpapers, services.History, _textInputs, theme)),
+            ..(services.OnlineAccounts.HasConfiguredProviders
+                ? new[] { new Tab(new OnlineAccountsConfigurationTab(services.OnlineAccounts, theme)) }
+                : []),
+            new Tab(new CalendarSourcesConfigurationTab(services.Calendar, _textInputs, theme)),
+            new Tab(new CompositeWindowsConfigurationTab(
+                configuration,
+                tabs,
+                openCompositeWindow,
+                _textInputs,
+                theme)),
         ];
     }
 
@@ -46,18 +55,19 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
 
     public void OnClosed()
     {
+        _textInputs.Deactivate();
     }
 
     public DialogInputResult HandleInput(DialogInput input)
     {
-        if (ActiveTab.HandleKey(input.Key))
+        if (_textInputs.HandleKey(input.Key) || ActiveTab.HandleKey(input.Key))
         {
             return DialogInputResult.None;
         }
 
         if (input.Key == DialogKey.Escape)
         {
-            return ActiveTab.HandleEscape()
+            return _textInputs.HandleEscape() || ActiveTab.HandleEscape()
                 ? DialogInputResult.None
                 : DialogInputResult.Close;
         }
@@ -65,10 +75,16 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         switch (input.Key)
         {
             case DialogKey.Backspace:
-                ActiveTab.HandleBackspace();
+                if (!_textInputs.HandleBackspace(input.ControlPressed))
+                {
+                    ActiveTab.HandleBackspace();
+                }
                 break;
             case DialogKey.Enter:
-                ActiveTab.ActivateSelection();
+                if (!_textInputs.HandleEnter())
+                {
+                    ActiveTab.ActivateSelection();
+                }
                 break;
             case DialogKey.Tab:
                 SelectTab((_activeTabIndex + 1) % _tabs.Length);
@@ -86,7 +102,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
                 ActiveTab.MoveSelection(SelectionDirection.Down);
                 break;
             default:
-                if (!string.IsNullOrEmpty(input.Text))
+                if (!string.IsNullOrEmpty(input.Text) && !_textInputs.HandleTextInput(input.Text))
                 {
                     ActiveTab.HandleTextInput(input.Text);
                 }
@@ -153,6 +169,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
 
     private void SelectTab(int index)
     {
+        _textInputs.Deactivate();
         _activeTabIndex = index;
         ActiveTab.Activate();
     }

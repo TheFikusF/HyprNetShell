@@ -21,8 +21,8 @@ internal interface IMainDialogTab
 
     void Activate();
     bool HandleKey(DialogKey key) => false;
-    void HandleTextInput(string text);
-    void HandleBackspace();
+    void HandleTextInput(string text) { }
+    void HandleBackspace() { }
     bool HandleEscape() => false;
     void MoveSelection(SelectionDirection direction);
     void ActivateSelection();

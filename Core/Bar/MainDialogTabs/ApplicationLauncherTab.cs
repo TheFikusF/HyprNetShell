@@ -9,16 +9,23 @@ using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialog, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class ApplicationLauncherTab(
+    IHyprctl hyprctl,
+    Action closeDialog,
+    TextInputCoordinator inputs,
+    Theme theme) : IMainDialogTab, IDisposable
 {
-
-
     private const int FUZZY_SCORE_CUTOFF = 35;
     private readonly DesktopApplicationCatalog _catalog = new();
     private readonly ApplicationResultInteraction _applicationResults = new(theme);
+    private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
+        "",
+        "",
+        "Type to search...",
+        4096,
+        alwaysActive: true);
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<DesktopApplication> _filteredApplications = [];
-    private string _query = "";
     private int _firstIndex;
 
     private int _selectedIndex;
@@ -30,26 +37,13 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
 
     public void Activate()
     {
+        inputs.Configure(_queryInput, _ => ApplyFilter());
+        inputs.Activate(_queryInput);
         _catalog.RefreshSoon();
         UpdateApplications();
         _firstIndex = 0;
         _selectedIndex = 0;
         ApplyFilter();
-    }
-
-    public void HandleTextInput(string text)
-    {
-        _query += text;
-        ApplyFilter();
-    }
-
-    public void HandleBackspace()
-    {
-        if (_query.Length > 0)
-        {
-            _query = MainDialogTabUi.RemoveLastTextElement(_query);
-            ApplyFilter();
-        }
     }
 
     public void MoveSelection(SelectionDirection direction)
@@ -100,8 +94,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                     action,
                     "ApplicationLauncher"))
             {
-                _query = "";
-                ApplyFilter();
+                inputs.SetValue(_queryInput, "", notify: true);
                 closeDialog();
             }
         }
@@ -126,7 +119,7 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
                         _selectedIndex,
                         _filteredApplications.Count,
                         _applications.Count == 0 ? "Loading applications..." : "No matching applications")),
-                MainDialogTabUi.BuildInput(_query, "Type to search..."),
+                inputs.Build(_queryInput),
                 BoundedListUi.BuildScrollableResults(
                     new BoxNode
                     {
@@ -277,13 +270,14 @@ internal sealed class ApplicationLauncherTab(IHyprctl hyprctl, Action closeDialo
 
     private void ApplyFilter()
     {
-        _filteredApplications = string.IsNullOrWhiteSpace(_query)
+        var query = _queryInput.Value;
+        _filteredApplications = string.IsNullOrWhiteSpace(query)
             ? _applications
             : _applications
                 .Select(app => (App: app,
                     Score: Math.Max(
-                        FuzzySearch.Score(_query, app.Name),
-                        FuzzySearch.Score(_query, app.Comment ?? "") - 12)))
+                        FuzzySearch.Score(query, app.Name),
+                        FuzzySearch.Score(query, app.Comment ?? "") - 12)))
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.App.Name, StringComparer.CurrentCultureIgnoreCase)
