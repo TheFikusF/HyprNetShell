@@ -28,13 +28,18 @@ internal sealed class ClipboardHistoryService : IDisposable
     private readonly Task _watchTask;
     private Process? _watchProcess;
     private int _version;
+    private long _lastChangeTimestamp;
 
     public int Version => Volatile.Read(ref _version);
+    internal long LastChangeTimestamp => Interlocked.Read(ref _lastChangeTimestamp);
 
     public ClipboardHistoryService(HistoryStore history)
     {
         _history = history;
         _entries.AddRange(history.LoadClipboardEntries());
+        _lastChangeTimestamp = _entries.Count == 0
+            ? 0
+            : new DateTimeOffset(_entries.Max(static entry => entry.CapturedAt), TimeSpan.Zero).ToUnixTimeMilliseconds();
         _history.LimitsChanged += ApplyHistoryLimit;
         _watchTask = Task.Run(() => WatchAsync(_disposeCancellation.Token));
     }
@@ -115,7 +120,11 @@ internal sealed class ClipboardHistoryService : IDisposable
                 ["-selection", "clipboard"],
                 data,
                 cancellationToken);
-        if (!copied && !cancellationToken.IsCancellationRequested)
+        if (copied)
+        {
+            Interlocked.Exchange(ref _lastChangeTimestamp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        }
+        else if (!cancellationToken.IsCancellationRequested)
         {
             AppLogger.Warning("Clipboard", "Could not copy text with wl-copy or xclip");
         }
@@ -247,6 +256,9 @@ internal sealed class ClipboardHistoryService : IDisposable
             {
                 if (existingIndex == 0)
                 {
+                    Interlocked.Exchange(
+                        ref _lastChangeTimestamp,
+                        new DateTimeOffset(entry.CapturedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
                     return;
                 }
 
@@ -260,6 +272,9 @@ internal sealed class ClipboardHistoryService : IDisposable
 
             var insertionIndex = entry.IsPinned ? 0 : _entries.FindLastIndex(candidate => candidate.IsPinned) + 1;
             _entries.Insert(insertionIndex, entry);
+            Interlocked.Exchange(
+                ref _lastChangeTimestamp,
+                new DateTimeOffset(entry.CapturedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
             _history.SaveClipboardEntry(entry);
             var storedBytes = _entries.Sum(candidate => (long)candidate.Data.Length);
             while (_entries.Count > _history.ClipboardLimit || storedBytes > MAX_HISTORY_BYTES)

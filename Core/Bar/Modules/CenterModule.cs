@@ -4,6 +4,7 @@ using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
+using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.OnlineAccounts;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
@@ -18,7 +19,7 @@ internal sealed class CenterModule : IDrawableModule
 {
     private const string CLOCK_IMAGE_RESOURCE_NAME = "HyprNetShell.Assets.Clock_3.png";
     private const string SUN_MOON_IMAGE_RESOURCE_NAME = "HyprNetShell.Assets.Clock_4.png";
-    private const int CAROUSEL_PAGE_COUNT = 2;
+    private const int CAROUSEL_PAGE_COUNT = 3;
 
     public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
 
@@ -35,6 +36,8 @@ internal sealed class CenterModule : IDrawableModule
     private readonly NotificationsWidget _notificationsWidget;
     private readonly TodaysEventsWidget _todaysEvents;
     private readonly ChatGptLimitsWidget _chatGptLimits;
+    private readonly KdeConnectService _kdeConnectService;
+    private readonly KdeConnectWidget _kdeConnect;
     private readonly ModulesCommon.BoxState _previousPageState = new();
     private readonly ModulesCommon.BoxState _nextPageState = new();
 
@@ -49,6 +52,7 @@ internal sealed class CenterModule : IDrawableModule
         CalendarService calendar,
         ClipboardHistoryService clipboard,
         ChatGptUsageService chatGptUsage,
+        KdeConnectService kdeConnect,
         WeatherWidget weather,
         DialogService dialogs,
         TabsService tabs,
@@ -69,6 +73,8 @@ internal sealed class CenterModule : IDrawableModule
         _notificationsWidget = new NotificationsWidget(notificationService, theme);
         _todaysEvents = new TodaysEventsWidget(calendar, theme);
         _chatGptLimits = new ChatGptLimitsWidget(chatGptUsage, theme);
+        _kdeConnectService = kdeConnect;
+        _kdeConnect = new KdeConnectWidget(kdeConnect, theme);
     }
 
     public Node Draw()
@@ -232,20 +238,29 @@ internal sealed class CenterModule : IDrawableModule
         ],
     };
 
-    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot) => new()
+    private BoxNode BuildPopup(DateTime now, NotificationsSnapshot snapshot)
     {
-        Direction = Direction.Vertical,
-        VerticalAlignment = ItemsAlignment.Start,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(_theme),
-        Children =
-        [
-            BuildCarouselPage(now),
-            BuildCarouselNavigation(),
-            ModulesCommon.BuildDivider(_theme.Border, height: 12),
-            _notificationsWidget.Draw(snapshot),
-        ],
-    };
+        if (_kdeConnectService.Snapshot.Devices.Any(static device =>
+                device.PairingState == KdeConnectPairingState.IncomingRequest))
+        {
+            _activeCarouselPage = 2;
+        }
+
+        return new BoxNode
+        {
+            Direction = Direction.Vertical,
+            VerticalAlignment = ItemsAlignment.Start,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = ModulesCommon.PopupStyle(_theme),
+            Children =
+            [
+                BuildCarouselPage(now),
+                BuildCarouselNavigation(),
+                ModulesCommon.BuildDivider(_theme.Border, height: 12),
+                _notificationsWidget.Draw(snapshot),
+            ],
+        };
+    }
 
     private BoxNode BuildCarouselPage(DateTime now)
     {
@@ -271,6 +286,7 @@ internal sealed class CenterModule : IDrawableModule
                         _todaysEvents.Draw(now, OpenCalendar),
                         _chatGptLimits.Draw(),
                     ],
+                    2 => [_kdeConnect.Draw(OpenKdeConnect)],
                     _ => Array.Empty<Node>()
                 },
                 BuildPageButton(Icons.ChevronRight, next, () => ChangeCarouselPage(1)),
@@ -287,6 +303,7 @@ internal sealed class CenterModule : IDrawableModule
         [
             BuildPageIndicator(0),
             BuildPageIndicator(1),
+            BuildPageIndicator(2),
         ],
     };
 
@@ -334,6 +351,12 @@ internal sealed class CenterModule : IDrawableModule
     {
         _node.ClosePopup();
         _dialogs.Open<CompositeWindow>([_tabs.Get<WorldClockTab>()]);
+    }
+
+    private void OpenKdeConnect()
+    {
+        _node.ClosePopup();
+        _dialogs.Open<CompositeWindow>([_tabs.Get<KdeConnectTab>()]);
     }
 
     private static double GradientOffset() => (Environment.TickCount64 % 4600 / 4600.0) * Math.PI * 2;

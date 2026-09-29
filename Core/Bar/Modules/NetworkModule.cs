@@ -20,15 +20,20 @@ internal sealed class NetworkModule(
     Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
+    private const string WifiPopupTab = "wifi";
+    private const string VpnPopupTab = "vpn";
+    private const string DetailsPopupTab = "details";
     private static readonly TimeSpan WifiScanInterval = TimeSpan.FromSeconds(5);
 
     private readonly ModulesCommon.BoxState _settingsState = new();
+    private readonly SegmentedSwitch _popupTabSwitch = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private IReadOnlyList<WifiNetworkSnapshot> _wifiNetworks = [];
     private DateTime _lastWifiScan = DateTime.MinValue;
     private Task? _wifiScanTask;
     private readonly Ref<float> _wifiSwitchAnimation = new();
     private bool? _wifiEnabledOverride;
+    private string _selectedPopupTab = WifiPopupTab;
 
     private readonly NodeWithPopup _node = new(popupCoordinator, "network_module")
     {
@@ -93,13 +98,31 @@ internal sealed class NetworkModule(
         Style = ModulesCommon.PopupStyle(theme),
         Children =
         [
-            BuildWifiPowerRow(network),
-            ..BuildWifiRows(EffectiveWifiEnabled(network)),
-            ModulesCommon.BuildDivider(theme.Border),
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Info, "Details"),
-            BuildIpRow(network.Device),
-            ..BuildIpRows(network),
+            _popupTabSwitch.Build(
+                theme,
+                [
+                    new SegmentedSwitch.Item(WifiPopupTab, new TextNode("Wi-Fi", theme.Text, theme.Text)),
+                    new SegmentedSwitch.Item(VpnPopupTab, new TextNode("VPN", theme.Text, theme.Text)),
+                    new SegmentedSwitch.Item(DetailsPopupTab, new TextNode("Details", theme.Text, theme.Text)),
+                ],
+                _selectedPopupTab,
+                selected => _selectedPopupTab = selected),
+            ..BuildSelectedPopupTab(network),
         ]
+    };
+
+    private IReadOnlyList<Node> BuildSelectedPopupTab(NetworkSnapshot network) => _selectedPopupTab switch
+    {
+        VpnPopupTab => [..BuildTunnelRows(network.Tunnels)],
+        DetailsPopupTab =>
+        [
+            BuildDetailRow("Status", network.Connected ? "Connected" : "Disconnected"),
+            BuildDetailRow("Device", network.Device),
+            BuildDetailRow("Connection", network.Connection),
+            BuildDetailRow("Type", network.Type),
+            ..BuildIpRows(network),
+        ],
+        _ => [BuildWifiPowerRow(network), ..BuildWifiRows(EffectiveWifiEnabled(network))],
     };
 
     private void OpenWifiSettings()
@@ -185,6 +208,121 @@ internal sealed class NetworkModule(
         }
     }
 
+    private IEnumerable<Node> BuildTunnelRows(IReadOnlyList<NetworkTunnelSnapshot> tunnels)
+    {
+        if (tunnels.Count == 0)
+        {
+            yield return BuildPlainRow("No active VPN connections");
+            yield break;
+        }
+
+        foreach (var tunnel in tunnels.OrderByDescending(tunnel => tunnel.IsTailscale))
+        {
+            yield return BuildTunnelRow(tunnel);
+        }
+    }
+
+    private BoxNode BuildTunnelRow(NetworkTunnelSnapshot tunnel) => new()
+    {
+        Direction = Direction.Vertical,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+        {
+            BorderRadius = 8,
+            BorderWidth = 0,
+            Spacing = 6,
+        },
+        Children =
+        [
+            new BoxNode
+            {
+                HorizontalAlignment = ItemsAlignment.Spread,
+                VerticalAlignment = ItemsAlignment.Center,
+                Children =
+                [
+                    ModulesCommon.BuildTextWithIcon(
+                        theme,
+                        tunnel.IsTailscale ? Icons.Globe : Icons.Lock,
+                        tunnel.Name,
+                        maxTextWidth: 220),
+                    new TextNode("Active", theme.Text, theme.Text.MutedColor),
+                ],
+            },
+            BuildDetailRow("Device", tunnel.Device),
+            BuildDetailRow("Type", tunnel.Type),
+            ..tunnel.IpAddresses.Select(BuildIpRow),
+            ..BuildTailscalePeerRows(tunnel),
+        ],
+    };
+
+    private IEnumerable<Node> BuildTailscalePeerRows(NetworkTunnelSnapshot tunnel)
+    {
+        if (!tunnel.IsTailscale)
+        {
+            yield break;
+        }
+
+        yield return ModulesCommon.BuildDivider(theme.Border, height: 12);
+        yield return BuildDetailRow("Devices online", tunnel.Peers.Count.ToString());
+        if (tunnel.Peers.Count == 0)
+        {
+            yield return new TextNode("No other Tailscale devices online", theme.Text, theme.Text.MutedColor);
+            yield break;
+        }
+
+        foreach (var peer in tunnel.Peers.Take(8))
+        {
+            yield return BuildTailscalePeerRow(peer);
+        }
+
+        if (tunnel.Peers.Count > 8)
+        {
+            yield return new TextNode($"+{tunnel.Peers.Count - 8} more devices", theme.Text, theme.Text.MutedColor);
+        }
+    }
+
+    private BoxNode BuildTailscalePeerRow(TailscalePeerSnapshot peer)
+    {
+        var ipAddress = peer.IpAddresses.FirstOrDefault();
+        var state = _rowStates.GetState($"tailscale:{peer.Name}", theme.Panel).UpdateColor(theme.Panel);
+        var icon = peer.OperatingSystem.Equals("android", StringComparison.OrdinalIgnoreCase) ||
+                   peer.OperatingSystem.Equals("ios", StringComparison.OrdinalIgnoreCase)
+            ? Icons.Smartphone
+            : Icons.Laptop;
+
+        return new BoxNode
+        {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            IsHovered = state.Hovered,
+            OnClick = ipAddress is null ? null : () => _ = clipboard.CopyTextAsync(ipAddress),
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Padding = new Insets(7, 6),
+                Spacing = 3,
+            },
+            Children =
+            [
+                new BoxNode
+                {
+                    HorizontalAlignment = ItemsAlignment.Spread,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    Children =
+                    [
+                        ModulesCommon.BuildTextWithIcon(theme, icon, peer.Name, maxTextWidth: 205),
+                        new TextNode(
+                            string.IsNullOrWhiteSpace(peer.OperatingSystem) ? "Online" : peer.OperatingSystem,
+                            theme.Text,
+                            theme.Text.MutedColor),
+                    ],
+                },
+                new TextNode(ipAddress ?? "No Tailscale IP", theme.Text.SmallSize, theme.Text.MutedColor),
+            ],
+        };
+    }
+
     private IEnumerable<Node> BuildIpRows(NetworkSnapshot network)
     {
         if (network.IpAddresses.Count == 0)
@@ -197,6 +335,17 @@ internal sealed class NetworkModule(
             yield return BuildIpRow(ipAddress);
         }
     }
+
+    private BoxNode BuildDetailRow(string label, string value) => new(Style.Spacer)
+    {
+        HorizontalAlignment = ItemsAlignment.Spread,
+        VerticalAlignment = ItemsAlignment.Center,
+        Children =
+        [
+            new TextNode(label, theme.Text, theme.Text),
+            new TextNode(string.IsNullOrWhiteSpace(value) ? "Unavailable" : value, theme.Text, theme.Text.MutedColor),
+        ],
+    };
 
     private BoxNode BuildWifiRow(WifiNetworkSnapshot wifi)
     {

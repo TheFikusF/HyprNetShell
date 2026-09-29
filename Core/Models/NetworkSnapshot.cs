@@ -8,10 +8,24 @@ public sealed record NetworkSnapshot(
     string Type,
     string Connection,
     IReadOnlyList<string> IpAddresses,
-    int? WifiSignal)
+    int? WifiSignal,
+    IReadOnlyList<NetworkTunnelSnapshot> Tunnels)
 {
-    public static NetworkSnapshot Empty { get; } = new(false, false, false, "", "", "", [], null);
+    public static NetworkSnapshot Empty { get; } = new(false, false, false, "", "", "", [], null, []);
 }
+
+public sealed record NetworkTunnelSnapshot(
+    string Name,
+    string Device,
+    string Type,
+    IReadOnlyList<string> IpAddresses,
+    bool IsTailscale,
+    IReadOnlyList<TailscalePeerSnapshot> Peers);
+
+public sealed record TailscalePeerSnapshot(
+    string Name,
+    string OperatingSystem,
+    IReadOnlyList<string> IpAddresses);
 
 public sealed record WifiNetworkSnapshot(
     string Ssid,

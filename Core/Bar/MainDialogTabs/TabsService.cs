@@ -1,5 +1,6 @@
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Platform;
 
@@ -15,6 +16,7 @@ internal sealed class TabsService : IDisposable
 
     internal TabsService(
         ClipboardHistoryService clipboardHistory,
+        KdeConnectService kdeConnect,
         IHyprctl hyprctl,
         UrlLauncher urlLauncher,
         NetworkModuleService network,
@@ -36,7 +38,8 @@ internal sealed class TabsService : IDisposable
             new WorldClockTab(Inputs, theme),
             new CalendarTab(calendar, theme),
             new TetrisTab(theme),
-            new ClipboardManagerTab(clipboardHistory, closeDialog, Inputs, theme),
+            new ClipboardManagerTab(clipboardHistory, kdeConnect, closeDialog, Inputs, theme),
+            new KdeConnectTab(kdeConnect, theme),
             new WallpapersTab(wallpapers, closeDialog, Inputs, theme),
             new WifiTab(network, Inputs, theme),
             new BluetoothTab(bluetooth, theme),

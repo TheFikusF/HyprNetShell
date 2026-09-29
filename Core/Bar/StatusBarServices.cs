@@ -3,6 +3,7 @@ using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.OnlineAccounts;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.Spotify;
@@ -57,8 +58,6 @@ public sealed class StatusBarServices : IDisposable
     private bool _lastNetworkConnected;
     private string _lastNetworkConnection = "";
     private HashSet<string> _lastConnectedBluetoothDevices = new(StringComparer.OrdinalIgnoreCase);
-    private bool _batteryNotificationInitialized;
-    private bool _batteryWasCritical;
     private int _lockScreenRequested;
     private bool _disposed;
 
@@ -75,6 +74,7 @@ public sealed class StatusBarServices : IDisposable
     internal MusicModuleService Music { get; }
     internal SpotifyPlaybackService Spotify { get; }
     internal ClipboardHistoryService ClipboardHistory { get; }
+    internal KdeConnectService KdeConnect { get; }
     internal WallpaperModuleService Wallpapers { get; }
     internal SniTrayService Tray { get; }
     internal DisplayControlsModuleService DisplayControls { get; }
@@ -83,6 +83,7 @@ public sealed class StatusBarServices : IDisposable
     internal PrivacyModuleService Privacy { get; }
     internal BluetoothModuleService Bluetooth { get; }
     internal BatteryModuleService Battery { get; }
+    internal DeviceBatteryService DeviceBatteries { get; }
     internal SystemStatsModuleService SystemStats { get; }
     internal WeatherService Weather { get; }
     internal CalendarService Calendar { get; }
@@ -121,10 +122,13 @@ public sealed class StatusBarServices : IDisposable
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
         Music = new MusicModuleService(Spotify);
         ClipboardHistory = new ClipboardHistoryService(History);
+        KdeConnect = new KdeConnectService(ClipboardHistory);
+        DeviceBatteries = new DeviceBatteryService(Battery, Bluetooth, KdeConnect, Notifications);
         Tray = new SniTrayService();
 
         Tabs = new TabsService(
             ClipboardHistory,
+            KdeConnect,
             Hyprctl,
             UrlLauncher,
             Network,
@@ -197,7 +201,7 @@ public sealed class StatusBarServices : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         CheckConnectionNotifications();
-        CheckBatteryNotification();
+        DeviceBatteries.Refresh();
         if (_refreshTask is { IsCompleted: false })
         {
             return;
@@ -263,31 +267,6 @@ public sealed class StatusBarServices : IDisposable
         _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private void CheckBatteryNotification()
-    {
-        var battery = Battery.Snapshot;
-        if (!battery.Available)
-        {
-            return;
-        }
-
-        if (!_batteryNotificationInitialized)
-        {
-            _batteryNotificationInitialized = true;
-            _batteryWasCritical = false;
-        }
-
-        if (battery.IsCritical && !_batteryWasCritical)
-        {
-            Notifications.ShowLocal(
-                "Low battery",
-                $"Battery is at {battery.Percentage}%.",
-                "battery-warning",
-                storeInHistory: false);
-        }
-
-        _batteryWasCritical = battery.IsCritical;
-    }
 
     private async Task RefreshStateAsync(
         CancellationToken cancellationToken)
@@ -352,6 +331,7 @@ public sealed class StatusBarServices : IDisposable
         Dialogs.Dispose();
         Tabs.Dispose();
         Tray.Dispose();
+        KdeConnect.Dispose();
         ClipboardHistory.Dispose();
         Music.Dispose();
         Spotify.Dispose();

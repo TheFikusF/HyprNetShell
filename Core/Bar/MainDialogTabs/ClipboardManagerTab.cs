@@ -1,4 +1,6 @@
+using System.Text;
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -11,6 +13,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class ClipboardManagerTab(
     ClipboardHistoryService history,
+    KdeConnectService kdeConnect,
     Action closeDialog,
     TextInputCoordinator inputs,
     Theme theme) : IMainDialogTab
@@ -22,6 +25,7 @@ internal sealed class ClipboardManagerTab(
 
     private sealed class ClipboardButtonState : ModulesCommon.BoxState
     {
+        public ActionButtonState Send { get; } = new();
         public ActionButtonState Pin { get; } = new();
         public ActionButtonState Delete { get; } = new();
     }
@@ -145,7 +149,7 @@ internal sealed class ClipboardManagerTab(
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
             {
-                if (state.Pin.Hovered.Value || state.Delete.Hovered.Value)
+                if (state.Send.Hovered.Value || state.Pin.Hovered.Value || state.Delete.Hovered.Value)
                 {
                     return;
                 }
@@ -180,8 +184,54 @@ internal sealed class ClipboardManagerTab(
                 },
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
+                    BuildSendButton(entry, selected || state.Hovered.Value, state.Send),
                     BuildPinButton(entry, selected || state.Hovered.Value, state.Pin),
                     BuildDeleteButton(entry, selected || state.Hovered.Value, state.Delete),
+                },
+            ],
+        };
+    }
+
+    private BoxNode BuildSendButton(
+        ClipboardHistoryEntry entry,
+        bool active,
+        ActionButtonState state)
+    {
+        var available = entry.Image is null && kdeConnect.Snapshot.Devices.Any(
+            static device => device.IsPaired && device.IsReachable);
+        var transparent = Color.White with { A = 0.0f };
+        var hover = Color.White with { A = 0.3f };
+        state.Background = Color.LerpSmooth(
+            state.Background,
+            available && state.Hovered.Value ? hover : transparent,
+            18.0f,
+            Renderer.DeltaTime);
+        state.IconOpacity = PrimitivesMath.LerpSmooth(
+            state.IconOpacity,
+            available && active ? 1.0f : 0.0f,
+            18.0f,
+            Renderer.DeltaTime);
+
+        return new BoxNode(32, 32)
+        {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = available
+                ? () => _ = kdeConnect.SendClipboardTextAsync(Encoding.UTF8.GetString(entry.Data))
+                : null,
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            {
+                Padding = 0,
+                BorderRadius = 8,
+                BorderWidth = 0,
+                ShadowColor = null,
+            },
+            Children =
+            [
+                new ImageNode(Icons.Smartphone, 18, 18, theme.Text)
+                {
+                    Opacity = state.IconOpacity,
                 },
             ],
         };

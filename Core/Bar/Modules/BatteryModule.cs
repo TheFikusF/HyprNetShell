@@ -9,10 +9,13 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
+internal sealed class BatteryModule(
+    BatteryModuleService service,
+    DeviceBatteryService deviceBatteries,
+    Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly Dictionary<string, ModulesCommon.BoxState> _profileStates = [];
+    private readonly SegmentedSwitch _powerProfileSwitch = new();
     private readonly ModulesCommon.BoxState _chargeLimitDecreaseState = new();
     private readonly ModulesCommon.BoxState _chargeLimitIncreaseState = new();
 
@@ -39,8 +42,9 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
     public Node Draw()
     {
         var battery = service.Snapshot;
+        var devices = deviceBatteries.Snapshot;
         return battery.Available
-            ? _node.Draw([BuildStateModule(battery)], () => BuildPopup(battery))
+            ? _node.Draw([BuildStateModule(battery)], () => BuildPopup(battery, devices))
             : new SpacerNode();
     }
 
@@ -190,7 +194,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
     private static float ChargingGradientOffset() =>
         -(float)(Environment.TickCount64 % 6000 / 6000.0);
 
-    private BoxNode BuildPopup(BatterySnapshot battery) => new()
+    private BoxNode BuildPopup(BatterySnapshot battery, DeviceBatteriesSnapshot devices) => new()
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
@@ -208,6 +212,7 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
             BuildRow("Status", battery.Status),
             ..BuildChargeLimitControl(battery.ChargeLimit),
             ..BuildPowerProfileSection(battery.PowerProfiles),
+            ..BuildDeviceBatterySection(devices.Devices),
         ],
     };
 
@@ -283,39 +288,59 @@ internal sealed class BatteryModule(BatteryModuleService service, Theme theme,
 
         yield return ModulesCommon.BuildDivider(theme.Border, height: 16);
         yield return new TextNode("Power profile", theme.Text, theme.Text);
-        yield return new BoxNode
-        {
-            Direction = Direction.Horizontal,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            VerticalAlignment = ItemsAlignment.Center,
-            Children =
-            [
-                ..powerProfiles.Profiles.Select((profile, i) =>
-                    BuildPowerProfileButton(profile, powerProfiles.Active, i))
-            ],
-        };
+        yield return _powerProfileSwitch.Build(
+            theme,
+            powerProfiles.Profiles
+                .Select(profile => new SegmentedSwitch.Item(
+                    profile,
+                    new ImageNode(ProfileLabel(profile), 16, 16, theme.Text)))
+                .ToArray(),
+            powerProfiles.Active,
+            service.SetPowerProfile);
     }
 
-    private BoxNode BuildPowerProfileButton(string profile, string activeProfile, int index)
+    private IEnumerable<Node> BuildDeviceBatterySection(IReadOnlyList<DeviceBatterySnapshot> devices)
     {
-        var active = profile.Equals(activeProfile, StringComparison.Ordinal);
-        var normal = active ? theme.Active : theme.Panel;
-        var state = _profileStates.GetState(profile, normal).UpdateColor(normal);
-
-        return new BoxNode
+        if (devices.Count == 0)
         {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            IsHovered = state.Hovered,
-            OnClick = active ? null : () => service.SetPowerProfile(profile),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background, index == 0, index == 2) with
+            yield break;
+        }
+
+        yield return ModulesCommon.BuildDivider(theme.Border, height: 16);
+        yield return new TextNode("Device batteries", theme.Text, theme.Text);
+        foreach (var device in devices)
+        {
+            var color = device.Percentage <= DeviceBatteryService.LowBatteryPercentage && device.IsCharging is not true
+                ? theme.Critical
+                : theme.Text;
+            yield return new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
             {
-                BorderWidth = active ? theme.Border.Width : 0,
-                Padding = new Insets(7, 6),
-            },
-            Children = [new ImageNode(ProfileLabel(profile), 16, 16, theme.Text)],
-        };
+                new BoxNode
+                {
+                    Direction = Direction.Vertical,
+                    Style = new Style { Spacing = 2 },
+                    Children =
+                    [
+                        new TextNode(device.Name, theme.Text, theme.Text),
+                        new TextNode(SourceLabel(device.Source), theme.Text.SmallSize, theme.Text.MutedColor),
+                    ],
+                },
+                ModulesCommon.BuildTextWithIcon(
+                    theme,
+                    device.IsCharging is true ? Icons.BatteryCharging : BatteryLevelIcon(device.Percentage),
+                    $"{device.Percentage}%",
+                    color),
+            };
+        }
     }
+
+    private static string SourceLabel(DeviceBatterySource source) => source switch
+    {
+        DeviceBatterySource.Laptop => "Laptop battery",
+        DeviceBatterySource.Bluetooth => "Bluetooth",
+        DeviceBatterySource.KdeConnect => "KDE Connect",
+        _ => "Device",
+    };
 
     private static SvgAsset ProfileLabel(string profile) => profile switch
     {

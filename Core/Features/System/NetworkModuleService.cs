@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Text.Json;
 using HyprNetShell.Core.Features.Sni;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
@@ -260,20 +262,33 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                 "-t -f DEVICE,TYPE,STATE,CONNECTION device",
                 TimeSpan.FromMilliseconds(800),
                 cancellationToken);
-            await Task.WhenAll(radioTask, devicesTask);
+            var activeConnectionsTask = CommandRunner.TryReadAsync(
+                "nmcli",
+                "-t -f NAME,TYPE,DEVICE connection show --active",
+                TimeSpan.FromMilliseconds(800),
+                cancellationToken);
+            await Task.WhenAll(radioTask, devicesTask, activeConnectionsTask);
 
             var radioOutput = await radioTask;
             var output = await devicesTask;
             var wifiAvailable = radioOutput is not null;
             var wifiEnabled = radioOutput?.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase) == true;
+            var tunnels = ReadActiveTunnels(await activeConnectionsTask);
+            if (tunnels.Any(tunnel => tunnel.IsTailscale))
+            {
+                var peers = await ReadTailscalePeersAsync(cancellationToken);
+                tunnels = tunnels
+                    .Select(tunnel => tunnel.IsTailscale ? tunnel with { Peers = peers } : tunnel)
+                    .ToArray();
+            }
 
-            var snapshot = new NetworkSnapshot(wifiAvailable, wifiEnabled, false, "", "", "", [], null);
+            var snapshot = new NetworkSnapshot(wifiAvailable, wifiEnabled, false, "", "", "", [], null, tunnels);
 
             if (!string.IsNullOrWhiteSpace(output))
             {
                 foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
-                    var parts = line.Split(':');
+                    var parts = SplitNmcliFields(line);
                     if (parts.Length < 4)
                     {
                         continue;
@@ -284,7 +299,10 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                     var stateName = parts[2];
                     var connection = parts[3];
 
-                    if (stateName != "connected" || string.IsNullOrWhiteSpace(connection))
+                    if (!stateName.Equals("connected", StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(connection) ||
+                        IsTunnelType(type) ||
+                        device.Equals("lo", StringComparison.Ordinal))
                     {
                         continue;
                     }
@@ -301,7 +319,8 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                         type,
                         connection,
                         ReadIpAddresses(device),
-                        wifiSignal);
+                        wifiSignal,
+                        tunnels);
 
                     break;
                 }
@@ -587,6 +606,112 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         }
         catch
         {
+        }
+    }
+
+    private static IReadOnlyList<NetworkTunnelSnapshot> ReadActiveTunnels(string? output)
+    {
+        var tunnels = new List<NetworkTunnelSnapshot>();
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = SplitNmcliFields(line);
+                if (parts.Length < 3 || !IsTunnelType(parts[1]))
+                {
+                    continue;
+                }
+
+                var device = parts[2];
+                var isTailscale = IsTailscale(parts[0], device);
+                tunnels.Add(new NetworkTunnelSnapshot(
+                    isTailscale ? "Tailscale" : parts[0],
+                    device,
+                    parts[1],
+                    ReadIpAddresses(device),
+                    isTailscale,
+                    []));
+            }
+        }
+
+        var tailscaleInterface = FindTailscaleInterface();
+        if (tailscaleInterface is not null && tunnels.All(tunnel => !tunnel.IsTailscale))
+        {
+            tunnels.Add(new NetworkTunnelSnapshot(
+                "Tailscale",
+                tailscaleInterface,
+                "tailscale",
+                ReadIpAddresses(tailscaleInterface),
+                true,
+                []));
+        }
+
+        return tunnels;
+    }
+
+    private static async Task<IReadOnlyList<TailscalePeerSnapshot>> ReadTailscalePeersAsync(
+        CancellationToken cancellationToken)
+    {
+        var json = await CommandRunner.TryReadAsync(
+            "tailscale",
+            "status --json",
+            TimeSpan.FromSeconds(1),
+            cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            var status = JsonSerializer.Deserialize(json, TailscaleJsonContext.Default.TailscaleStatus);
+            return status?.Peer.Values
+                .Where(peer => peer.Online)
+                .Select(peer => new TailscalePeerSnapshot(
+                    PeerName(peer),
+                    peer.OS,
+                    peer.TailscaleIPs))
+                .OrderBy(peer => peer.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? [];
+        }
+        catch (JsonException exception)
+        {
+            AppLogger.Warning("Network", "Could not parse Tailscale device status", exception);
+            return [];
+        }
+    }
+
+    private static string PeerName(TailscalePeerStatus peer)
+    {
+        if (!string.IsNullOrWhiteSpace(peer.HostName))
+        {
+            return peer.HostName;
+        }
+
+        var dnsName = peer.DNSName.TrimEnd('.');
+        return string.IsNullOrWhiteSpace(dnsName) ? "Unknown device" : dnsName;
+    }
+
+    private static bool IsTunnelType(string type) => type.Equals("vpn", StringComparison.OrdinalIgnoreCase) ||
+        type.Equals("wireguard", StringComparison.OrdinalIgnoreCase) ||
+        type.Equals("tun", StringComparison.OrdinalIgnoreCase) ||
+        type.Equals("ip-tunnel", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTailscale(string name, string device) =>
+        name.Contains("tailscale", StringComparison.OrdinalIgnoreCase) ||
+        device.StartsWith("tailscale", StringComparison.OrdinalIgnoreCase);
+
+    private static string? FindTailscaleInterface()
+    {
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(networkInterface => IsTailscale(networkInterface.Name, networkInterface.Name))
+                ?.Name;
+        }
+        catch
+        {
+            return null;
         }
     }
 

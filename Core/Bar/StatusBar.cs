@@ -69,7 +69,11 @@ public sealed class StatusBar
             services.Tabs,
             Theme.Default,
             _popupCoordinator);
-        var batteryModule = new BatteryModule(services.Battery, Theme.Default, _popupCoordinator);
+        var batteryModule = new BatteryModule(
+            services.Battery,
+            services.DeviceBatteries,
+            Theme.Default,
+            _popupCoordinator);
         var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
         var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);
         var powerModule = new PowerModule(
@@ -93,6 +97,7 @@ public sealed class StatusBar
             services.Calendar,
             services.ClipboardHistory,
             services.ChatGptUsage,
+            services.KdeConnect,
             weatherWidget,
             services.Dialogs,
             services.Tabs,
