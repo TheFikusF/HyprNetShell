@@ -128,7 +128,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         ],
     };
 
-    private BoxNode BuildTabs() => new (height: 46)
+    private BoxNode BuildTabs() => new(height: 46)
     {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
@@ -156,7 +156,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
             },
-            Children = [tab.Content.Icon, tab.Content.Title],
+            Children = [new ImageNode(tab.Content.Icon, color: ThemeManager.Current.Text), tab.Content.Title],
         };
     }
 

@@ -79,6 +79,7 @@ public sealed class StatusBarServices : IDisposable
     internal SniTrayService Tray { get; }
     internal DisplayControlsModuleService DisplayControls { get; }
     internal NetworkModuleService Network { get; }
+    private PipeWireGraphService PipeWireGraph { get; }
     internal AudioModuleService Audio { get; }
     internal PrivacyModuleService Privacy { get; }
     internal BluetoothModuleService Bluetooth { get; }
@@ -109,8 +110,9 @@ public sealed class StatusBarServices : IDisposable
         DisplayControls = new DisplayControlsModuleService(Hyprctl);
         Wallpapers = new WallpaperModuleService(Hyprctl);
         Network = new NetworkModuleService();
-        Audio = new AudioModuleService();
-        Privacy = new PrivacyModuleService(Audio);
+        PipeWireGraph = new PipeWireGraphService();
+        Audio = new AudioModuleService(PipeWireGraph);
+        Privacy = new PrivacyModuleService(Audio, PipeWireGraph);
         Bluetooth = new BluetoothModuleService();
         Battery = new BatteryModuleService();
         SystemStats = new SystemStatsModuleService();
@@ -339,7 +341,9 @@ public sealed class StatusBarServices : IDisposable
         Weather.Dispose();
         Battery.Dispose();
         Bluetooth.Dispose();
+        Privacy.Dispose();
         Audio.Dispose();
+        PipeWireGraph.Dispose();
         Network.Dispose();
         Wallpapers.Dispose();
         SuperKey.Dispose();

@@ -22,8 +22,11 @@ internal sealed partial class AudioModuleService : IBarDataService, IDisposable
 
     public AudioSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
-    public AudioModuleService()
+    private readonly PipeWireGraphService _graph;
+
+    public AudioModuleService(PipeWireGraphService graph)
     {
+        _graph = graph;
         _snapshotCallback = OnNativeSnapshot;
         TryInitializeNativeBackend();
     }
@@ -41,16 +44,9 @@ internal sealed partial class AudioModuleService : IBarDataService, IDisposable
             "status",
             TimeSpan.FromMilliseconds(900),
             cancellationToken);
-        var graphTask = CommandRunner.TryReadAsync(
-            "pw-dump",
-            "-N",
-            TimeSpan.FromMilliseconds(900),
-            cancellationToken);
-
-        await Task.WhenAll(statusTask, graphTask);
         var fallbackSnapshot = ParseStatus(await statusTask) with
         {
-            IsRecording = ParseRecordingState(await graphTask),
+            IsRecording = _graph.IsRecording,
         };
         if (!NativeAvailable())
         {

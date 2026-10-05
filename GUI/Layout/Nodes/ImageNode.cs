@@ -33,7 +33,7 @@ public class ImageNode : Node
     public ImageNode(SvgAsset svgAsset, int? width = null, int? height = null, Color? color = null)
     {
         _svgAsset = svgAsset;
-        _color = color ?? ThemeManager.Current.Text;
+        _color = color;
         Width = width ?? ThemeManager.Current.IconSize;
         Height = height ?? ThemeManager.Current.IconSize;
     }

@@ -60,7 +60,7 @@ internal sealed class TabsService : IDisposable
 
     public void Dispose()
     {
-        foreach (var tab in _tabs.Where(x => x is IDisposable).Cast<IDisposable>())
+        foreach (var tab in _tabs.OfType<IDisposable>())
         {
             tab.Dispose();
         }

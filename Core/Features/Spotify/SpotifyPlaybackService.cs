@@ -24,6 +24,7 @@ internal sealed class SpotifyPlaybackService : IDisposable
     };
 
     private readonly OnlineAccountsService _onlineAccounts;
+    private long _nextPlaybackTimeoutWarningAt = long.MinValue;
 
     internal event Action? AvailabilityChanged;
 
@@ -81,6 +82,17 @@ internal sealed class SpotifyPlaybackService : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException)
+        {
+            var now = Environment.TickCount64;
+            var nextWarningAt = Interlocked.Read(ref _nextPlaybackTimeoutWarningAt);
+            if (now >= nextWarningAt &&
+                Interlocked.CompareExchange(ref _nextPlaybackTimeoutWarningAt, now + 60_000, nextWarningAt) == nextWarningAt)
+            {
+                AppLogger.Warning("Spotify", "Could not read Spotify playback state: request timed out. Further timeout warnings are limited to once per minute.");
+            }
+            return null;
         }
         catch (Exception exception)
         {

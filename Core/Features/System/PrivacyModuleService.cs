@@ -1,12 +1,14 @@
+using System.Diagnostics;
 using System.Globalization;
+using HyprNetShell.Core.Logging;
 using System.Text.Json;
 using HyprNetShell.Core.Models;
-using HyprNetShell.Core.Platform;
+
 using HyprNetShell.Core.Services;
 
 namespace HyprNetShell.Core.Features.System;
 
-internal sealed class PrivacyModuleService(AudioModuleService audioService) : IBarDataService
+internal sealed class PrivacyModuleService : IBarDataService, IDisposable
 {
     private enum VideoSourceKind
     {
@@ -19,6 +21,7 @@ internal sealed class PrivacyModuleService(AudioModuleService audioService) : IB
         VideoSourceKind Kind,
         bool IsRunning,
         IReadOnlySet<string> Aliases);
+
     private sealed record VideoConsumer(
         int Id,
         string Application,
@@ -29,15 +32,67 @@ internal sealed class PrivacyModuleService(AudioModuleService audioService) : IB
 
     public PrivacySnapshot Snapshot => Volatile.Read(ref _snapshot);
 
-    public async ValueTask RefreshAsync(CancellationToken cancellationToken)
+    private readonly AudioModuleService _audioService;
+    private readonly PipeWireGraphService _graph;
+    private readonly FileSystemWatcher? _devices;
+
+    private IReadOnlyList<string> _directCameraApplications = [];
+    private long _lastCameraScan;
+    private int _devicesChanged = 1;
+
+    public PrivacyModuleService(AudioModuleService audioService, PipeWireGraphService graph)
     {
-        var graph = await CommandRunner.TryReadAsync(
-            "pw-dump",
-            "-N",
-            TimeSpan.FromMilliseconds(900),
-            cancellationToken);
-        var snapshot = ParseState(graph);
-        var directCameraApplications = FindDirectCameraApplications(cancellationToken);
+        _audioService = audioService;
+        _graph = graph;
+        try
+        {
+            _devices = new FileSystemWatcher("/dev", "video*")
+            {
+                NotifyFilter = NotifyFilters.FileName,
+            };
+            _devices.Created += OnDevicesChanged;
+            _devices.Deleted += OnDevicesChanged;
+            _devices.Renamed += OnDevicesChanged;
+            _devices.Error += (_, args) =>
+            {
+                Interlocked.Exchange(ref _devicesChanged, 1);
+                AppLogger.Warning("Privacy", "Video device watcher failed; using periodic discovery", args.GetException());
+            };
+            _devices.EnableRaisingEvents = true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            _devices?.Dispose();
+            AppLogger.Warning("Privacy", "Could not watch video device hotplug; using periodic discovery", exception);
+        }
+    }
+
+    private void OnDevicesChanged(object sender, FileSystemEventArgs args) =>
+        Interlocked.Exchange(ref _devicesChanged, 1);
+
+    public void Dispose() => _devices?.Dispose();
+
+    public ValueTask RefreshAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = _graph.Privacy;
+        if (Interlocked.Exchange(ref _devicesChanged, 0) != 0 ||
+            Stopwatch.GetElapsedTime(_lastCameraScan) >= TimeSpan.FromSeconds(10))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                _directCameraApplications = Directory.EnumerateFileSystemEntries("/dev", "video*").Any()
+                    ? FindDirectCameraApplications(cancellationToken)
+                    : [];
+                _lastCameraScan = Stopwatch.GetTimestamp();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _lastCameraScan = Stopwatch.GetTimestamp();
+                AppLogger.Warning("Privacy", "Could not discover video devices; preserving camera state", exception);
+            }
+        }
+        var directCameraApplications = _directCameraApplications;
         if (directCameraApplications.Count > 0)
         {
             snapshot = snapshot with
@@ -46,12 +101,13 @@ internal sealed class PrivacyModuleService(AudioModuleService audioService) : IB
             };
         }
 
-        if (audioService.Snapshot.IsRecording && snapshot.MicrophoneApplications.Count == 0)
+        if (_audioService.Snapshot.IsRecording && snapshot.MicrophoneApplications.Count == 0)
         {
             snapshot = snapshot with { MicrophoneApplications = ["Unknown application"] };
         }
 
         Volatile.Write(ref _snapshot, snapshot);
+        return ValueTask.CompletedTask;
     }
 
     internal static PrivacySnapshot ParseState(string? output)
@@ -327,8 +383,17 @@ internal sealed class PrivacyModuleService(AudioModuleService audioService) : IB
                 try
                 {
                     var descriptors = Path.Combine(processDirectory, "fd");
-                    var usesCamera = Directory.EnumerateFileSystemEntries(descriptors).Any(descriptor =>
-                        new FileInfo(descriptor).LinkTarget?.StartsWith("/dev/video", StringComparison.Ordinal) == true);
+                    var usesCamera = false;
+                    foreach (var descriptor in Directory.EnumerateFileSystemEntries(descriptors))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (File.ResolveLinkTarget(descriptor, returnFinalTarget: false)?.FullName
+                            .StartsWith("/dev/video", StringComparison.Ordinal) == true)
+                        {
+                            usesCamera = true;
+                            break;
+                        }
+                    }
                     if (usesCamera)
                     {
                         applications.Add(ProcessName(processDirectory));
@@ -342,7 +407,7 @@ internal sealed class PrivacyModuleService(AudioModuleService audioService) : IB
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // /proc may be restricted by hidepid or a container policy.
+            AppLogger.Warning("Privacy", "Could not scan /proc for direct camera users", exception);
         }
 
         return [.. applications.Order(StringComparer.OrdinalIgnoreCase)];

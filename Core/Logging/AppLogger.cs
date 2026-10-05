@@ -3,11 +3,17 @@ using System.Text;
 
 namespace HyprNetShell.Core.Logging;
 
+public enum LogLevel
+{
+    Info,
+    Warning,
+    Error,
+}
+
 public static class AppLogger
 {
     private const long MAX_LOG_BYTES = 5 * 1024 * 1024;
-    private const string CONSOLE_LOGGING_VARIABLE = "HYPRNETSHELL_LOG_TO_CONSOLE";
-    private static readonly Lock Gate = new();
+    private static readonly Lock _lock = new();
     private static StreamWriter? _writer;
 
     public static string LogFilePath { get; private set; } = "";
@@ -15,7 +21,7 @@ public static class AppLogger
 
     public static void Initialize()
     {
-        lock (Gate)
+        lock (_lock)
         {
             if (_writer is not null)
             {
@@ -49,7 +55,7 @@ public static class AppLogger
             {
                 if (ConsoleLoggingEnabled)
                 {
-                    Console.Error.WriteLine($"Could not initialize file logging: {exception}");
+                    Error("Application", "Could not initialize file logging", exception);
                 }
             }
         }
@@ -65,41 +71,67 @@ public static class AppLogger
         Info("Application", $"Logging initialized{(LogFilePath.Length > 0 ? $" at {LogFilePath}" : "")}");
     }
 
-    public static void Info(string category, string message) => Write("INF", category, message, null);
+    public static void Info(string category, string message) => Write(LogLevel.Info, category, message, null);
 
     public static void Warning(string category, string message, Exception? exception = null) =>
-        Write("WRN", category, message, exception);
+        Write(LogLevel.Warning, category, message, exception);
 
     public static void Error(string category, string message, Exception? exception = null) =>
-        Write("ERR", category, message, exception);
+        Write(LogLevel.Error, category, message, exception);
 
     public static void Shutdown()
     {
         Info("Application", "Shutting down");
-        lock (Gate)
+        lock (_lock)
         {
             _writer?.Dispose();
             _writer = null;
         }
     }
 
-    private static void Write(string level, string category, string message, Exception? exception)
+    private static void Write(LogLevel level, string category, string message, Exception? exception)
     {
-        var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
-        var line = $"{timestamp} [{level}] [{category}] {message}";
+        var label = level switch
+        {
+            LogLevel.Info => "INF",
+            LogLevel.Warning => "WRN",
+            LogLevel.Error => "ERR",
+            _ => level.ToString(),
+        };
+        var timestamp = DateTimeOffset.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        var line = $"{timestamp} [{label}] [{category}] {message}";
         if (exception is not null)
         {
             line += Environment.NewLine + exception;
         }
 
-        lock (Gate)
+        lock (_lock)
         {
             try
             {
                 if (ConsoleLoggingEnabled)
                 {
-                    Console.Error.WriteLine(line);
+                    var output = level == LogLevel.Info ? Console.Out : Console.Error;
+                    var redirected = level == LogLevel.Info
+                        ? Console.IsOutputRedirected
+                        : Console.IsErrorRedirected;
+                    var color = level switch
+                    {
+                        LogLevel.Info => "\u001b[36m",
+                        LogLevel.Warning => "\u001b[33m",
+                        LogLevel.Error => "\u001b[31m",
+                        _ => "\u001b[0m",
+                    };
+                    output.WriteLine(redirected ? line : $"{color}{line}\u001b[0m");
                 }
+            }
+            catch
+            {
+                // A console failure must not prevent file logging.
+            }
+
+            try
+            {
                 _writer?.WriteLine(line);
             }
             catch
@@ -108,6 +140,7 @@ public static class AppLogger
             }
         }
     }
+
 
     private static void RotateIfNeeded(string path)
     {
@@ -118,15 +151,5 @@ public static class AppLogger
 
         var previousPath = path + ".1";
         File.Move(path, previousPath, overwrite: true);
-    }
-
-    private static bool ReadConsoleLoggingSwitch()
-    {
-        var value = Environment.GetEnvironmentVariable(CONSOLE_LOGGING_VARIABLE);
-        return value is not null &&
-               (value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
-                value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
-                value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
-                value.Equals("on", StringComparison.OrdinalIgnoreCase));
     }
 }
