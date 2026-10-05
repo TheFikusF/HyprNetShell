@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -12,8 +13,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     CompositeWindowConfiguration configuration,
     TabsService tabs,
     Action<IReadOnlyList<IMainDialogTab>> openWindow,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab
+    TextInputCoordinator inputs) : IMainDialogTab
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private int _selectedIndex;
@@ -24,12 +24,14 @@ internal sealed class CompositeWindowsConfigurationTab(
         "",
         "Window name",
         48);
+
     private readonly TextInputCoordinator.Input _hotkeyInput = inputs.Create(
         "Hotkey",
         "",
         "Example: SUPER + SPACE",
         80,
         transform: value => value.ToUpperInvariant());
+
     private List<string> _tabs = [];
     private string _message = "";
 
@@ -90,12 +92,9 @@ internal sealed class CompositeWindowsConfigurationTab(
                         "Choose its tabs and an optional Hyprland hotkey"),
                     inputs.Build(_nameInput),
                     inputs.Build(_hotkeyInput),
-                    new TextNode("Tabs", theme.Text, theme.Text),
+                    new TextNode("Tabs"),
                     BuildTabGrid(),
-                    new TextNode(
-                        _message.Length == 0 ? "Changes are applied after Save." : _message,
-                        theme.Text,
-                        _message.StartsWith("Saved", StringComparison.Ordinal) ? theme.Active : theme.Text.MutedColor),
+                    new TextNode(_message.Length == 0 ? "Changes are applied after Save." : _message, color: _message.StartsWith("Saved", StringComparison.Ordinal) ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor),
                     BuildActions(),
                 ],
             },
@@ -117,26 +116,26 @@ internal sealed class CompositeWindowsConfigurationTab(
     private BoxNode BuildWindowRow(CompositeWindowDefinition window, int index)
     {
         var selected = !_isNew && index == _selectedIndex;
-        var state = _buttonStates.GetState("window-" + window.Id, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _buttonStates.GetState("window-" + window.Id, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
             IsHovered = state.Hovered,
             OnClick = () => Select(index),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 12,
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 3,
             },
             Children =
             [
-                new TextNode(window.Name, theme.Text, theme.Text),
+                new TextNode(window.Name),
                 new TextNode(
                     window.Hotkey.Length == 0 ? "No hotkey" : window.Hotkey,
                     12,
-                    selected ? theme.Text : theme.Text.MutedColor),
+                    selected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
             ],
         };
     }
@@ -216,8 +215,8 @@ internal sealed class CompositeWindowsConfigurationTab(
     private BoxNode BuildMoveButton(string tabId, int offset, bool enabled, SvgAsset icon)
     {
         var state = _buttonStates
-            .GetState($"move-{tabId}-{offset}", theme.Panel)
-            .UpdateColor(theme.Panel);
+            .GetState($"move-{tabId}-{offset}", ThemeManager.Current.Panel)
+            .UpdateColor(ThemeManager.Current.Panel);
         if (!enabled)
         {
             state.Hovered.Value = false;
@@ -230,13 +229,13 @@ internal sealed class CompositeWindowsConfigurationTab(
             IsHovered = enabled ? state.Hovered : null,
             OnClick = enabled ? () => MoveTab(tabId, offset) : null,
             Opacity = enabled ? 1.0f : 0.35f,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 8,
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new ImageNode(icon, 16, 16, theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, ThemeManager.Current.Text)],
         };
     }
 
@@ -289,20 +288,20 @@ internal sealed class CompositeWindowsConfigurationTab(
         Action action,
         bool selected = false)
     {
-        var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode
         {
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = action,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 8,
             },
-            Children = [new ImageNode(icon, 16, 16, theme.Text), new TextNode(label, theme.Text, theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, ThemeManager.Current.Text), new TextNode(label)],
         };
     }
 

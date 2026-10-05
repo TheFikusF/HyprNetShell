@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -12,8 +13,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class ConfigurationTab(
     WallpaperModuleService wallpapers,
     HistoryStore history,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab
+    TextInputCoordinator inputs) : IMainDialogTab
 {
     private readonly Ref<float> _slideshowSwitchAnimation = new(wallpapers.SlideshowEnabled ? 1.0f : 0.0f);
     private readonly ModulesCommon.BoxState _decreaseState = new();
@@ -78,12 +78,12 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildSlideshowToggle()
     {
         var enabled = wallpapers.SlideshowEnabled;
-        return new (height: 64)
+        return new(height: 64)
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => wallpapers.SetSlideshowEnabled(!enabled),
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 Padding = new Insets(18, 0),
                 BorderRadius = 8,
@@ -91,12 +91,12 @@ internal sealed class ConfigurationTab(
             },
             Children =
             [
-                new TextNode("Wallpaper slideshow", 16, theme.Text),
+                new TextNode("Wallpaper slideshow", 16),
                 new SwitchNode(enabled, _slideshowSwitchAnimation)
                 {
-                    OffTrackColor = theme.Text.MutedColor,
-                    OnTrackColor = theme.Active,
-                    KnobColor = theme.Text,
+                    OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                    OnTrackColor = ThemeManager.Current.Active,
+                    KnobColor = ThemeManager.Current.Text,
                 },
             ],
         };
@@ -105,11 +105,11 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildDurationControl()
     {
         var duration = wallpapers.DurationMinutes;
-        return new (height: 78)
+        return new(height: 78)
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 Padding = new Insets(18, 0),
                 BorderRadius = 8,
@@ -123,8 +123,8 @@ internal sealed class ConfigurationTab(
                     Style = new Style { Spacing = 4 },
                     Children =
                     [
-                        new TextNode("Slideshow duration", 16, theme.Text),
-                        new TextNode("Time between wallpaper changes", theme.Text, theme.Text.MutedColor),
+                        new TextNode("Slideshow duration", 16),
+                        new TextNode("Time between wallpaper changes", color: ThemeManager.Current.Text.MutedColor),
                     ],
                 },
                 new BoxNode
@@ -138,7 +138,7 @@ internal sealed class ConfigurationTab(
                         {
                             HorizontalAlignment = ItemsAlignment.Center,
                             VerticalAlignment = ItemsAlignment.Center,
-                            Children = [new TextNode($"{duration} min", 16, theme.Text)],
+                            Children = [new TextNode($"{duration} min", 16)],
                         },
                         BuildDurationButton("+", 1, _increaseState),
                     ],
@@ -154,16 +154,16 @@ internal sealed class ConfigurationTab(
         Action<int> setValue,
         ModulesCommon.BoxState decreaseState,
         ModulesCommon.BoxState increaseState) => new(height: 78)
-    {
-        HorizontalAlignment = ItemsAlignment.Spread,
-        VerticalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
         {
-            Padding = new Insets(18, 0),
-            BorderRadius = 8,
-            BorderWidth = 0,
-        },
-        Children =
+            HorizontalAlignment = ItemsAlignment.Spread,
+            VerticalAlignment = ItemsAlignment.Center,
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
+            {
+                Padding = new Insets(18, 0),
+                BorderRadius = 8,
+                BorderWidth = 0,
+            },
+            Children =
         [
             new BoxNode
             {
@@ -171,8 +171,8 @@ internal sealed class ConfigurationTab(
                 Style = new Style { Spacing = 4 },
                 Children =
                 [
-                    new TextNode(title, 16, theme.Text),
-                    new TextNode(description, theme.Text, theme.Text.MutedColor),
+                    new TextNode(title, 16),
+                    new TextNode(description, color: ThemeManager.Current.Text.MutedColor),
                 ],
             },
             new BoxNode
@@ -186,49 +186,49 @@ internal sealed class ConfigurationTab(
                     {
                         HorizontalAlignment = ItemsAlignment.Center,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Children = [new TextNode(value.ToString(), 16, theme.Text)],
+                        Children = [new TextNode(value.ToString(), 16)],
                     },
                     BuildValueButton("+", () => setValue(value + HistoryStore.LimitStep), increaseState),
                 ],
             },
         ],
-    };
+        };
 
     private BoxNode BuildValueButton(string label, Action onClick, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(theme.Text.MutedColor);
+        var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
         return new BoxNode(38, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = onClick,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new TextNode(label, 20, theme.Text)],
+            Children = [new TextNode(label, 20)],
         };
     }
 
     private BoxNode BuildDurationButton(string label, int delta, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(theme.Text.MutedColor);
-        return new (38, 34)
+        var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
+        return new(38, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => wallpapers.SetDurationMinutes(wallpapers.DurationMinutes + delta),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new TextNode(label, 20, theme.Text)],
+            Children = [new TextNode(label, 20)],
         };
     }
 }

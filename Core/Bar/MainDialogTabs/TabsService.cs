@@ -25,25 +25,26 @@ internal sealed class TabsService : IDisposable
         WeatherService weather,
         CalendarService calendar,
         DictionaryService dictionary,
-        Action closeDialog,
-        Theme theme)
+        Action closeDialog)
     {
-        Inputs = new TextInputCoordinator(clipboardHistory, theme);
+        Inputs = new TextInputCoordinator(clipboardHistory);
         _tabs =
         [
-            new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, clipboardHistory, Inputs, theme),
-            new ApplicationLauncherTab(hyprctl, closeDialog, Inputs, theme),
-            new CalculatorTab(clipboardHistory, Inputs, theme),
-            new DictionaryTab(dictionary, clipboardHistory, Inputs, theme),
-            new WorldClockTab(Inputs, theme),
-            new CalendarTab(calendar, theme),
-            new TetrisTab(theme),
-            new ClipboardManagerTab(clipboardHistory, kdeConnect, closeDialog, Inputs, theme),
-            new KdeConnectTab(kdeConnect, theme),
-            new WallpapersTab(wallpapers, closeDialog, Inputs, theme),
-            new WifiTab(network, Inputs, theme),
-            new BluetoothTab(bluetooth, theme),
-            new WeatherTab(weather, theme),
+            new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, clipboardHistory, Inputs),
+            new ApplicationLauncherTab(hyprctl, closeDialog, Inputs),
+            new CalculatorTab(clipboardHistory, Inputs),
+            new DictionaryTab(dictionary, clipboardHistory, Inputs),
+            new WorldClockTab(Inputs),
+            new CalendarTab(calendar),
+            new TetrisTab(),
+            new SolitaireTab(),
+            new MinesweeperTab(),
+            new ClipboardManagerTab(clipboardHistory, kdeConnect, closeDialog, Inputs),
+            new KdeConnectTab(kdeConnect),
+            new WallpapersTab(wallpapers, closeDialog, Inputs),
+            new WifiTab(network, Inputs),
+            new BluetoothTab(bluetooth),
+            new WeatherTab(weather),
         ];
         _tabsById = _tabs.ToDictionary(tab => tab.Id, StringComparer.Ordinal);
     }
@@ -59,12 +60,9 @@ internal sealed class TabsService : IDisposable
 
     public void Dispose()
     {
-        foreach (var tab in _tabs)
+        foreach (var tab in _tabs.Where(x => x is IDisposable).Cast<IDisposable>())
         {
-            if (tab is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
+            tab.Dispose();
         }
     }
 }

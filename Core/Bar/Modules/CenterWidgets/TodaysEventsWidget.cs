@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.MainDialogTabs;
@@ -9,7 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
-internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
+internal sealed class TodaysEventsWidget(CalendarService calendar)
 {
     public const int WIDTH = 540;
     private const int VisibleEventCount = 5;
@@ -28,14 +29,14 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 Spacing = 8,
             },
             Children =
             [
-                ModulesCommon.CentralWidgetHeader(Icons.Calendar, "Today's events", openCalendar, _titleState, theme),
+                ModulesCommon.CentralWidgetHeader(Icons.Calendar, "Today's events", openCalendar, _titleState),
                 ..BuildEvents(events),
             ],
         };
@@ -49,18 +50,17 @@ internal sealed class TodaysEventsWidget(CalendarService calendar, Theme theme)
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Children = [new TextNode("Nothing scheduled for today", theme.Text.HeaderSize, theme.Text.MutedColor)],
+                Children = [new TextNode("Nothing scheduled for today", ThemeManager.Current.Text.HeaderSize, ThemeManager.Current.Text.MutedColor)],
             };
             yield break;
         }
 
         yield return new BoxNode(Style.Empty, ItemsAlignment.End)
         {
-            new TextNode($"{events.Count} event{(events.Count == 1 ? "" : "s")}", theme.Text, theme.Text.MutedColor),
+            new TextNode($"{events.Count} event{(events.Count == 1 ? "" : "s")}", color: ThemeManager.Current.Text.MutedColor),
         };
 
-        yield return CalendarTab.BuildEventsList(events, _firstEventIndex, VisibleEventCount,
-            theme, _eventStates, delta => Scroll(delta, events.Count));
+        yield return CalendarTab.BuildEventsList(events, _firstEventIndex, VisibleEventCount, _eventStates, delta => Scroll(delta, events.Count));
     }
 
     private void Scroll(float delta, int eventCount) => BoundedListUi.MoveViewport(

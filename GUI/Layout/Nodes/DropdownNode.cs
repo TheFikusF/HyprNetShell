@@ -28,12 +28,12 @@ public sealed class DropdownNode : Node
     public override int Height => TriggerHeight;
 
     public int SelectedIndex { get; set; }
-    public float FontSize { get; init; } = 14.0f;
+    public float FontSize { get; init; } = ThemeManager.Current.Text.Size;
     public Color BackgroundColor { get; init; } = Color.FromRgb(31, 35, 44, 0.9f);
     public Color HoverColor { get; init; } = Color.FromRgb(65, 69, 78, 0.95f);
     public Color SelectedColor { get; init; } = Color.Orange;
-    public Color BorderColor { get; init; } = Color.White;
-    public Color TextColor { get; init; } = Color.White;
+    public Color BorderColor { get; init; } = ThemeManager.Current.Border.Color;
+    public Color TextColor { get; init; } = ThemeManager.Current.Text.Color;
     public Color PopupBackgroundColor { get; init; } = Color.FromRgb(0, 0, 0, 0.85f);
     public float BorderWidth { get; init; } = 1.0f;
     public float BorderRadius { get; init; } = 8.0f;

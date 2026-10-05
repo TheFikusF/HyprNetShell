@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Features.System;
 
@@ -7,7 +8,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Common;
 
-internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard, Theme theme)
+internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard)
 {
     internal sealed class Input(
         string label,
@@ -94,8 +95,8 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard, Th
         var displayedValue = input.Value.Length == 0
             ? input.Placeholder
             : active ? input.Value + caret : input.Value;
-        var inputColor = active || input.Value.Length > 0 ? theme.Text : theme.Text.MutedColor;
-        var background = active && !input.AlwaysActive ? theme.Active : theme.Panel;
+        var inputColor = active || input.Value.Length > 0 ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor;
+        var background = active && !input.AlwaysActive ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         if (hasLabel)
         {
             return new BoxNode
@@ -104,17 +105,17 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard, Th
                 HorizontalAlignment = ItemsAlignment.Stretch,
                 VerticalAlignment = ItemsAlignment.Start,
                 OnClick = () => _activeInput = input,
-                Style = ModulesCommon.ModuleStyle(theme, background) with
+                Style = ModulesCommon.ModuleStyle(background) with
                 {
                     Padding = 12,
                     BorderRadius = 8,
-                    BorderWidth = active && !input.AlwaysActive ? theme.Border.Width : 0,
+                    BorderWidth = active && !input.AlwaysActive ? ThemeManager.Current.Border.Width : 0,
                     Spacing = 5,
                 },
                 Children =
                 [
-                    new TextNode(input.Label, theme.Text.SmallSize, active ? theme.Text : theme.Text.MutedColor),
-                    new TextNode(displayedValue, input.TextSize ?? theme.Text.Size, inputColor),
+                    new TextNode(input.Label, ThemeManager.Current.Text.SmallSize, active ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
+                    new TextNode(displayedValue, input.TextSize ?? ThemeManager.Current.Text.Size, inputColor),
                 ],
             };
         }
@@ -124,11 +125,11 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard, Th
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => _activeInput = input,
-            Style = ModulesCommon.ModuleStyle(theme, background) with
+            Style = ModulesCommon.ModuleStyle(background) with
             {
-                Padding = new Insets(theme.Text.Size, 8),
+                Padding = new Insets(ThemeManager.Current.Text.Size, 8),
                 BorderRadius = 8,
-                BorderWidth = active && !input.AlwaysActive ? theme.Border.Width : 0,
+                BorderWidth = active && !input.AlwaysActive ? ThemeManager.Current.Border.Width : 0,
             },
             Children = [new TextNode(displayedValue, input.TextSize ?? 16, inputColor)],
         };

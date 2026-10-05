@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -11,12 +12,10 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class TetrisTab : IMainDialogTab
 {
-    private readonly Theme _theme;
     private readonly DefaultTetris _game = new();
 
-    internal TetrisTab(Theme theme)
+    internal TetrisTab()
     {
-        _theme = theme;
         _game.Restart();
     }
 
@@ -112,7 +111,7 @@ internal sealed class TetrisTab : IMainDialogTab
                     [
                         new BoxNode()
                         {
-                            Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
+                            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
                             {
                                 BorderRadius = 8,
                                 Padding = 8,
@@ -127,7 +126,7 @@ internal sealed class TetrisTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildSidebar() => new (150 + 150 + 8)
+    private BoxNode BuildSidebar() => new(150 + 150 + 8)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -145,17 +144,17 @@ internal sealed class TetrisTab : IMainDialogTab
                     BuildPreview("NEXT", _game.NextPiece),
                 ],
             },
-            new TextNode("Controls", _theme.Text.HeaderSize, _theme.Text),
+            new TextNode("Controls", ThemeManager.Current.Text.HeaderSize),
             new TextNode("A/D or horizontal arrows move\nS or down arrow soft drop\nW or up arrow rotate   Q rotate CCW\nSpace/Enter hard drop   Shift hold\nP pause   R restart", 14,
-                _theme.Text.MutedColor, 320, TextWrapping.Wrap),
+                ThemeManager.Current.Text.MutedColor, 320, TextWrapping.Wrap),
         ],
     };
 
-    private BoxNode BuildStats() => new ()
+    private BoxNode BuildStats() => new()
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
         {
             BorderRadius = 8,
             Padding = 14,
@@ -164,17 +163,17 @@ internal sealed class TetrisTab : IMainDialogTab
         Children =
         [
             MainDialogTabUi.BuildSectionHeader($"Score  {_game.Score:N0}", $"Level {_game.Level}"),
-            new TextNode($"Lines: {_game.Lines}", _theme.Text, _theme.Text.MutedColor),
-            new TextNode($"Combo: {_game.Combo}", _theme.Text, _theme.Text.MutedColor),
-            new TextNode($"Time: {_game.CurrentTime:0.0}s", _theme.Text, _theme.Text.MutedColor),
+            new TextNode($"Lines: {_game.Lines}", color: ThemeManager.Current.Text.MutedColor),
+            new TextNode($"Combo: {_game.Combo}", color: ThemeManager.Current.Text.MutedColor),
+            new TextNode($"Time: {_game.CurrentTime:0.0}s", color: ThemeManager.Current.Text.MutedColor),
         ],
     };
 
-    private BoxNode BuildPreview(string title, TetraminoType? piece) => new (150)
+    private BoxNode BuildPreview(string title, TetraminoType? piece) => new(150)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
         {
             BorderRadius = 8,
             Padding = 8,
@@ -182,7 +181,7 @@ internal sealed class TetrisTab : IMainDialogTab
         },
         Children =
         [
-            new TextNode(title, _theme.Text, _theme.Text.MutedColor),
+            new TextNode(title, color: ThemeManager.Current.Text.MutedColor),
             new PiecePreviewNode(piece),
         ],
     };
@@ -283,13 +282,13 @@ internal sealed class TetrisTab : IMainDialogTab
 
     private static Color PieceColor(TetraminoType type) => type switch
     {
-        TetraminoType.I => Color.FromRgb(  1, 237, 250),
-        TetraminoType.J => Color.FromRgb( 24, 130, 246),
-        TetraminoType.L => Color.FromRgb(255, 120,  12),
-        TetraminoType.O => Color.FromRgb(250, 182,  21),
-        TetraminoType.S => Color.FromRgb( 42, 218,  34),
-        TetraminoType.T => Color.FromRgb(178,  10, 156),
-        TetraminoType.Z => Color.FromRgb(234,  20,  28),
+        TetraminoType.I => Color.FromRgb(1, 237, 250),
+        TetraminoType.J => Color.FromRgb(24, 130, 246),
+        TetraminoType.L => Color.FromRgb(255, 120, 12),
+        TetraminoType.O => Color.FromRgb(250, 182, 21),
+        TetraminoType.S => Color.FromRgb(42, 218, 34),
+        TetraminoType.T => Color.FromRgb(178, 10, 156),
+        TetraminoType.Z => Color.FromRgb(234, 20, 28),
         _ => Color.White,
     };
 }

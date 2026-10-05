@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -25,7 +26,6 @@ internal static class NotificationCard
     public static Node Draw(
         NotificationSnapshot notification,
         NotificationService service,
-        Theme theme,
         State state)
     {
         var svgIcon = Icons.ByName.GetValueOrDefault(notification.IconName);
@@ -37,7 +37,7 @@ internal static class NotificationCard
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.PopupStyle(theme) with
+            Style = ModulesCommon.PopupStyle() with
             {
                 BorderRadius = 12,
                 Padding = 8,
@@ -53,11 +53,11 @@ internal static class NotificationCard
                     Style = new Style { Spacing = 12 },
                     Children =
                     [
-                        BuildContent(notification, svgIcon, iconPath, service, theme, state),
-                        BuildCloseButton(notification.Id, service, theme, state),
+                        BuildContent(notification, svgIcon, iconPath, service, state),
+                        BuildCloseButton(notification.Id, service, state),
                     ],
                 },
-                ..BuildActions(notification, service, theme, state),
+                ..BuildActions(notification, service, state),
             ],
         };
     }
@@ -66,28 +66,21 @@ internal static class NotificationCard
         NotificationSnapshot notification,
         SvgAsset? svgIcon,
         string? iconPath,
-        NotificationService service,
-        Theme theme,
-        State state)
+        NotificationService service, State state)
     {
         if (!state.ContentInitialized)
         {
-            state.Content.Background = theme.Panel with { A = 0.2f };
+            state.Content.Background = ThemeManager.Current.Panel with { A = 0.2f };
             state.ContentInitialized = true;
         }
-        state.Content.UpdateColor(theme.Panel with { A = 0.2f });
+        state.Content.UpdateColor(ThemeManager.Current.Panel with { A = 0.2f });
 
         TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
-            ? [new TextNode(notification.Title, theme.Text, theme.Text, wrapping: TextWrapping.Wrap, maxLines: 3)]
+            ? [new TextNode(notification.Title, wrapping: TextWrapping.Wrap, maxLines: 3)]
             :
             [
-                new TextNode(notification.Title, 16, theme.Text, wrapping: TextWrapping.Ellipsis),
-                new TextNode(
-                    notification.Body,
-                    theme.Text,
-                    theme.Text,
-                    wrapping: TextWrapping.Wrap,
-                    maxLines: 3),
+                new TextNode(notification.Title, 16, wrapping: TextWrapping.Ellipsis),
+                new TextNode(notification.Body, wrapping: TextWrapping.Wrap, maxLines: 3),
             ];
         return new BoxNode
         {
@@ -105,7 +98,7 @@ internal static class NotificationCard
             },
             Children =
             [
-                ..BuildIcon(notification, svgIcon, iconPath, theme),
+                ..BuildIcon(notification, svgIcon, iconPath),
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
@@ -120,7 +113,7 @@ internal static class NotificationCard
                                 new TextNode(
                                     notification.AppName,
                                     11,
-                                    theme.Text.MutedColor,
+                                    ThemeManager.Current.Text.MutedColor,
                                     wrapping: TextWrapping.Ellipsis),
                             ]
                             : []),
@@ -132,16 +125,14 @@ internal static class NotificationCard
 
     private static BoxNode BuildCloseButton(
         uint id,
-        NotificationService service,
-        Theme theme,
-        State state)
+        NotificationService service, State state)
     {
         if (!state.CloseButtonInitialized)
         {
-            state.CloseButton.Background = theme.Panel;
+            state.CloseButton.Background = ThemeManager.Current.Panel;
             state.CloseButtonInitialized = true;
         }
-        state.CloseButton.UpdateColor(theme.Panel);
+        state.CloseButton.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode(22, 22)
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -154,15 +145,13 @@ internal static class NotificationCard
                 BorderRadius = 6,
                 Padding = 4,
             },
-            Children = [new ImageNode(Icons.X, 14, 14, theme.Text)],
+            Children = [new ImageNode(Icons.X, 14, 14, ThemeManager.Current.Text)],
         };
     }
 
     private static IEnumerable<Node> BuildActions(
         NotificationSnapshot notification,
-        NotificationService service,
-        Theme theme,
-        State state)
+        NotificationService service, State state)
     {
         var actions = notification.Actions
             .Where(action => action.Key != "default")
@@ -179,7 +168,7 @@ internal static class NotificationCard
             Style = new Style { Spacing = 6 },
             Children =
             [
-                ..actions.Select(action => BuildAction(notification.Id, action, service, theme, state)),
+                ..actions.Select(action => BuildAction(notification.Id, action, service, state)),
             ],
         };
     }
@@ -187,13 +176,11 @@ internal static class NotificationCard
     private static BoxNode BuildAction(
         uint notificationId,
         NotificationActionSnapshot action,
-        NotificationService service,
-        Theme theme,
-        State state)
+        NotificationService service, State state)
     {
         var buttonState = state.ActionButtons
-            .GetState(action.Key, theme.Active)
-            .UpdateColor(theme.Active);
+            .GetState(action.Key, ThemeManager.Current.Active)
+            .UpdateColor(ThemeManager.Current.Active);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -207,11 +194,7 @@ internal static class NotificationCard
             },
             Children =
             [
-                new TextNode(
-                    action.Label,
-                    12,
-                    theme.Text,
-                    wrapping: TextWrapping.Ellipsis),
+                new TextNode(action.Label, 12, wrapping: TextWrapping.Ellipsis),
             ],
         };
     }
@@ -219,8 +202,7 @@ internal static class NotificationCard
     private static IEnumerable<Node> BuildIcon(
         NotificationSnapshot notification,
         SvgAsset? svgIcon,
-        string? iconPath,
-        Theme theme)
+        string? iconPath)
     {
         var width = notification.ShowImageAsPreview ? 128 : 32;
         var height = notification.ShowImageAsPreview ? 80 : 32;
@@ -234,7 +216,7 @@ internal static class NotificationCard
         }
         else if (svgIcon is not null)
         {
-            yield return new ImageNode(svgIcon, 32, 32, theme.Text);
+            yield return new ImageNode(svgIcon, 32, 32, ThemeManager.Current.Text);
         }
         else if (!string.IsNullOrWhiteSpace(iconPath))
         {

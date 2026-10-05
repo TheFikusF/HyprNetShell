@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -14,18 +15,18 @@ internal sealed class WorldClockTab : IMainDialogTab
     private readonly WorldClockService _clocks;
     private readonly TextInputCoordinator _inputs;
     private readonly TextInputCoordinator.Input _queryInput;
-    private readonly Theme _theme;
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
+
     private IReadOnlyList<WorldClock> _filteredClocks = [];
     private int _firstIndex;
     private int _selectedIndex;
 
-    public WorldClockTab(TextInputCoordinator inputs, Theme theme)
-        : this(WorldClockService.Shared, inputs, theme)
+    public WorldClockTab(TextInputCoordinator inputs)
+        : this(WorldClockService.Shared, inputs)
     {
     }
 
-    public WorldClockTab(WorldClockService clocks, TextInputCoordinator inputs, Theme theme)
+    public WorldClockTab(WorldClockService clocks, TextInputCoordinator inputs)
     {
         _clocks = clocks;
         _inputs = inputs;
@@ -35,7 +36,7 @@ internal sealed class WorldClockTab : IMainDialogTab
             "Search cities or time zones...",
             4096,
             alwaysActive: true);
-        _theme = theme;
+
         ApplyFilter();
     }
 
@@ -104,8 +105,7 @@ internal sealed class WorldClockTab : IMainDialogTab
                     },
                     _firstIndex,
                     _filteredClocks.Count,
-                    BoundedListUi.DefaultVisibleItemCount,
-                    _theme),
+                    BoundedListUi.DefaultVisibleItemCount),
             ],
         };
     }
@@ -115,8 +115,8 @@ internal sealed class WorldClockTab : IMainDialogTab
         var selected = index == _selectedIndex;
         var enabled = _clocks.IsSelected(clock.TimeZoneId);
         var state = _rowStates
-            .GetState(clock.TimeZoneId, _theme.Panel)
-            .UpdateColor(selected ? _theme.Active : _theme.Panel);
+            .GetState(clock.TimeZoneId, ThemeManager.Current.Panel)
+            .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var time = WorldClockService.GetTime(clock, DateTime.UtcNow);
 
         return new BoxNode(height: 56)
@@ -129,11 +129,11 @@ internal sealed class WorldClockTab : IMainDialogTab
                 _clocks.Toggle(clock.TimeZoneId);
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(14, 8),
                 BorderRadius = 8,
-                BorderWidth = selected ? _theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
             },
             Children =
             [
@@ -141,15 +141,15 @@ internal sealed class WorldClockTab : IMainDialogTab
                 {
                     new CheckboxNode(enabled, Icons.Check)
                     {
-                        SelectedColor = selected ? _theme.Text : _theme.Active,
-                        UnselectedColor = selected ? _theme.Text : _theme.Text.MutedColor,
-                        BackgroundColor = selected ? _theme.Active : _theme.Panel,
-                        CheckColor = selected ? _theme.Active : _theme.Text,
+                        SelectedColor = selected ? ThemeManager.Current.Text : ThemeManager.Current.Active,
+                        UnselectedColor = selected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor,
+                        BackgroundColor = selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel,
+                        CheckColor = selected ? ThemeManager.Current.Active : ThemeManager.Current.Text,
                     },
-                    new TextNode(clock.DisplayName, _theme.Text, _theme.Text),
-                    new TextNode(clock.TimeZoneId, _theme.Text, selected ? _theme.Text : _theme.Text.MutedColor),
+                    new TextNode(clock.DisplayName),
+                    new TextNode(clock.TimeZoneId, color: selected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
                 },
-                new TextNode(time.ToString("HH:mm"), 18, _theme.Text),
+                new TextNode(time.ToString("HH:mm"), 18),
             ],
         };
     }

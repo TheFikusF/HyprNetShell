@@ -137,10 +137,9 @@ public sealed class StatusBarServices : IDisposable
             Weather,
             Calendar,
             Dictionary,
-            Dialogs.Close,
-            Theme.Default);
+            Dialogs.Close);
         CompositeWindowConfiguration = new CompositeWindowConfiguration(Tabs.Tabs);
-        Dialogs.Register(new CompositeWindow(Tabs.Inputs, Theme.Default));
+        Dialogs.Register(new CompositeWindow(Tabs.Inputs));
         CompositeWindows = new CompositeWindowService(
             CompositeWindowConfiguration,
             Tabs,
@@ -151,8 +150,7 @@ public sealed class StatusBarServices : IDisposable
             this,
             CompositeWindowConfiguration,
             Tabs,
-            tabs => Dialogs.Open<CompositeWindow>(tabs),
-            Theme.Default));
+            tabs => Dialogs.Open<CompositeWindow>(tabs)));
 
         OnlineAccounts.AuthorizationCallbackReceived += HandleAuthorizationCallbackReceived;
         OnlineAccounts.EnsureInitialized();

@@ -462,7 +462,8 @@ internal sealed class CalendarService : IBarDataService, IDisposable
             var error = exception is OperationCanceledException
                 ? $"Request timed out after {RequestTimeout.TotalSeconds:0} seconds."
                 : exception.Message;
-            AppLogger.Warning("Calendar", "Could not list Google calendars", exception);
+            AppLogger.Warning("Calendar", $"Could not list Google calendars: {error}",
+                            exception is OperationCanceledException ? null : exception);
             lock (_stateLock)
             {
                 _googleError = error;
@@ -498,7 +499,8 @@ internal sealed class CalendarService : IBarDataService, IDisposable
             var error = exception is OperationCanceledException
                 ? $"Request timed out after {RequestTimeout.TotalSeconds:0} seconds."
                 : exception.Message;
-            AppLogger.Warning("Calendar", $"Could not refresh calendar source at {GetLogLabel(sourceUrl)}", exception);
+            AppLogger.Warning("Calendar", $"Could not refresh calendar source at {GetLogLabel(sourceUrl)}: {error}",
+                            exception is OperationCanceledException ? null : exception);
             return new SourceRefreshResult(sourceUrl, null, error, DateTime.Now);
         }
     }
@@ -534,7 +536,8 @@ internal sealed class CalendarService : IBarDataService, IDisposable
             var error = exception is OperationCanceledException
                 ? $"Request timed out after {RequestTimeout.TotalSeconds:0} seconds."
                 : exception.Message;
-            AppLogger.Warning("Calendar", $"Could not refresh Google calendar '{calendar.Name}'", exception);
+            AppLogger.Warning("Calendar", $"Could not refresh Google calendar '{calendar.Name}': {error}",
+                            exception is OperationCanceledException ? null : exception);
             return new SourceRefreshResult(sourceKey, null, error, DateTime.Now);
         }
     }

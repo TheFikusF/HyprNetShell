@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -11,8 +12,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class DisplayControlsModule(DisplayControlsModuleService service, Theme theme,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class DisplayControlsModule(DisplayControlsModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly NodeWithPopup _node = new(popupCoordinator, "display_controls_module")
     {
@@ -42,17 +42,17 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             ? EffectiveValue("display", display.Percentage)
             : (int?)null;
 
-        var color = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Orange, Color.White, 0.25f));
+        var color = ModulesCommon.ToBackground(Color.Lerp(Color.Orange, Color.White, 0.25f));
         _iconRotation = PrimitivesMath.LerpSmooth(_iconRotation, _node.IsHovered ? MathF.PI * 4 : 0, 18.0f, Renderer.DeltaTime);
         return new BoxNode(40)
         {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, color, false, false) with
+            Style = ModulesCommon.ModuleStyle(color, false, false) with
             {
                 Spacing = 8,
-                BorderWidth = new Insets(theme.Border.Width, 0, theme.Border.Width, 1),
+                BorderWidth = new Insets(ThemeManager.Current.Border.Width, 0, ThemeManager.Current.Border.Width, 1),
                 ShadowColor = null
             },
             Children = [new ImageNode(Icons.Brightness[brightness switch
@@ -60,7 +60,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                 > 66 => 0,
                 > 33 => 1,
                 _ => 2
-            }], 18, 18, theme.Text)
+            }], 18, 18, ThemeManager.Current.Text)
             {
                 RotationRadians = _iconRotation
             }]
@@ -72,10 +72,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = ModulesCommon.PopupStyle(),
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Brightness[0], "Display controls"),
+            ModulesCommon.BuildTextWithIcon(Icons.Brightness[0], "Display controls"),
             BuildBrightnessSchedule(controls),
             BuildBacklightControl("keyboard", "Keyboard brightness", Icons.Keyboard, controls.Keyboard),
             BuildTemperatureSchedule(controls),
@@ -108,7 +108,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -124,10 +124,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                     Style = Style.Spacer,
                     Children =
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.Brightness[0], "Screen brightness"),
+                        ModulesCommon.BuildTextWithIcon(Icons.Brightness[0], "Screen brightness"),
                         new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                         {
-                            new TextNode($"{value}%", theme.Text, theme.Text),
+                            new TextNode($"{value}%"),
                             BuildAutomaticToggle(
                                 enabled,
                                 _automaticBrightnessSwitchAnimation,
@@ -151,15 +151,15 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             point => point.Percentage,
             hour => BrightnessCurveMath.Evaluate(points, hour),
             value => $"{value}%",
-            theme.Text.MutedColor,
+            ThemeManager.Current.Text.MutedColor,
             Color.Orange,
-            theme.Text,
+            ThemeManager.Current.Text,
             service.SetBrightnessCurvePoint,
             _brightnessCurveDragState);
     }
 
     private SliderNode BuildManualBrightnessSlider(BacklightSnapshot display, int value) =>
-        new(340, 14, value / 100.0f, theme.Text.MutedColor, Color.Orange, theme.Text,
+        new(340, 14, value / 100.0f, ThemeManager.Current.Text.MutedColor, Color.Orange, ThemeManager.Current.Text,
             normalized => SetValue("display", QuantizePercentage(display, normalized),
                 percentage => service.SetBacklightAsync(display, percentage)),
             GetSliderDragging("display"));
@@ -176,7 +176,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -192,10 +192,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                     Style = Style.Spacer,
                     Children =
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.Temperature, "Screen temperature"),
+                        ModulesCommon.BuildTextWithIcon(Icons.Temperature, "Screen temperature"),
                         new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                         {
-                            new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K", theme.Text, theme.Text),
+                            new TextNode($"{EffectiveValue("temperature", controls.TemperatureKelvin)}K"),
                             BuildAutomaticTemperatureToggle(automaticTemperatureEnabled),
                         }
                     ],
@@ -218,9 +218,9 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             point => point.TemperatureKelvin,
             hour => TemperatureCurveMath.Evaluate(points, hour),
             value => $"{value / 1000.0f:0.#}k",
-            theme.Text.MutedColor,
+            ThemeManager.Current.Text.MutedColor,
             Color.Orange,
-            theme.Text,
+            ThemeManager.Current.Text,
             service.SetCurvePoint,
             _temperatureCurveDragState);
     }
@@ -240,9 +240,9 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         [
             new SwitchNode(enabled, animation)
             {
-                OffTrackColor = theme.Text.MutedColor,
-                OnTrackColor = theme.Active,
-                KnobColor = theme.Text,
+                OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                OnTrackColor = ThemeManager.Current.Active,
+                KnobColor = ThemeManager.Current.Text,
             },
         ],
     };
@@ -253,7 +253,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         return new SliderNode(340, 14,
             (value - TemperatureCurveMath.MINIMUM_TEMPERATURE) /
             (float)(TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE),
-            theme.Text.MutedColor, Color.Orange, theme.Text,
+            ThemeManager.Current.Text.MutedColor, Color.Orange, ThemeManager.Current.Text,
             normalized => SetValue("temperature", TemperatureCurveMath.MINIMUM_TEMPERATURE + (int)MathF.Round(normalized *
                 (TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE)),
                 service.SetTemperatureAsync),
@@ -265,7 +265,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -280,22 +280,22 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                     VerticalAlignment = ItemsAlignment.Center,
                     Children =
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, icon, label),
-                        new TextNode(valueText, theme.Text, theme.Text),
+                        ModulesCommon.BuildTextWithIcon(icon, label),
+                        new TextNode(valueText),
                     ],
                 },
-                new SliderNode(340, 14, normalizedValue, theme.Text.MutedColor, Color.Orange,
-                    theme.Text, onValueChanged, GetSliderDragging(key)),
+                new SliderNode(340, 14, normalizedValue, ThemeManager.Current.Text.MutedColor, Color.Orange,
+                    ThemeManager.Current.Text, onValueChanged, GetSliderDragging(key)),
             ],
         };
 
-    private BoxNode BuildUnavailableRow(string text) => new(ModulesCommon.ModuleStyle(theme, theme.Panel) with
+    private BoxNode BuildUnavailableRow(string text) => new(ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
     {
         BorderRadius = 8,
         BorderWidth = 0,
     })
     {
-        new TextNode(text, theme.Text, theme.Text.MutedColor)
+        new TextNode(text, color: ThemeManager.Current.Text.MutedColor)
     };
 
     private int EffectiveValue(string key, int snapshotValue)

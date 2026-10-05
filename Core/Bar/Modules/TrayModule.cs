@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Models;
@@ -9,9 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class TrayModule(
-    SniTrayService service,
-    Theme theme,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+    SniTrayService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Dictionary<string, NodeWithPopup> _nodes = [];
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
@@ -47,7 +46,7 @@ internal sealed class TrayModule(
         }
 
         var icon = string.IsNullOrWhiteSpace(item.IconPath)
-            ? ModulesCommon.BuildBadge(ModulesCommon.AppBadge(item.Title), theme.Panel, theme)
+            ? ModulesCommon.BuildBadge(ModulesCommon.AppBadge(item.Title), ThemeManager.Current.Panel)
             : new ImageNode(item.IconPath, 18, 18);
 
         return node.Draw([
@@ -56,7 +55,7 @@ internal sealed class TrayModule(
                 Direction = Direction.Horizontal,
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with
+                Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left, right) with
                 {
                     Padding = new Insets(6, right ? 8 : 4, 6, left ? 8 : 4),
                     ShadowColor = null,
@@ -73,10 +72,10 @@ internal sealed class TrayModule(
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.PopupStyle(theme),
+            Style = ModulesCommon.PopupStyle(),
             Children = rows is { Count: > 0 }
                 ? rows.Select(row => BuildRow(item, row)).ToArray()
-                : [new TextNode(item.Title, 14.0f, theme.Text.MutedColor)],
+                : [new TextNode(item.Title, color: ThemeManager.Current.Text.MutedColor)],
         };
     }
 
@@ -84,11 +83,11 @@ internal sealed class TrayModule(
     {
         if (row.Kind == PopupRowKind.Separator)
         {
-            return ModulesCommon.BuildDivider(theme.Border, height: 12);
+            return ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12);
         }
 
-        var state = _rowStates.GetState(item.Id + ":" + (row.ActionId?.ToString() ?? row.Label), theme.Panel);
-        var target = state.Hovered && row.Enabled ? Color.Lighten(theme.Panel, 0.12f) : theme.Panel;
+        var state = _rowStates.GetState(item.Id + ":" + (row.ActionId?.ToString() ?? row.Label), ThemeManager.Current.Panel);
+        var target = state.Hovered && row.Enabled ? Color.Lighten(ThemeManager.Current.Panel, 0.12f) : ThemeManager.Current.Panel;
         state.Background = Color.LerpSmooth(state.Background, target, 18, Renderer.DeltaTime);
 
         return new BoxNode(height: 30)
@@ -105,7 +104,7 @@ internal sealed class TrayModule(
                 BorderRadius = 6,
                 Padding = new Insets(8, 4),
             },
-            Children = [new TextNode(row.Label, 14.0f, row.Enabled ? theme.Text : theme.Text.MutedColor)],
+            Children = [new TextNode(row.Label, color: row.Enabled ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor)],
         };
     }
 }

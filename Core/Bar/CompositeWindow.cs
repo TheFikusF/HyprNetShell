@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
@@ -46,16 +47,15 @@ internal sealed class CompositeWindow : IDialogWindow
 
     private Tab[] _tabs = [];
     private readonly TextInputCoordinator _textInputs;
-    private readonly Theme _theme;
+
     private readonly IReadOnlyDictionary<DialogKey, Action> _actions;
 
     private int _activeTabIndex;
     private IMainDialogTab ActiveTab => _tabs[_activeTabIndex];
 
-    internal CompositeWindow(TextInputCoordinator textInputs, Theme theme)
+    internal CompositeWindow(TextInputCoordinator textInputs)
     {
         _textInputs = textInputs;
-        _theme = theme;
 
         _actions = new Dictionary<DialogKey, Action>
         {
@@ -70,7 +70,7 @@ internal sealed class CompositeWindow : IDialogWindow
     internal void SetTabs(IReadOnlyList<IMainDialogTab> tabs)
     {
         ArgumentOutOfRangeException.ThrowIfZero(tabs.Count);
-        _tabs = [..tabs.Select(tab => new Tab(tab))];
+        _tabs = [.. tabs.Select(tab => new Tab(tab))];
     }
 
     public void OnOpened()
@@ -140,7 +140,7 @@ internal sealed class CompositeWindow : IDialogWindow
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 24, Spacing = 16 },
+        Style = ModulesCommon.PopupStyle() with { Padding = 24, Spacing = 16 },
         Children = [BuildTabs(), ActiveTab.Draw()],
     };
 
@@ -149,13 +149,13 @@ internal sealed class CompositeWindow : IDialogWindow
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
-        Children = [.._tabs.Select(BuildTab)],
+        Children = [.. _tabs.Select(BuildTab)],
     };
 
     private Node BuildTab(Tab tab)
     {
         var index = Array.IndexOf(_tabs, tab);
-        var normal = index == _activeTabIndex ? _theme.Active : _theme.Panel;
+        var normal = index == _activeTabIndex ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
         tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, Renderer.DeltaTime);
 
@@ -165,13 +165,13 @@ internal sealed class CompositeWindow : IDialogWindow
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => SelectTab(index),
             IsHovered = tab.BoxState.Hovered,
-            Style = ModulesCommon.ModuleStyle(_theme, tab.BoxState.Background) with
+            Style = ModulesCommon.ModuleStyle(tab.BoxState.Background) with
             {
                 Spacing = 8,
                 BorderRadius = 8,
-                BorderWidth = index == _activeTabIndex ? _theme.Border.Width : 0,
+                BorderWidth = index == _activeTabIndex ? ThemeManager.Current.Border.Width : 0,
             },
-            Children = [new ImageNode(tab.Icon, 18, 18, _theme.Text), new TextNode(tab.Title, 15, _theme.Text)],
+            Children = [new ImageNode(tab.Icon, 18, 18, ThemeManager.Current.Text), new TextNode(tab.Title, 15)],
         };
     }
 

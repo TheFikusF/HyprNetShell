@@ -506,9 +506,10 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
                 Style.ShadowDistance);
         }
 
-        if (Style.BorderColor.HasValue)
+        if (borderThickness.Max > 0.0f)
         {
-            renderer.FillRoundedBorder(rect, cornerRadius, borderThickness, Style.BorderColor.Value.PushOpacity(Opacity));
+            renderer.FillRoundedBorder(rect, cornerRadius, borderThickness,
+                (Style.BorderColor ?? ThemeManager.Current.Border.Color).PushOpacity(Opacity));
 
             if (Style.BackgroundColor.HasValue && borderThickness.Max > 0.0f)
             {
@@ -534,7 +535,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
 
     private void AddVisualInputRegion(int x, int y)
     {
-        if (Style.BackgroundColor.HasValue || Style.BorderColor.HasValue)
+        if (Style.BackgroundColor.HasValue || Style.BorderWidth.Max > 0.0f)
         {
             Layout.AddInputRegion(new Rect(x, y, Width, Height));
         }

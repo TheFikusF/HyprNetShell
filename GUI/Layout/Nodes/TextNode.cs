@@ -76,13 +76,13 @@ public class TextNode : Node, IWidthBoundNode
 
     public TextNode(
         string text,
-        float fontSize = 14.0f,
+        float? fontSize = null,
         Color? color = null,
         int? maxWidth = null,
         TextWrapping wrapping = TextWrapping.NoWrap,
         int? maxLines = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(fontSize);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(fontSize ?? ThemeManager.Current.Text.Size);
         if (maxWidth is <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(maxWidth));
@@ -94,8 +94,8 @@ public class TextNode : Node, IWidthBoundNode
         }
 
         Text = text;
-        FontSize = fontSize;
-        Color = color ?? Color.White;
+        FontSize = fontSize ?? ThemeManager.Current.Text.Size;
+        Color = color ?? ThemeManager.Current.Text.Color;
         MaxWidth = maxWidth;
         Wrapping = wrapping;
         MaxLines = maxLines;

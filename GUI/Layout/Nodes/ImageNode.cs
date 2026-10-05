@@ -30,12 +30,12 @@ public class ImageNode : Node
         Height = height;
     }
 
-    public ImageNode(SvgAsset svgAsset, int width, int height, Color? color = null)
+    public ImageNode(SvgAsset svgAsset, int? width = null, int? height = null, Color? color = null)
     {
         _svgAsset = svgAsset;
-        _color = color;
-        Width = width;
-        Height = height;
+        _color = color ?? ThemeManager.Current.Text;
+        Width = width ?? ThemeManager.Current.IconSize;
+        Height = height ?? ThemeManager.Current.IconSize;
     }
 
     public ImageNode(RawImageData image, int width, int height, Color? multiplicativeColor = null)

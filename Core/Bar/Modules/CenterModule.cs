@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -27,7 +28,7 @@ internal sealed class CenterModule : IDrawableModule
     private static readonly EncodedImageData SunMoonImage = LoadClockImage(SUN_MOON_IMAGE_RESOURCE_NAME);
 
     private readonly NotificationService _notificationService;
-    private readonly Theme _theme;
+
     private readonly CalendarWidget _calendar;
     private readonly WorldClocksWidget _worldClocks;
     private readonly WeatherWidget _weather;
@@ -56,25 +57,24 @@ internal sealed class CenterModule : IDrawableModule
         WeatherWidget weather,
         DialogService dialogs,
         TabsService tabs,
-        Theme theme,
         PopupCoordinator popupCoordinator)
     {
         _notificationService = notificationService;
-        _theme = theme;
+
         _node = new(popupCoordinator, "center_module")
         {
             HorizontalAlignment = ItemsAlignment.Center,
         };
-        _calendar = new CalendarWidget(calendar, theme);
-        _worldClocks = new WorldClocksWidget(theme, clipboard);
+        _calendar = new CalendarWidget(calendar);
+        _worldClocks = new WorldClocksWidget(clipboard);
         _weather = weather;
         _dialogs = dialogs;
         _tabs = tabs;
-        _notificationsWidget = new NotificationsWidget(notificationService, theme);
-        _todaysEvents = new TodaysEventsWidget(calendar, theme);
-        _chatGptLimits = new ChatGptLimitsWidget(chatGptUsage, theme);
+        _notificationsWidget = new NotificationsWidget(notificationService);
+        _todaysEvents = new TodaysEventsWidget(calendar);
+        _chatGptLimits = new ChatGptLimitsWidget(chatGptUsage);
         _kdeConnectService = kdeConnect;
-        _kdeConnect = new KdeConnectWidget(kdeConnect, theme);
+        _kdeConnect = new KdeConnectWidget(kdeConnect);
     }
 
     public Node Draw()
@@ -100,7 +100,7 @@ internal sealed class CenterModule : IDrawableModule
                                 Direction = Direction.Horizontal,
                                 HorizontalAlignment = ItemsAlignment.Center,
                                 VerticalAlignment = ItemsAlignment.Center,
-                                Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, false, false) with
+                                Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, false, false) with
                                 {
                                     Padding = new Insets(6, 4),
                                     ShadowColor = null,
@@ -121,8 +121,8 @@ internal sealed class CenterModule : IDrawableModule
     {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, right: false) with { ShadowColor = null },
-        Children = [new TextNode(now.ToString(" ddd dd, MMM"), 14, _theme.Text)],
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, right: false) with { ShadowColor = null },
+        Children = [new TextNode(now.ToString(" ddd dd, MMM"), 14)],
     };
 
     private BoxNode BuildTimeWidget(DateTime now)
@@ -152,7 +152,7 @@ internal sealed class CenterModule : IDrawableModule
                         new BoxNode(new Style
                         {
                             BorderColor = Color.White,
-                            BorderWidth = _theme.Border.Width,
+                            BorderWidth = ThemeManager.Current.Border.Width,
                             BorderRadius = 999,
                             BackgroundColor = Color.Black,
                             ShadowColor = Color.Black with { A = 0.45f },
@@ -215,7 +215,7 @@ internal sealed class CenterModule : IDrawableModule
                     IgnoreLayout = true,
                     Children =
                     [
-                        new TextNode(now.ToString("HH:mm"), 24, _theme.Text)
+                        new TextNode(now.ToString("HH:mm"), 24)
                         {
                             ShadowColor = Color.FromRgb(0, 0, 0, 0.9f),
                             ShadowDistance = 2,
@@ -231,10 +231,10 @@ internal sealed class CenterModule : IDrawableModule
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = _notificationService.ToggleDoNotDisturb,
-        Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel, left: false) with { ShadowColor = null },
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left: false) with { ShadowColor = null },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(_theme, snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, $"{snapshot.Count}")
+            ModulesCommon.BuildTextWithIcon(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, $"{snapshot.Count}")
         ],
     };
 
@@ -251,12 +251,12 @@ internal sealed class CenterModule : IDrawableModule
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.PopupStyle(_theme),
+            Style = ModulesCommon.PopupStyle(),
             Children =
             [
                 BuildCarouselPage(now),
                 BuildCarouselNavigation(),
-                ModulesCommon.BuildDivider(_theme.Border, height: 12),
+                ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12),
                 _notificationsWidget.Draw(snapshot),
             ],
         };
@@ -264,8 +264,8 @@ internal sealed class CenterModule : IDrawableModule
 
     private BoxNode BuildCarouselPage(DateTime now)
     {
-        var previous = _previousPageState.UpdateColor(_theme.Panel);
-        var next = _nextPageState.UpdateColor(_theme.Panel);
+        var previous = _previousPageState.UpdateColor(ThemeManager.Current.Panel);
+        var next = _nextPageState.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode(new Style { Spacing = 12 })
         {
             VerticalAlignment = ItemsAlignment.Stretch,
@@ -312,7 +312,7 @@ internal sealed class CenterModule : IDrawableModule
         OnClick = () => _activeCarouselPage = page,
         Style = new Style
         {
-            BackgroundColor = page == _activeCarouselPage ? _theme.Active : _theme.Text.MutedColor,
+            BackgroundColor = page == _activeCarouselPage ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor,
             BorderRadius = 999,
         },
     };
@@ -326,13 +326,13 @@ internal sealed class CenterModule : IDrawableModule
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = action,
         IsHovered = state.Hovered,
-        Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+        Style = ModulesCommon.ModuleStyle(state.Background) with
         {
             Padding = 0,
             BorderRadius = 8,
             BorderWidth = 0,
         },
-        Children = [new ImageNode(icon, 16, 16, _theme.Text)],
+        Children = [new ImageNode(icon, 16, 16, ThemeManager.Current.Text)],
     };
 
     private void OpenCalendar()

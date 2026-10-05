@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -13,7 +14,6 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class AudioModule(
     AudioModuleService service,
     BluetoothModuleService bluetoothService,
-    Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int NOTE_CAPACITY = 20;
@@ -69,10 +69,10 @@ internal sealed class AudioModule(
             ? Icons.MicrophoneOff
             : Icons.Microphone;
         var microphoneColor = !audio.Available || input is null
-            ? theme.Text.MutedColor
-            : theme.Text;
+            ? ThemeManager.Current.Text.MutedColor
+            : ThemeManager.Current.Text;
 
-        var bg = ModulesCommon.ToBackground(theme, Color.Lerp(Color.Yellow, Color.Orange, 0.1f));
+        var bg = ModulesCommon.ToBackground(Color.Lerp(Color.Yellow, Color.Orange, 0.1f));
         var microphoneControl = BuildHoverLabel(
             BuildMicrophoneIcon(microphoneIcon, microphoneColor, audio.IsRecording),
             input is not null ? $"{EffectiveVolume(input)}%" : "?",
@@ -84,7 +84,7 @@ internal sealed class AudioModule(
             input is null ? null : delta => AdjustVolume(input, delta));
 
         var volumeControl = BuildHoverLabel(
-            new ImageNode(volumeIcon, 18, 18, theme.Text),
+            new ImageNode(volumeIcon, 18, 18, ThemeManager.Current.Text),
             output is not null ? $"{volume}%" : "?",
             _volumeHovered,
             ref _volumeLabelWidth,
@@ -98,7 +98,7 @@ internal sealed class AudioModule(
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             IsHovered = _widgetHovered,
-            Style = ModulesCommon.ModuleStyle(theme, bg, right: false) with
+            Style = ModulesCommon.ModuleStyle(bg, right: false) with
             {
                 Spacing = 0,
                 Padding = new Insets(4, 0),
@@ -129,11 +129,11 @@ internal sealed class AudioModule(
         Action? onClick,
         Action<float>? onScroll)
     {
-        var label = new TextNode(text, theme.Text, theme.Text);
+        var label = new TextNode(text);
         var targetWidth = hovered.Value ? label.Width : 0.0f;
         var targetSpacing = hovered.Value ? LABEL_SPACING : 0.0f;
-        var hiddenColor = theme.Text.Color with { A = 0.0f };
-        var targetColor = hovered.Value ? theme.Text : hiddenColor;
+        var hiddenColor = ThemeManager.Current.Text.Color with { A = 0.0f };
+        var targetColor = hovered.Value ? ThemeManager.Current.Text : hiddenColor;
 
         animatedWidth = PrimitivesMath.LerpSmooth(
             animatedWidth,
@@ -169,7 +169,7 @@ internal sealed class AudioModule(
                 VerticalAlignment = ItemsAlignment.Center,
                 Children =
                 [
-                    new TextNode(text, theme.Text, animatedColor.Value, maxWidth: visibleWidth),
+                    new TextNode(text, color: animatedColor.Value, maxWidth: visibleWidth),
                 ],
             });
         }
@@ -200,7 +200,7 @@ internal sealed class AudioModule(
                     Style = new Style
                     {
                         BackgroundColor = Color.FromRgb(245, 45, 55),
-                        BorderColor = theme.Panel,
+                        BorderColor = ThemeManager.Current.Panel,
                         BorderRadius = 3.5f,
                         BorderWidth = 1,
                     },
@@ -264,7 +264,7 @@ internal sealed class AudioModule(
             return [];
         }
 
-        var color = Color.Lerp(theme.Text, Color.Orange, 0.55f);
+        var color = Color.Lerp(ThemeManager.Current.Text, Color.Orange, 0.55f);
         return _notes.Select(note =>
         {
             var progress = Math.Clamp((now - note.SpawnedAtMs) / (float)NOTE_LIFETIME_MS, 0.0f, 1.0f);
@@ -295,13 +295,13 @@ internal sealed class AudioModule(
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = ModulesCommon.PopupStyle(),
         Children = !audio.Available
-            ? [new TextNode("PipeWire audio unavailable", 14.0f, theme.Text.MutedColor)]
+            ? [new TextNode("PipeWire audio unavailable", color: ThemeManager.Current.Text.MutedColor)]
             :
             [
                 ..BuildDeviceSection(Icons.Speaker, "Output devices", audio.Outputs, false),
-                ModulesCommon.BuildDivider(theme.Border),
+                ModulesCommon.BuildDivider(ThemeManager.Current.Border),
                 ..BuildDeviceSection(Icons.Microphone, "Input devices", audio.Inputs, true),
             ],
     };
@@ -312,7 +312,7 @@ internal sealed class AudioModule(
         IReadOnlyList<AudioDeviceSnapshot> devices,
         bool input)
     {
-        yield return ModulesCommon.BuildTextWithIcon(theme, icon, title);
+        yield return ModulesCommon.BuildTextWithIcon(icon, title);
 
         if (devices.Count == 0)
         {
@@ -337,7 +337,7 @@ internal sealed class AudioModule(
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -359,18 +359,18 @@ internal sealed class AudioModule(
                             new RadioButtonNode(device.Active)
                             {
                                 SelectedColor = Color.Orange,
-                                UnselectedColor = theme.Text.MutedColor,
-                                BackgroundColor = theme.Panel,
+                                UnselectedColor = ThemeManager.Current.Text.MutedColor,
+                                BackgroundColor = ThemeManager.Current.Panel,
                             }
                         ],
                     },
                     new ImageNode(DeviceIcon(device.Name, input, bluetoothDevice), 18, 18,
-                        muted ? theme.Text.MutedColor : theme.Text),
+                        muted ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text),
                     new BoxNode
                     {
                         Direction = Direction.Horizontal,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Children = [new TextNode(Trim(device.Name, 30), 13.0f, theme.Text)],
+                        Children = [new TextNode(Trim(device.Name, 30))],
                     },
                     new BoxNode(44)
                     {
@@ -379,14 +379,14 @@ internal sealed class AudioModule(
                         [
                             new SwitchNode(muted, GetMuteSwitchAnimation(device.Id, muted))
                             {
-                                OffTrackColor = theme.Text.MutedColor,
-                                OnTrackColor = theme.Warning,
-                                KnobColor = theme.Text,
+                                OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                                OnTrackColor = ThemeManager.Current.Warning,
+                                KnobColor = ThemeManager.Current.Text,
                             }
                         ],
                     },
                     new ImageNode(input ? Icons.MicrophoneOff : Icons.VolumeMuted, 18, 18,
-                        muted ? theme.Warning : theme.Text.MutedColor),
+                        muted ? ThemeManager.Current.Warning : ThemeManager.Current.Text.MutedColor),
                 },
                 ..BuildBluetoothBattery(bluetoothDevice),
                 new BoxNode
@@ -401,12 +401,12 @@ internal sealed class AudioModule(
                             292,
                             14,
                             volume / 100.0f,
-                            theme.Text.MutedColor,
+                            ThemeManager.Current.Text.MutedColor,
                             Color.Orange,
-                            theme.Text,
+                            ThemeManager.Current.Text,
                             value => SetVolume(device, (int)MathF.Round(value * 100.0f)),
                             GetSliderDragging(device.Id)),
-                        new TextNode($"{volume}%", 14.0f, theme.Text),
+                        new TextNode($"{volume}%"),
                     ],
                 }
             ],
@@ -427,12 +427,10 @@ internal sealed class AudioModule(
             Style = new Style { Padding = new Insets(8, 0, 0, 0) },
             Children =
             [
-                new TextNode("Battery", theme.Text, theme.Text),
-                ModulesCommon.BuildTextWithIcon(
-                    theme,
-                    BatteryModule.BatteryLevelIcon(battery),
+                new TextNode("Battery"),
+                ModulesCommon.BuildTextWithIcon(BatteryModule.BatteryLevelIcon(battery),
                     $"{battery}%",
-                    battery <= 20 ? Color.Lerp(Color.White, Color.Orange, 0.5f) : theme.Text),
+                    battery <= 20 ? Color.Lerp(Color.White, Color.Orange, 0.5f) : ThemeManager.Current.Text),
             ],
         };
     }
@@ -446,8 +444,8 @@ internal sealed class AudioModule(
 
     private BoxNode BuildPlainRow(string text) => new ()
     {
-        Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-        Children = [new TextNode(text, theme.Text, theme.Text.MutedColor)],
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
+        Children = [new TextNode(text, color: ThemeManager.Current.Text.MutedColor)],
     };
 
     private int EffectiveVolume(AudioDeviceSnapshot device)

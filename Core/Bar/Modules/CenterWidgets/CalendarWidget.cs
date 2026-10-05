@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.MainDialogTabs;
@@ -14,7 +15,7 @@ internal sealed class CalendarWidget
     public const int WIDTH = 360;
 
     private readonly CalendarService _calendar;
-    private readonly Theme _theme;
+
     private readonly int _width;
     private readonly int _cellWidth;
     private readonly ModulesCommon.BoxState _previousMonthState = new();
@@ -24,10 +25,10 @@ internal sealed class CalendarWidget
     private DateTime? _displayedMonth;
     private DateTime? _lastCurrentMonth;
 
-    internal CalendarWidget(CalendarService calendar, Theme theme, int width = WIDTH)
+    internal CalendarWidget(CalendarService calendar, int width = WIDTH)
     {
         _calendar = calendar;
-        _theme = theme;
+
         _width = width;
         _cellWidth = width > WIDTH ? 48 : 42;
     }
@@ -57,7 +58,7 @@ internal sealed class CalendarWidget
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             OnScroll = handleScroll ? delta => ChangeMonth(delta > 0 ? 1 : -1) : null,
-            Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 Spacing = 10,
@@ -74,29 +75,29 @@ internal sealed class CalendarWidget
 
     internal void ShowDate(DateOnly date) => _displayedMonth = new DateTime(date.Year, date.Month, 1);
 
-    private BoxNode BuildMonthHeader(DateTime month, Action? openCalendar) => new (Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Center)
+    private BoxNode BuildMonthHeader(DateTime month, Action? openCalendar) => new(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Center)
     {
         BuildMonthButton(Icons.ChevronLeft, -1, _previousMonthState),
-        ModulesCommon.CentralWidgetHeader(Icons.Calendar, month.ToString("MMMM yyyy"), openCalendar, _titleState, _theme),
+        ModulesCommon.CentralWidgetHeader(Icons.Calendar, month.ToString("MMMM yyyy"), openCalendar, _titleState),
         BuildMonthButton(Icons.ChevronRight, 1, _nextMonthState),
     };
 
     private BoxNode BuildMonthButton(SvgAsset icon, int monthDelta, ModulesCommon.BoxState buttonState)
     {
-        var state = buttonState.UpdateColor(_theme.Panel);
+        var state = buttonState.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode(34, 34)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => ChangeMonth(monthDelta),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new ImageNode(icon, 20, 20, _theme.Text)],
+            Children = [new ImageNode(icon, 20, 20, ThemeManager.Current.Text)],
         };
     }
 
@@ -155,10 +156,10 @@ internal sealed class CalendarWidget
         var events = CalendarTab.EventsOn(occurrences, date);
         var active = date == today;
         var selected = date == selectedDate;
-        var state = _dayStates.GetState(date, _theme.Panel).UpdateColor(selected ? _theme.Active : _theme.Panel);
+        var state = _dayStates.GetState(date, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var children = new List<Node>
         {
-            new TextNode(date.Day.ToString(), 16, _theme.Text),
+            new TextNode(date.Day.ToString(), 16),
         };
         if (events.Count > 0)
         {
@@ -185,10 +186,10 @@ internal sealed class CalendarWidget
                 BackgroundColor = selected
                     ? state.Background
                     : active
-                        ? _theme.Active
+                        ? ThemeManager.Current.Active
                         : state.Hovered.Value ? state.Background : null,
-                BorderColor = selected ? _theme.Border : null,
-                BorderWidth = selected ? _theme.Border.Width : 0,
+                BorderColor = selected ? ThemeManager.Current.Border : null,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 BorderRadius = active || selected || state.Hovered.Value ? 8 : 0,
                 Spacing = 1,
             },
@@ -200,30 +201,25 @@ internal sealed class CalendarWidget
     {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
-        Children = [new TextNode(text, 16, _theme.Text)],
+        Children = [new TextNode(text, 16)],
     };
 
     private BoxNode BuildDot(bool selected) => new(4, 4)
     {
-        Style = new Style { BackgroundColor = selected ? _theme.Text : _theme.Active, BorderRadius = 4308 },
+        Style = new Style { BackgroundColor = selected ? ThemeManager.Current.Text : ThemeManager.Current.Active, BorderRadius = 4308 },
     };
 
-    private BoxNode BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new (280)
+    private BoxNode BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new(280)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(_theme) with { Padding = 12, Spacing = 8 },
+        Style = ModulesCommon.PopupStyle() with { Padding = 12, Spacing = 8 },
         Children =
         [
-            new TextNode(date.ToString("dddd, MMMM d"), _theme.Text, _theme.Text.MutedColor),
-            ..events.Take(5).Select(occurrence => new TextNode(
-                occurrence.IsAllDay ? $"All day · {occurrence.Title}" : $"{occurrence.Start:HH:mm} · {occurrence.Title}",
-                _theme.Text,
-                _theme.Text,
-                maxWidth: 256,
-                wrapping: TextWrapping.Ellipsis)),
+            new TextNode(date.ToString("dddd, MMMM d"), color: ThemeManager.Current.Text.MutedColor),
+            ..events.Take(5).Select(occurrence => new TextNode(occurrence.IsAllDay ? $"All day · {occurrence.Title}" : $"{occurrence.Start:HH:mm} · {occurrence.Title}", maxWidth: 256, wrapping: TextWrapping.Ellipsis)),
             ..(events.Count > 5
-                ? new Node[] { new TextNode($"+{events.Count - 5} more", 12, _theme.Text.MutedColor) }
+                ? new Node[] { new TextNode($"+{events.Count - 5} more", 12, ThemeManager.Current.Text.MutedColor) }
                 : []),
         ],
     };

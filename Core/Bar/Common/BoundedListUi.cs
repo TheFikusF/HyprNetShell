@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 
@@ -80,9 +81,7 @@ internal static class BoundedListUi
         Node content,
         int firstItem,
         int totalItems,
-        int visibleItems,
-        Theme theme,
-        Action<float>? onScroll = null)
+        int visibleItems, Action<float>? onScroll = null)
     {
         if (totalItems <= visibleItems)
         {
@@ -103,8 +102,8 @@ internal static class BoundedListUi
                     firstItem,
                     totalItems,
                     visibleItems,
-                    theme.Panel,
-                    theme.Text.MutedColor),
+                    ThemeManager.Current.Panel,
+                    ThemeManager.Current.Text.MutedColor),
             ],
         };
     }
@@ -113,16 +112,14 @@ internal static class BoundedListUi
         IReadOnlyCollection<T> items,
         Func<T, int, Node> renderItem,
         int firstItem,
-        int visibleItems,
-        Theme theme,
-        Action<float>? onScroll = null) => BuildScrollableResults(new BoxNode
+        int visibleItems, Action<float>? onScroll = null) => BuildScrollableResults(new BoxNode
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = [..items.VisibleItems(firstItem, visibleItems)
                 .Select(item => renderItem(item.Item, item.Index))],
-        }, firstItem, items.Count, visibleItems, theme, onScroll);
+        }, firstItem, items.Count, visibleItems, onScroll);
 
     private static void AlignViewport(
         ref int firstIndex,

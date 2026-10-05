@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
@@ -12,7 +13,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class WorkspacesModule : IDrawableModule
 {
     private readonly Dictionary<int, ModulesCommon.BoxState> _popupWorkspaceStates = [];
-    private readonly Theme _theme;
+
     private readonly NodeWithPopup _node;
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
@@ -22,12 +23,10 @@ internal sealed class WorkspacesModule : IDrawableModule
         HyprlandService hyprland,
         IHyprctl hyprctl,
         KeyStateService keyState,
-        Theme theme,
         Func<string> getOutputName,
         Func<bool> blockPopup,
         PopupCoordinator popupCoordinator)
     {
-        _theme = theme;
         _hyprland = hyprland;
         _hyprctl = hyprctl;
         _getOutputName = getOutputName;
@@ -61,12 +60,12 @@ internal sealed class WorkspacesModule : IDrawableModule
         className = string.IsNullOrWhiteSpace(className) ? "APP" : className;
 
         return _node.Draw([
-            new BoxNode(height: 52 - (int)(_theme.Border.Width * 2))
+            new BoxNode(height: 52 - (int)(ThemeManager.Current.Border.Width * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 OnScroll = delta => ScrollWorkspace(monitor, activeWorkspaceId, delta),
-                Style = ModulesCommon.ModuleStyle(_theme, _theme.Panel) with { BorderRadius = 8 },
-                Children = [new TextNode(activeWorkspaceId > 0 ? activeWorkspaceId.ToString() : "?", 24, _theme.Text)]
+                Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
+                Children = [new TextNode(activeWorkspaceId > 0 ? activeWorkspaceId.ToString() : "?", 24)]
             },
             new BoxNode
             {
@@ -77,19 +76,19 @@ internal sealed class WorkspacesModule : IDrawableModule
                 {
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
                     Spacing = 4,
-                    BorderColor = _theme.Border,
-                    BorderRadius = new BorderRadius(0, _theme.Border.Radius, _theme.Border.Radius, 0),
+
+                    BorderRadius = new BorderRadius(0, ThemeManager.Current.Border.Radius, ThemeManager.Current.Border.Radius, 0),
                     Padding = new Insets(8, 8),
                     ShadowColor = Color.Black with { A = 0.45f },
                     ShadowDistance = 5.0f
                 },
                 Children =
                 {
-                    ModulesCommon.BuildAppBadge(className, 14, _theme.Text.MutedColor, _theme),
-                    new TextNode(title.Length > 40 ? title[..37] + "..." : title, 14.0f, _theme.Text),
+                    ModulesCommon.BuildAppBadge(className, 14, ThemeManager.Current.Text.MutedColor),
+                    new TextNode(title.Length > 40 ? title[..37] + "..." : title),
                 },
             }
-        ], () => BuildWorkspacePopup(snapshot, _theme));
+        ], () => BuildWorkspacePopup(snapshot));
     }
 
     private MonitorWorkspaceSnapshot? ResolveMonitor(HyprlandSnapshot snapshot) =>
@@ -124,7 +123,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         _ = _hyprctl.FocusWorkspaceAsync(workspaces[targetIndex]);
     }
 
-    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot, Theme theme)
+    private BoxNode BuildWorkspacePopup(HyprlandSnapshot snapshot)
     {
         var outputName = _getOutputName();
         var monitors = snapshot.MonitorWorkspaces
@@ -137,56 +136,55 @@ internal sealed class WorkspacesModule : IDrawableModule
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.PopupStyle(theme) with { Spacing = 8 },
+            Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
             Children = monitors.Length == 0
-                ? [BuildMonitorColumn(outputName, [], theme)]
-                : [..monitors.Select(monitor => BuildMonitorColumn(monitor.Name, monitor.Workspaces, theme))],
+                ? [BuildMonitorColumn(outputName, [])]
+                : [.. monitors.Select(monitor => BuildMonitorColumn(monitor.Name, monitor.Workspaces))],
         };
     }
 
     private BoxNode BuildMonitorColumn(
         string monitorName,
-        IReadOnlyList<WorkspaceSnapshot> workspaces,
-        Theme theme) => new(400)
-    {
-        Direction = Direction.Vertical,
-        VerticalAlignment = ItemsAlignment.Start,
-        HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = new Style { Spacing = 8 },
-        Children =
+        IReadOnlyList<WorkspaceSnapshot> workspaces) => new(400)
+        {
+            Direction = Direction.Vertical,
+            VerticalAlignment = ItemsAlignment.Start,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = new Style { Spacing = 8 },
+            Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Monitor, $"Monitor {monitorName}"),
-            ..workspaces.Select(workspace => WorkspaceModule(workspace, theme)),
+            ModulesCommon.BuildTextWithIcon(Icons.Monitor, $"Monitor {monitorName}"),
+            ..workspaces.Select(workspace => WorkspaceModule(workspace)),
         ],
-    };
+        };
 
-    private BoxNode WorkspaceModule(WorkspaceSnapshot workspace, Theme theme)
+    private BoxNode WorkspaceModule(WorkspaceSnapshot workspace)
     {
-        var state = _popupWorkspaceStates.GetState(workspace.Id, theme.Panel)
-            .UpdateColor(workspace.Active ? theme.Active : theme.Panel);
+        var state = _popupWorkspaceStates.GetState(workspace.Id, ThemeManager.Current.Panel)
+            .UpdateColor(workspace.Active ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => _ = _hyprctl.FocusWorkspaceAsync(workspace.Id),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Spacing = 8,
                 BorderRadius = 8,
-                BorderWidth = workspace.Active ? _theme.Border.Width : 0,
+                BorderWidth = workspace.Active ? ThemeManager.Current.Border.Width : 0,
             },
             Children =
             [
-                new TextNode($"Workspace {workspace.Id}", theme.Text, theme.Text),
+                new TextNode($"Workspace {workspace.Id}"),
                 ..workspace.Windows.Select(x => new BoxNode
                 {
                     Style = new Style { Spacing = 8, Padding = new Insets(0, 0, 0, 4) },
                     HorizontalAlignment = ItemsAlignment.Stretch,
                     Children =
                     [
-                        ModulesCommon.BuildAppBadge(x.ClassName, 14, theme.Text.MutedColor, theme),
-                        new TextNode(x.Title, theme.Text, theme.Text, wrapping: TextWrapping.Ellipsis)
+                        ModulesCommon.BuildAppBadge(x.ClassName, 14, ThemeManager.Current.Text.MutedColor),
+                        new TextNode(x.Title, wrapping: TextWrapping.Ellipsis)
                     ]
                 }),
             ],

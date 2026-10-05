@@ -17,6 +17,7 @@ internal sealed class KdeConnectService : IDisposable
     private const string LogCategory = "KdeConnect";
     private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StableConnectionDuration = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ConnectionWarningInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DisposeTimeout = TimeSpan.FromSeconds(2);
 
     private readonly Lock _gate = new();
@@ -464,11 +465,22 @@ internal sealed class KdeConnectService : IDisposable
 
             device.Name = identity.DeviceName;
             device.DeviceType = identity.DeviceType;
-            device.Address = address.ToString();
+            var discoveredAddress = address.ToString();
+            if (!string.Equals(device.Address, discoveredAddress, StringComparison.Ordinal) ||
+                device.TcpPort != identity.TcpPort)
+            {
+                device.NextReconnectAt = DateTimeOffset.MinValue;
+                device.ReconnectAttempts = 0;
+                device.ConnectionFailed = false;
+                device.LastConnectionFailure = null;
+                device.NextConnectionWarningAt = DateTimeOffset.MinValue;
+            }
+            device.Address = discoveredAddress;
             device.TcpPort = identity.TcpPort;
             device.LastSeen = DateTimeOffset.UtcNow;
             shouldConnect = identity.TcpPort is >= KdeConnectProtocol.DiscoveryPort and <= KdeConnectProtocol.LastPort &&
                 device.Channel is null && !device.Connecting &&
+                DateTimeOffset.UtcNow >= device.NextReconnectAt &&
                 string.CompareOrdinal(_state?.DeviceId, device.Id) < 0;
             PublishSnapshotLocked();
         }
@@ -539,7 +551,8 @@ internal sealed class KdeConnectService : IDisposable
             {
                 return device.Channel;
             }
-            if (device.Connecting || string.IsNullOrWhiteSpace(device.Address) ||
+            if (device.Connecting || DateTimeOffset.UtcNow < device.NextReconnectAt ||
+                string.IsNullOrWhiteSpace(device.Address) ||
                 device.TcpPort is < KdeConnectProtocol.DiscoveryPort or > KdeConnectProtocol.LastPort)
             {
                 return null;
@@ -567,7 +580,37 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not connect to KDE Connect device '{device.Name}'", exception);
+            lock (_gate)
+            {
+                // A discovery update or inbound connection may have superseded this attempt.
+                if (device.Channel is not null ||
+                    !string.Equals(device.Address, address, StringComparison.Ordinal) || device.TcpPort != port)
+                {
+                    return null;
+                }
+
+                device.ConnectionFailed = true;
+                ScheduleReconnectLocked(device, afterConnectionFailure: true);
+                var socketException = FindSocketException(exception);
+                var failure = socketException is not null
+                    ? $"{socketException.SocketErrorCode}: {socketException.Message}"
+                    : $"{exception.GetType().Name}: {exception.Message}";
+                var now = DateTimeOffset.UtcNow;
+                if (!string.Equals(device.LastConnectionFailure, failure, StringComparison.Ordinal) || now >= device.NextConnectionWarningAt)
+                {
+                    device.LastConnectionFailure = failure;
+                    device.NextConnectionWarningAt = now + ConnectionWarningInterval;
+                    var retrySeconds = Math.Max(0, (int)Math.Ceiling((device.NextReconnectAt - now).TotalSeconds));
+                    AppLogger.Warning(LogCategory,
+                        $"Could not connect to KDE Connect device '{device.Name}' ({device.Id}) at {address}:{port}: " +
+                        $"{failure}. Next connection attempt allowed in {retrySeconds}s with backoff capped at 60s; " +
+                        "unchanged failures are logged at most once every 5 minutes. " +
+                        "Check that the device is awake on the same reachable network, VPN routes, " +
+                        "Wi-Fi client isolation, and firewall access to KDE Connect TCP/UDP ports 1714-1764.",
+                        exception);
+                }
+                PublishSnapshotLocked();
+            }
             return null;
         }
         finally
@@ -622,6 +665,9 @@ internal sealed class KdeConnectService : IDisposable
                 device.Channel = channel;
                 device.ChannelConnectedAt = DateTimeOffset.UtcNow;
                 device.NextReconnectAt = DateTimeOffset.MaxValue;
+                device.ConnectionFailed = false;
+                device.LastConnectionFailure = null;
+                device.NextConnectionWarningAt = DateTimeOffset.MinValue;
                 var paired = _state?.GetPaired(device.Id);
                 device.IsPaired = paired is not null;
                 device.PairingState = device.IsPaired
@@ -669,6 +715,7 @@ internal sealed class KdeConnectService : IDisposable
                 if (ReferenceEquals(device.Channel, channel))
                 {
                     device.Channel = null;
+                    device.ConnectionFailed = true;
                     if (DateTimeOffset.UtcNow - device.ChannelConnectedAt >= StableConnectionDuration)
                     {
                         device.ReconnectAttempts = 0;
@@ -986,10 +1033,6 @@ internal sealed class KdeConnectService : IDisposable
                             device.TcpPort is >= KdeConnectProtocol.DiscoveryPort and <= KdeConnectProtocol.LastPort &&
                             now >= device.NextReconnectAt)
                         .ToArray();
-                    foreach (var device in reconnectDevices)
-                    {
-                        ScheduleReconnectLocked(device);
-                    }
                     PublishSnapshotLocked();
                 }
                 foreach (var device in reconnectDevices)
@@ -1044,11 +1087,23 @@ internal sealed class KdeConnectService : IDisposable
         }
     }
 
-    private static void ScheduleReconnectLocked(KdeConnectDevice device)
+    private static SocketException? FindSocketException(Exception exception)
     {
-        if (!device.IsPaired)
+        for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            device.NextReconnectAt = DateTimeOffset.MaxValue;
+            if (current is SocketException socketException)
+            {
+                return socketException;
+            }
+        }
+        return null;
+    }
+
+    private static void ScheduleReconnectLocked(KdeConnectDevice device, bool afterConnectionFailure = false)
+    {
+        if (!device.IsPaired && !afterConnectionFailure)
+        {
+            device.NextReconnectAt = DateTimeOffset.MinValue;
             device.ReconnectAttempts = 0;
             return;
         }
@@ -1107,7 +1162,7 @@ internal sealed class KdeConnectService : IDisposable
         device.PairingTimestamp = null;
         device.BatteryLevel = null;
         device.IsCharging = null;
-        device.NextReconnectAt = DateTimeOffset.MaxValue;
+        device.NextReconnectAt = DateTimeOffset.MinValue;
         device.ReconnectAttempts = 0;
     }
 

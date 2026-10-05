@@ -46,52 +46,38 @@ public sealed class StatusBar
 
         var languageModule = new LanguageModule(
             services.Hyprland,
-            services.Hyprctl,
-            Theme.Default,
-            _popupCoordinator);
-        var systemStatsModule = new SystemStatsModule(services.SystemStats, Theme.Default, _popupCoordinator);
+            services.Hyprctl, _popupCoordinator);
+        var systemStatsModule = new SystemStatsModule(services.SystemStats, _popupCoordinator);
         var networkModule = new NetworkModule(
             services.Network,
             services.Dialogs,
             services.Tabs,
-            services.ClipboardHistory,
-            Theme.Default,
-            _popupCoordinator);
-        var audioModule = new AudioModule(services.Audio, services.Bluetooth, Theme.Default, _popupCoordinator);
-        var privacyModule = new PrivacyModule(services.Privacy, Theme.Default, _popupCoordinator);
+            services.ClipboardHistory, _popupCoordinator);
+        var audioModule = new AudioModule(services.Audio, services.Bluetooth, _popupCoordinator);
+        var privacyModule = new PrivacyModule(services.Privacy, _popupCoordinator);
         var displayControlsModule = new DisplayControlsModule(
-            services.DisplayControls,
-            Theme.Default,
-            _popupCoordinator);
+            services.DisplayControls, _popupCoordinator);
         var bluetoothModule = new BluetoothModule(
             services.Bluetooth,
             services.Dialogs,
-            services.Tabs,
-            Theme.Default,
-            _popupCoordinator);
+            services.Tabs, _popupCoordinator);
         var batteryModule = new BatteryModule(
             services.Battery,
-            services.DeviceBatteries,
-            Theme.Default,
-            _popupCoordinator);
-        var musicModule = new MusicModule(services.Music, Theme.Default, _popupCoordinator);
-        var trayModule = new TrayModule(services.Tray, Theme.Default, _popupCoordinator);
+            services.DeviceBatteries, _popupCoordinator);
+        var musicModule = new MusicModule(services.Music, _popupCoordinator);
+        var trayModule = new TrayModule(services.Tray, _popupCoordinator);
         var powerModule = new PowerModule(
             services.Dialogs,
             services.Hyprctl,
-            services.RequestLockScreen,
-            Theme.Default,
-            _popupCoordinator);
+            services.RequestLockScreen, _popupCoordinator);
         var workspacesModule = new WorkspacesModule(
             services.Hyprland,
             services.Hyprctl,
-            services.SuperKey,
-            Theme.Default,
-            getOutputName,
+            services.SuperKey, getOutputName,
             () => languageModule.IsShown,
             _popupCoordinator);
 
-        var weatherWidget = new WeatherWidget(services.Weather, Theme.Default);
+        var weatherWidget = new WeatherWidget(services.Weather);
         _centerModule = new CenterModule(
             services.Notifications,
             services.Calendar,
@@ -100,9 +86,7 @@ public sealed class StatusBar
             services.KdeConnect,
             weatherWidget,
             services.Dialogs,
-            services.Tabs,
-            Theme.Default,
-            _popupCoordinator);
+            services.Tabs, _popupCoordinator);
         _leftModules = [workspacesModule, musicModule];
         _rightModules =
         [
@@ -135,7 +119,7 @@ public sealed class StatusBar
         }
     }
 
-    private static BoxNode DrawSide(IEnumerable<IDrawableModule> modules) => new ()
+    private static BoxNode DrawSide(IEnumerable<IDrawableModule> modules) => new()
     {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
@@ -166,9 +150,7 @@ public sealed class StatusBar
         layout.AddNode(new SpacerNode());
         layout.AddNode(NotificationPopupLayout.Draw(
             _notificationService.Snapshot,
-            _notificationService,
-            Theme.Default,
-            _renderer.Height,
+            _notificationService, _renderer.Height,
             _barHeight));
     }
 }

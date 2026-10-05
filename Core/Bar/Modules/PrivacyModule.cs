@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -9,10 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class PrivacyModule(
-    PrivacyModuleService service,
-    Theme theme,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class PrivacyModule(PrivacyModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const long ICON_INTERVAL_MS = 3000;
     private const float ICON_FADE_DECAY = 8.0f;
@@ -99,7 +97,7 @@ internal sealed class PrivacyModule(
             {
                 IgnoreLayout = true,
                 Opacity = 1.0f - _iconOpacity,
-                Children = [new ImageNode(_previousIcon, size, size, theme.Panel)],
+                Children = [new ImageNode(_previousIcon, size, size, ThemeManager.Current.Panel)],
             });
         }
 
@@ -107,7 +105,7 @@ internal sealed class PrivacyModule(
         {
             IgnoreLayout = true,
             Opacity = _iconOpacity,
-            Children = [new ImageNode(_currentIcon!, size, size, theme.Panel)],
+            Children = [new ImageNode(_currentIcon!, size, size, ThemeManager.Current.Panel)],
         });
 
         return new BoxNode(size, size)
@@ -123,10 +121,10 @@ internal sealed class PrivacyModule(
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle(theme) with { Spacing = 8 },
+        Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
         Children =
         [
-            new TextNode("Privacy", 18, theme.Text),
+            new TextNode("Privacy", 18),
             ..BuildUsageRows(Icons.ScreenShare, "Screen recording", privacy.ScreenRecordingApplications),
             ..BuildUsageRows(Icons.Microphone, "Microphone", privacy.MicrophoneApplications),
             ..BuildUsageRows(Icons.Camera, "Camera", privacy.CameraApplications),
@@ -140,7 +138,7 @@ internal sealed class PrivacyModule(
             yield return new BoxNode
             {
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.Orange)) with
+                Style = ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.Orange)) with
                 {
                     BorderRadius = 8,
                     ShadowColor = null,
@@ -148,15 +146,15 @@ internal sealed class PrivacyModule(
                 },
                 Children =
                 [
-                    new ImageNode(icon, 18, 18, theme.Text),
+                    new ImageNode(icon, 18, 18, ThemeManager.Current.Text),
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
                         Style = new Style { Spacing = 2 },
                         Children =
                         [
-                            new TextNode(usage, 13, theme.Text.MutedColor),
-                            new TextNode(application, 15, theme.Text),
+                            new TextNode(usage, 13, ThemeManager.Current.Text.MutedColor),
+                            new TextNode(application, 15),
                         ],
                     },
                 ],

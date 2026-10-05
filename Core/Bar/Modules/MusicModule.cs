@@ -1,4 +1,5 @@
 using System.Globalization;
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -12,10 +13,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class MusicModule(
-    MusicModuleService service,
-    Theme theme,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class MusicModule(MusicModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private enum PlayerAction
     {
@@ -102,14 +100,14 @@ internal sealed class MusicModule(
                 Left = 0,
                 Children =
                 [
-                    BuildSurface(music, [new ImageNode(Icons.SkipBack, 18, 18, theme.Text)],
+                    BuildSurface(music, [new ImageNode(Icons.SkipBack, 18, 18, ThemeManager.Current.Text)],
                         right: false,
                         onClick: () => Control(music, PlayerAction.Previous),
                         padding: new Insets(6, 4)
                     ),
                     new BoxNode(IMAGE_SIZE),
                     BuildCover(music),
-                    BuildSurface(music, [new ImageNode(Icons.SkipForward, 18, 18, theme.Text)],
+                    BuildSurface(music, [new ImageNode(Icons.SkipForward, 18, 18, ThemeManager.Current.Text)],
                         left: false,
                         onClick: () => Control(music, PlayerAction.Next),
                         padding: new Insets(6, 4)
@@ -117,7 +115,7 @@ internal sealed class MusicModule(
                 ]
             },
             new BoxNode(18 * 2 + 6 * 4 + 2 * 2 + IMAGE_SIZE),
-            new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS, 14.0f, theme.Text)
+            new MarqueeTextNode(music.Label, VISIBLE_CHARACTERS)
         ], padding: new Insets(6, 8, 6, -2),
         horizontalAlignment: ItemsAlignment.Start, darken: 0.5f
     );
@@ -138,7 +136,7 @@ internal sealed class MusicModule(
         ItemsAlignment verticalAlignment = ItemsAlignment.Center,
         float darken = 0)
     {
-        var style = ModulesCommon.ModuleStyle(theme, theme.Panel, left, right) with { Spacing = 8 };
+        var style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left, right) with { Spacing = 8 };
 
         if (radius.HasValue)
         {
@@ -184,7 +182,7 @@ internal sealed class MusicModule(
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = ModulesCommon.PopupStyle(),
         Children = music.IsSpotify
             ? [BuildNowPlaying(music), BuildSpotifyQueue(music)]
             : [BuildNowPlaying(music)]
@@ -211,9 +209,9 @@ internal sealed class MusicModule(
                         Style = new Style { Spacing = 6 },
                         Children =
                         [
-                            new MarqueeTextNode(music.Title, 42, 16.0f, theme.Text),
-                            new MarqueeTextNode(FormatSubtitle(music), 47, theme.Text, theme.Text),
-                            new MarqueeTextNode(music.Player, 47, theme.Text, theme.Text.MutedColor),
+                            new MarqueeTextNode(music.Title, 42, 16.0f, ThemeManager.Current.Text),
+                            new MarqueeTextNode(FormatSubtitle(music), 47, ThemeManager.Current.Text, ThemeManager.Current.Text),
+                            new MarqueeTextNode(music.Player, 47, ThemeManager.Current.Text, ThemeManager.Current.Text.MutedColor),
                         ]
                     },
                     new BoxNode
@@ -259,8 +257,8 @@ internal sealed class MusicModule(
         Style = Style.Spacer,
         Children =
         [
-            ModulesCommon.BuildDivider(theme.Text, height: 0),
-            new TextNode("QUEUE", theme.Text, theme.Text),
+            ModulesCommon.BuildDivider(ThemeManager.Current.Text, height: 0),
+            new TextNode("QUEUE"),
             ..BuildQueueRows(music)
         ]
     };
@@ -269,10 +267,7 @@ internal sealed class MusicModule(
     {
         if (music.Queue.Count == 0)
         {
-            yield return new TextNode(
-                "Queue unavailable — reconnect Spotify in Accounts",
-                theme.Text,
-                theme.Text.MutedColor);
+            yield return new TextNode("Queue unavailable — reconnect Spotify in Accounts", color: ThemeManager.Current.Text.MutedColor);
             yield break;
         }
 
@@ -297,8 +292,8 @@ internal sealed class MusicModule(
                 Style = new Style { Spacing = 2 },
                 Children =
                 [
-                    new MarqueeTextNode(song.Title, 44, theme.Text, theme.Text),
-                    new MarqueeTextNode(song.Artist, 50, 12.0f, theme.Text.MutedColor),
+                    new MarqueeTextNode(song.Title, 44, ThemeManager.Current.Text, ThemeManager.Current.Text),
+                    new MarqueeTextNode(song.Artist, 50, 12.0f, ThemeManager.Current.Text.MutedColor),
                 ]
             },
             // BuildQueueRemoveButton(music, song, position),
@@ -327,8 +322,8 @@ internal sealed class MusicModule(
                     {
                         HorizontalAlignment = ItemsAlignment.Center,
                         VerticalAlignment = ItemsAlignment.Center,
-                        Style = new Style { BackgroundColor = theme.Panel, BorderRadius = 4 },
-                        Children = [new ImageNode(Icons.MusicNotes[0], 18, 18, theme.Text.MutedColor)]
+                        Style = new Style { BackgroundColor = ThemeManager.Current.Panel, BorderRadius = 4 },
+                        Children = [new ImageNode(Icons.MusicNotes[0], 18, 18, ThemeManager.Current.Text.MutedColor)]
                     }
                     : new ImageNode(song.ImagePath, QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE),
                 new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE)
@@ -368,7 +363,7 @@ internal sealed class MusicModule(
             IsHovered = state.Hovered,
             OnClick = () => _ = service.RemoveFromSpotifyQueueAsync(music, position),
             Style = new Style { BackgroundColor = state.Background, BorderRadius = 8 },
-            Children = [new ImageNode(Icons.Delete, 16, 16, theme.Text)]
+            Children = [new ImageNode(Icons.Delete, 16, 16, ThemeManager.Current.Text)]
         };
     }
 
@@ -378,8 +373,8 @@ internal sealed class MusicModule(
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with { BorderRadius = 8 },
-                Children = [new TextNode("M", 28.0f, theme.Text.MutedColor)]
+                Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
+                Children = [new TextNode("M", 28.0f, ThemeManager.Current.Text.MutedColor)]
             }
             : new ImageNode(music.ImagePath, POPUP_IMAGE_SIZE, POPUP_IMAGE_SIZE);
 
@@ -401,9 +396,9 @@ internal sealed class MusicModule(
                     width,
                     18,
                     ratio,
-                    theme.Panel,
+                    ThemeManager.Current.Panel,
                     music.Playing ? Color.Orange : Color.Orange with { A = 0.8f },
-                    theme.Text,
+                    ThemeManager.Current.Text,
                     value => Seek(music, value),
                     _progressDragging),
                 new BoxNode(width)
@@ -412,8 +407,8 @@ internal sealed class MusicModule(
                     HorizontalAlignment = ItemsAlignment.Spread,
                     Children =
                     [
-                        new TextNode(FormatTime(position), 14.0f, theme.Text),
-                        new TextNode(FormatTime(music.LengthMicros), 14.0f, theme.Text),
+                        new TextNode(FormatTime(position)),
+                        new TextNode(FormatTime(music.LengthMicros)),
                     ]
                 }
             ]
@@ -453,7 +448,7 @@ internal sealed class MusicModule(
             PlayerAction.Repeat => music.RepeatMode is not null and not MusicRepeatMode.Off,
             _ => false,
         };
-        var defaultColor = action == PlayerAction.PlayPause || active ? theme.Active : theme.Panel;
+        var defaultColor = action == PlayerAction.PlayPause || active ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         var state = _buttonStates.GetState(action, defaultColor);
         var target = state.Hovered
             ? Color.Lighten(defaultColor, 0.16f)
@@ -466,7 +461,7 @@ internal sealed class MusicModule(
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => Control(music, action),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 999,
                 Padding = new Insets(8, 8)
@@ -481,7 +476,7 @@ internal sealed class MusicModule(
                     PlayerAction.Shuffle => Icons.Shuffle,
                     PlayerAction.Repeat => music.RepeatMode == MusicRepeatMode.Track ? Icons.RepeatOne : Icons.Repeat,
                     _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
-                }, iconSize, iconSize, theme.Text)
+                }, iconSize, iconSize, ThemeManager.Current.Text)
             ]
         };
     }

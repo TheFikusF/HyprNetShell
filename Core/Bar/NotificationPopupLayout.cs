@@ -15,7 +15,6 @@ internal static class NotificationPopupLayout
     public static Node Draw(
         NotificationsSnapshot snapshot,
         NotificationService service,
-        Theme theme,
         int screenHeight,
         int barHeight)
     {
@@ -44,13 +43,13 @@ internal static class NotificationPopupLayout
                         Padding = new Insets(barHeight + 4, 6, 0, 0),
                         Spacing = 8,
                     },
-                    Children = [..visible.Select(notification => BuildToast(notification, service, theme))],
+                    Children = [..visible.Select(notification => BuildToast(notification, service))],
                 }
             ],
         };
     }
 
-    private static Node BuildToast(NotificationSnapshot notification, NotificationService service, Theme theme)
+    private static Node BuildToast(NotificationSnapshot notification, NotificationService service)
     {
         if (!CardStates.TryGetValue(notification.Id, out var state))
         {
@@ -58,7 +57,7 @@ internal static class NotificationPopupLayout
             CardStates[notification.Id] = state;
         }
 
-        return NotificationCard.Draw(notification, service, theme, state);
+        return NotificationCard.Draw(notification, service,state);
     }
 
     private static void RemoveExpiredCardStates(IReadOnlyList<NotificationSnapshot> notifications)

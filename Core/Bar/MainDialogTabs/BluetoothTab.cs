@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -10,7 +11,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialogTab, IDisposable
 {
     private const int VisibleDeviceCount = 7;
 
@@ -166,11 +167,11 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
             VerticalAlignment = ItemsAlignment.Start,
             Style = new Style { Spacing = 12 },
             Children = pairDevice is not null
-                ? [BuildPairPopup(pairDevice, busy), MainDialogTabUi.BuildStatus(theme, status)]
+                ? [BuildPairPopup(pairDevice, busy), MainDialogTabUi.BuildStatus(status)]
                 : [
                     BuildHeader(snapshot, powered, scanning, busy),
                     ..BuildDevices(snapshot, powered, devices, firstIndex, scanning, busy),
-                    MainDialogTabUi.BuildStatus(theme, status)
+                    MainDialogTabUi.BuildStatus(status)
                 ],
         };
     }
@@ -217,20 +218,15 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
         VerticalAlignment = ItemsAlignment.Center,
         Children =
         [
-            new TextNode(
-                powered ? "Bluetooth devices" : "Turn Bluetooth on to discover devices",
-                theme.Text.HeaderSize,
-                theme.Text),
+            new TextNode(powered ? "Bluetooth devices" : "Turn Bluetooth on to discover devices", ThemeManager.Current.Text.HeaderSize),
 
             new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
             {
-                MainDialogTabUi.BuildButton(
-                    theme,
-                    _buttonStates,
+                MainDialogTabUi.BuildButton(_buttonStates,
                     scanning ? "Discovering..." : "Discover",
                     "discover",
                     powered && !scanning && !busy ? ScheduleScan : null),
-                new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
                 new BoxNode
                 {
                     OnClick = snapshot.Available && !busy ? () => SetPowered(!powered) : null,
@@ -238,12 +234,12 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
                     Style = Style.Spacer,
                     Children =
                     [
-                        new TextNode(powered ? "On" : "Off", theme.Text, theme.Text.MutedColor),
+                        new TextNode(powered ? "On" : "Off", color: ThemeManager.Current.Text.MutedColor),
                         new SwitchNode(powered, _powerSwitchAnimation)
                         {
-                            OffTrackColor = theme.Text.MutedColor,
-                            OnTrackColor = theme.Active,
-                            KnobColor = theme.Text,
+                            OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                            OnTrackColor = ThemeManager.Current.Active,
+                            KnobColor = ThemeManager.Current.Text,
                         },
                     ],
                 },
@@ -259,24 +255,22 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
         bool scanning,
         bool busy)
     {
-        yield return ModulesCommon.BuildDivider(theme.Border, height: 12);
+        yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12);
         if (!snapshot.Available)
         {
-            yield return MainDialogTabUi.BuildMessage(theme, "Bluetooth is unavailable");
+            yield return MainDialogTabUi.BuildMessage("Bluetooth is unavailable");
             yield break;
         }
 
         if (!powered)
         {
-            yield return MainDialogTabUi.BuildMessage(theme, "Bluetooth is turned off");
+            yield return MainDialogTabUi.BuildMessage("Bluetooth is turned off");
             yield break;
         }
 
         if (devices.Count == 0)
         {
-            yield return MainDialogTabUi.BuildMessage(
-                theme,
-                scanning ? "Discovering nearby devices..." : "No Bluetooth devices found");
+            yield return MainDialogTabUi.BuildMessage(scanning ? "Discovering nearby devices..." : "No Bluetooth devices found");
             yield break;
         }
 
@@ -295,15 +289,14 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
             content,
             firstIndex,
             devices.Count,
-            VisibleDeviceCount,
-            theme);
+            VisibleDeviceCount);
     }
 
     private BoxNode BuildDeviceRow(BluetoothDeviceSnapshot device, int index, bool busy)
     {
         var selected = index == _selectedIndex;
-        var rowState = _rowStates.GetState(device.Address, theme.Panel)
-            .UpdateColor(selected ? Color.Lighten(theme.Panel, 0.1f) : theme.Panel);
+        var rowState = _rowStates.GetState(device.Address, ThemeManager.Current.Panel)
+            .UpdateColor(selected ? Color.Lighten(ThemeManager.Current.Panel, 0.1f) : ThemeManager.Current.Panel);
         var stateText = device.Connected ? "Connected" : device.Paired ? "Paired" : "Available";
 
         return new BoxNode
@@ -312,49 +305,43 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => _selectedIndex = index,
-            Style = ModulesCommon.ModuleStyle(theme, rowState.Background) with
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
             },
             Children =
             [
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    new ImageNode(BluetoothUi.DeviceIcon(device.Icon), 18, 18, theme.Text),
+                    new ImageNode(BluetoothUi.DeviceIcon(device.Icon), 18, 18, ThemeManager.Current.Text),
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
                         Style = new Style { Spacing = 4 },
                         Children =
                         [
-                            new TextNode(device.Name, theme.Text, theme.Text, maxWidth: 310),
+                            new TextNode(device.Name, maxWidth: 310),
                             new TextNode(device.BatteryPercentage is { } battery
                                 ? $"{stateText} · Battery {battery}%"
-                                : stateText, 14, theme.Text.MutedColor),
+                                : stateText, 14, ThemeManager.Current.Text.MutedColor),
                         ],
                     },
                 },
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
                     device.Paired
-                        ? MainDialogTabUi.BuildButton(
-                            theme,
-                            _buttonStates,
+                        ? MainDialogTabUi.BuildButton(_buttonStates,
                             device.Connected ? "Disconnect" : "Connect",
                             $"connect:{device.Address}",
                             busy ? null : () => BeginConnectionChange(device, !device.Connected))
-                        : MainDialogTabUi.BuildButton(
-                            theme,
-                            _buttonStates,
+                        : MainDialogTabUi.BuildButton(_buttonStates,
                             "Pair",
                             $"pair:{device.Address}",
                             busy ? null : () => ShowPairPopup(device)),
 
-                    busy == false ? MainDialogTabUi.BuildButton(
-                        theme,
-                        _buttonStates,
+                    busy == false ? MainDialogTabUi.BuildButton(_buttonStates,
                         "Forget",
                         $"forget:{device.Address}",
                         device.Paired && !busy ? () => BeginForget(device) : null) : null,
@@ -370,28 +357,19 @@ internal sealed class BluetoothTab(BluetoothModuleService service, Theme theme) 
         Style = new Style { Spacing = 14 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(
-                theme,
-                BluetoothUi.DeviceIcon(device.Icon),
+            ModulesCommon.BuildTextWithIcon(BluetoothUi.DeviceIcon(device.Icon),
                 $"Pair with {device.Name}",
                 maxTextWidth: 430),
-            new TextNode(
-                "Make sure the device is in pairing mode. Confirm any matching code shown on the device.",
-                theme.Text,
-                theme.Text,
-                maxWidth: 620),
-            new TextNode(device.Address, theme.Text, theme.Text),
+            new TextNode("Make sure the device is in pairing mode. Confirm any matching code shown on the device.", maxWidth: 620),
+            new TextNode(device.Address),
             new BoxNode
             {
                 HorizontalAlignment = ItemsAlignment.End,
                 Style = Style.Spacer,
                 Children =
                 [
-                    MainDialogTabUi.BuildButton(
-                        theme, _buttonStates, "Cancel", "pair-cancel", busy ? null : CancelPair),
-                    MainDialogTabUi.BuildButton(
-                        theme,
-                        _buttonStates,
+                    MainDialogTabUi.BuildButton(_buttonStates, "Cancel", "pair-cancel", busy ? null : CancelPair),
+                    MainDialogTabUi.BuildButton(_buttonStates,
                         busy ? "Pairing..." : "Pair",
                         "pair-confirm",
                         busy ? null : ConfirmPair),

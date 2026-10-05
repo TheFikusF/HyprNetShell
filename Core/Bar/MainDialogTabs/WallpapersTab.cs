@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
@@ -10,8 +11,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class WallpapersTab(
     WallpaperModuleService wallpapers,
     Action closeDialog,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab, IDisposable
+    TextInputCoordinator inputs) : IMainDialogTab, IDisposable
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private const int COLUMNS = 4;
@@ -26,6 +26,7 @@ internal sealed class WallpapersTab(
         "Search wallpapers...",
         4096,
         alwaysActive: true);
+
     private IReadOnlyList<Wallpaper> _wallpapers = [];
     private IReadOnlyList<Wallpaper> _filteredWallpapers = [];
     private CancellationTokenSource? _loadCancellation;
@@ -189,8 +190,7 @@ internal sealed class WallpapersTab(
                     grid,
                     firstIndex / COLUMNS,
                     (totalCount + COLUMNS - 1) / COLUMNS,
-                    ROWS,
-                    theme),
+                    ROWS),
             ],
         };
     }
@@ -218,7 +218,7 @@ internal sealed class WallpapersTab(
     private Node BuildTile(Wallpaper wallpaper, int index, int selectedIndex)
     {
         var selected = index == selectedIndex;
-        var state = _buttonsState.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _buttonsState.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode
         {
             Direction = Direction.Vertical,
@@ -234,18 +234,17 @@ internal sealed class WallpapersTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
-                Padding = 4 + (selected ? 0 : theme.Border.Width),
+                Padding = 4 + (selected ? 0 : ThemeManager.Current.Border.Width),
                 Spacing = 4,
                 BorderRadius = 6,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
             },
             Children =
             [
                 new ImageNode(wallpaper.Path, (int)(192 * 0.98f), (int)(108 * 0.98f), loadAsync: true),
-                new TextNode(wallpaper.Name, theme.Text, theme.Text, maxWidth: 188,
-                    wrapping: TextWrapping.Ellipsis),
+                new TextNode(wallpaper.Name, maxWidth: 188, wrapping: TextWrapping.Ellipsis),
             ],
         };
     }

@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 
 using System.Globalization;
 using HyprNetShell.Core.Assets;
@@ -18,21 +19,21 @@ internal sealed class UnifiedSearchTab(
     UrlLauncher urlLauncher,
     Action closeDialog,
     ClipboardHistoryService clipboard,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab, IDisposable
+    TextInputCoordinator inputs) : IMainDialogTab, IDisposable
 {
     private const int FuzzyScoreCutoff = 35;
     private const int MaximumApplicationResults = 8;
 
     private readonly DesktopApplicationCatalog _catalog = new();
     private readonly Dictionary<int, ModulesCommon.BoxState> _buttonStates = [];
-    private readonly ApplicationResultInteraction _applicationResults = new(theme);
+    private readonly ApplicationResultInteraction _applicationResults = new();
     private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
         "",
         "",
         "Search apps, type =1+2, or ?web search...",
         4096,
         alwaysActive: true);
+
     private IReadOnlyList<DesktopApplication> _applications = [];
     private IReadOnlyList<SearchResult> _results = [];
     private int _firstIndex;
@@ -130,8 +131,7 @@ internal sealed class UnifiedSearchTab(
                     },
                     _firstIndex,
                     _results.Count,
-                    BoundedListUi.DefaultVisibleItemCount,
-                    theme),
+                    BoundedListUi.DefaultVisibleItemCount),
             ],
         };
     }
@@ -157,7 +157,7 @@ internal sealed class UnifiedSearchTab(
                 });
         }
 
-        var state = _buttonStates.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _buttonStates.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var fallbackIcon = result.Kind switch
         {
             ResultKind.Calculation => Icons.Calculator,
@@ -175,16 +175,16 @@ internal sealed class UnifiedSearchTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(16, 10),
                 Spacing = 14,
             },
             Children =
             [
-                new ImageNode(fallbackIcon, 38, 38, theme.Text),
+                new ImageNode(fallbackIcon, 38, 38, ThemeManager.Current.Text),
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
@@ -192,8 +192,8 @@ internal sealed class UnifiedSearchTab(
                     Style = new Style { Spacing = 4 },
                     Children =
                     [
-                        new TextNode(result.Title, 18, theme.Text),
-                        new TextNode(result.Description, theme.Text, selected ? theme.Text : theme.Text.MutedColor),
+                        new TextNode(result.Title, 18),
+                        new TextNode(result.Description, color: selected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
                     ],
                 },
             ],

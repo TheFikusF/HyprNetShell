@@ -1,3 +1,4 @@
+using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
@@ -51,7 +52,7 @@ public abstract class Node
     public virtual int Height { get; }
 
     public float Opacity { get; set; } = 1;
-    
+
     public Style Style { get; set; } = new Style();
     internal bool LastHovered { get; private set; }
     internal bool LastHoveredThrough { get; private set; }
@@ -78,6 +79,18 @@ public abstract class Node
         LastHoveredThrough = hoveredThrough;
         LastClicked = clicked;
         LastClickedThrough = clickedThrough;
+    }
+
+    public static implicit operator Node(string str)
+    {
+        ArgumentNullException.ThrowIfNull(str);
+        return new TextNode(str);
+    }
+
+    public static implicit operator Node(SvgAsset icon)
+    {
+        ArgumentNullException.ThrowIfNull(icon);
+        return new ImageNode(icon);
     }
 }
 

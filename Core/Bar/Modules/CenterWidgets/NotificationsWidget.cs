@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -9,7 +10,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
-internal sealed class NotificationsWidget(NotificationService service, Theme theme)
+internal sealed class NotificationsWidget(NotificationService service)
 {
     private const int VisibleNotificationCount = 5;
 
@@ -45,19 +46,19 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
                 {
                     new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                     {
-                        new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, theme.Text),
-                        new TextNode("Notifications", 22, theme.Text),
+                        new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, ThemeManager.Current.Text),
+                        new TextNode("Notifications", 22),
                     },
 
                     new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
                     {
                         BuildDateDropdown(),
-                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
                         BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
-                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = theme.Border } },
+                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
                         new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                         {
-                            new TextNode($"{filteredItems.Length}", 22, theme.Text),
+                            new TextNode($"{filteredItems.Length}", 22),
                             BuildClearButton(snapshot.Count),
                         }
                     }
@@ -75,12 +76,12 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
         Style = new Style { Spacing = 8 },
         Children =
         [
-            new ImageNode(enabled ? Icons.BellOff : Icons.Bell, 18, 18, theme.Text),
+            new ImageNode(enabled ? Icons.BellOff : Icons.Bell, 18, 18, ThemeManager.Current.Text),
             new SwitchNode(enabled, _doNotDisturbSwitchAnimation)
             {
-                OffTrackColor = theme.Text.MutedColor,
-                OnTrackColor = theme.Active,
-                KnobColor = theme.Text,
+                OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                OnTrackColor = ThemeManager.Current.Active,
+                KnobColor = ThemeManager.Current.Text,
             },
         ],
     };
@@ -93,7 +94,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Children = [new TextNode("No notifications", theme.Text.HeaderSize, theme.Text.MutedColor)]
+                Children = [new TextNode("No notifications", ThemeManager.Current.Text.HeaderSize, ThemeManager.Current.Text.MutedColor)]
             };
             yield break;
         }
@@ -113,9 +114,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             content,
             _firstNotificationIndex,
             notifications.Count,
-            VisibleNotificationCount,
-            theme,
-            delta => ScrollNotifications(delta, notifications.Count));
+            VisibleNotificationCount, delta => ScrollNotifications(delta, notifications.Count));
     }
 
     private Node BuildNotificationCard(NotificationSnapshot notification)
@@ -126,7 +125,7 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             _cardStates[notification.Id] = state;
         }
 
-        return NotificationCard.Draw(notification, service, theme, state);
+        return NotificationCard.Draw(notification, service, state);
     }
 
     private void ScrollNotifications(float delta, int notificationCount) =>
@@ -150,14 +149,14 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
                 _firstNotificationIndex = 0;
             })
         {
-            FontSize = theme.Text,
-            BackgroundColor = theme.Panel,
-            HoverColor = Color.Lighten(theme.Panel, 0.18f),
-            SelectedColor = theme.Active,
-            BorderColor = theme.Border,
-            BorderWidth = theme.Border.Width,
+            FontSize = ThemeManager.Current.Text,
+            BackgroundColor = ThemeManager.Current.Panel,
+            HoverColor = Color.Lighten(ThemeManager.Current.Panel, 0.18f),
+            SelectedColor = ThemeManager.Current.Active,
+
+            BorderWidth = ThemeManager.Current.Border.Width,
             BorderRadius = 8,
-            TextColor = theme.Text,
+            TextColor = ThemeManager.Current.Text,
         };
         _dateDropdown.SelectedIndex = (int)_dateRange;
         return _dateDropdown;
@@ -176,10 +175,10 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
     {
         if (!_clearButtonInitialized)
         {
-            _clearButtonState.Background = theme.Panel;
+            _clearButtonState.Background = ThemeManager.Current.Panel;
             _clearButtonInitialized = true;
         }
-        _clearButtonState.UpdateColor(theme.Panel);
+        _clearButtonState.UpdateColor(ThemeManager.Current.Panel);
 
         return new BoxNode
         {
@@ -196,8 +195,8 @@ internal sealed class NotificationsWidget(NotificationService service, Theme the
             },
             Children =
             [
-                new ImageNode(Icons.Trash, 18, 18, theme.Text),
-                new TextNode("Clear", theme.Text, theme.Text),
+                new ImageNode(Icons.Trash, 18, 18, ThemeManager.Current.Text),
+                new TextNode("Clear"),
             ],
         };
     }

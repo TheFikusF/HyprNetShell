@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.LockScreen;
@@ -95,8 +96,8 @@ internal static class LockScreenApplication
         }
 
         using var renderer = new Renderer((int)HyprLayer.TARGET_FRAMERATE, HyprLayer.GetProcAddress);
-        var view = new LockScreenView(Theme.Default);
-        var opaqueBackground = Theme.Default.Panel with { A = 1 };
+        var view = new LockScreenView();
+        var opaqueBackground = ThemeManager.Current.Panel with { A = 1 };
 
         while (sessionLock.Update())
         {

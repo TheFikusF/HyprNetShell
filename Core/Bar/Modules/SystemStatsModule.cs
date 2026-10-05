@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -10,8 +11,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class SystemStatsModule(SystemStatsModuleService service,
-    Theme theme, PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int WIDTH = 75;
     private const int GRAPH_WIDTH = 400;
@@ -23,23 +23,23 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
     };
 
     private readonly Gradient _cpuGradient = new(
-        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Violet)),
-        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Violet)),
-        new Gradient.Stop(0.75f, theme.Warning),
+        new Gradient.Stop(0, ModulesCommon.ToBackground(Color.Violet)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(Color.Violet)),
+        new Gradient.Stop(0.75f, ThemeManager.Current.Warning),
         new Gradient.Stop(1f, Color.Red)
     );
 
     private readonly Gradient _ramGradient = new(
-        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Green)),
-        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Green)),
-        new Gradient.Stop(0.70f, theme.Warning),
+        new Gradient.Stop(0, ModulesCommon.ToBackground(Color.Green)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(Color.Green)),
+        new Gradient.Stop(0.70f, ThemeManager.Current.Warning),
         new Gradient.Stop(1f, Color.Red)
     );
 
     private readonly Gradient _tempGradient = new(
-        new Gradient.Stop(0, ModulesCommon.ToBackground(theme, Color.Orange)),
-        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(theme, Color.Orange)),
-        new Gradient.Stop(0.75f, theme.Warning),
+        new Gradient.Stop(0, ModulesCommon.ToBackground(Color.Orange)),
+        new Gradient.Stop(0.6f, ModulesCommon.ToBackground(Color.Orange)),
+        new Gradient.Stop(0.75f, ThemeManager.Current.Warning),
         new Gradient.Stop(1f, Color.Red)
     );
 
@@ -67,27 +67,27 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
     {
         const Direction DIRECTION = Direction.Horizontal;
         var width = DIRECTION == Direction.Horizontal ? WIDTH : WIDTH - 30;
-        var radius = DIRECTION == Direction.Horizontal ? theme.Border.Radius : 12;
+        var radius = DIRECTION == Direction.Horizontal ? ThemeManager.Current.Border.Radius : 12;
 
         var style = new Style()
         {
             BackgroundColor = color,
             BorderRadius = new BorderRadius(left ? radius : 0, right ? radius : 0,
                 right ? radius : 0, left ? radius : 0),
-            BorderWidth = new Insets(theme.Border.Width, right ? theme.Border.Width : 0,
-                theme.Border.Width, left ? theme.Border.Width : 0),
-            BorderColor = theme.Border.Color,
+            BorderWidth = new Insets(ThemeManager.Current.Border.Width, right ? ThemeManager.Current.Border.Width : 0,
+                ThemeManager.Current.Border.Width, left ? ThemeManager.Current.Border.Width : 0),
+
             Spacing = DIRECTION == Direction.Horizontal ? 8 : 2,
             ShadowColor = null,
         };
 
-        if (left  == false && right == false)
+        if (left == false && right == false)
         {
-            style = style with { BorderWidth = new Insets(1, theme.Border.Width) };
+            style = style with { BorderWidth = new Insets(1, ThemeManager.Current.Border.Width) };
         }
 
         return new BoxNode(width, DIRECTION == Direction.Vertical
-            ? 52 - (int)(theme.Border.Width * 2)
+            ? 52 - (int)(ThemeManager.Current.Border.Width * 2)
             : 18 + 6 * 2 + 3 * 2)
         {
             Direction = DIRECTION,
@@ -96,8 +96,8 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
             Style = style,
             Children =
             [
-                new ImageNode(icon, 18, 18, theme.Text),
-                new TextNode(text, theme.Text, theme.Text),
+                new ImageNode(icon, 18, 18, ThemeManager.Current.Text),
+                new TextNode(text),
             ],
         };
     }
@@ -135,51 +135,51 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.PopupStyle(theme) with { Spacing = 8 },
+            Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
             Children =
             [
-                ModulesCommon.BuildTextWithIcon(theme, Icons.SquareActivity, "System Info"),
+                ModulesCommon.BuildTextWithIcon(Icons.SquareActivity, "System Info"),
                 BuildGraphNode(
                     100.0f,
                     stats.CpuHistory,
                     cpuColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.CPU, "CPU"),
-                        new TextNode(FormatPercent(stats.CpuPercent), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.CPU, "CPU"),
+                        new TextNode(FormatPercent(stats.CpuPercent), 14)
                     ],
                     stats.GpuHistory,
                     gpuColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.GPU, "GPU"),
-                        new TextNode(FormatPercent(stats.GpuPercent), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.GPU, "GPU"),
+                        new TextNode(FormatPercent(stats.GpuPercent), 14)
                     ]),
                 BuildGraphNode(
                     100.0f,
                     stats.RamHistory,
                     ramColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.RAM, "RAM"),
-                        new TextNode(FormatPercent(stats.RamPercent), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.RAM, "RAM"),
+                        new TextNode(FormatPercent(stats.RamPercent), 14)
                     ],
                     stats.SwapHistory,
                     swapColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.HardDrive, "Swap"),
-                        new TextNode(FormatPercent(stats.SwapPercent), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.HardDrive, "Swap"),
+                        new TextNode(FormatPercent(stats.SwapPercent), 14)
                     ]),
                 BuildGraphNode(
                     networkMaximum,
                     stats.DownloadHistory,
                     downloadColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.ArrowDown, "Download"),
-                        new TextNode(FormatRate(stats.DownloadBytesPerSecond), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.ArrowDown, "Download"),
+                        new TextNode(FormatRate(stats.DownloadBytesPerSecond), 14)
                     ],
                     stats.UploadHistory,
                     uploadColor,
                     [
-                        ModulesCommon.BuildTextWithIcon(theme, Icons.ArrowUp, "Upload"),
-                        new TextNode(FormatRate(stats.UploadBytesPerSecond), 14, theme.Text)
+                        ModulesCommon.BuildTextWithIcon(Icons.ArrowUp, "Upload"),
+                        new TextNode(FormatRate(stats.UploadBytesPerSecond), 14)
                     ]),
                 ..BuildDiskSection(stats.Disks),
             ],
@@ -189,9 +189,9 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
     private BoxNode BuildGraphNode(float max, IReadOnlyList<float> upData, Color upColor, ICollection<Node> upLabel,
         IReadOnlyList<float>? downData = null, Color? downColor = null, ICollection<Node>? downLabel = null)
     {
-        var graphBackground = theme.Panel;
-        var grid = theme.Text.MutedColor with { A = 0.22f };
-        return new BoxNode(ModulesCommon.PopupStyle(theme) with { Padding = 0 })
+        var graphBackground = ThemeManager.Current.Panel;
+        var grid = ThemeManager.Current.Text.MutedColor with { A = 0.22f };
+        return new BoxNode(ModulesCommon.PopupStyle() with { Padding = 0 })
         {
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children =
@@ -229,11 +229,11 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
             yield break;
         }
 
-        yield return ModulesCommon.BuildDivider(theme.Border, GRAPH_WIDTH, 12);
+        yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, GRAPH_WIDTH, 12);
         yield return new BoxNode(GRAPH_WIDTH)
         {
             HorizontalAlignment = ItemsAlignment.Center,
-            Children = [ModulesCommon.BuildTextWithIcon(theme, Icons.HardDrive, "Disks")],
+            Children = [ModulesCommon.BuildTextWithIcon(Icons.HardDrive, "Disks")],
         };
 
         foreach (var disk in disks)
@@ -248,8 +248,8 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
         var percentage = disk.Percent;
         var fill = percentage switch
         {
-            >= 90 => theme.Critical,
-            >= 75 => theme.Warning,
+            >= 90 => ThemeManager.Current.Critical,
+            >= 75 => ThemeManager.Current.Warning,
             _ => Color.FromRgb(80, 180, 255),
         };
 
@@ -264,15 +264,13 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service,
                     HorizontalAlignment = ItemsAlignment.Spread,
                     Children =
                     [
-                        new TextNode(disk.Name, 14.0f, theme.Text, maxWidth: GRAPH_WIDTH - 150,
-                            wrapping: TextWrapping.Ellipsis),
-                        new TextNode($"{FormatBytes(disk.UsedBytes)} / {FormatBytes(disk.TotalBytes)}  {percentage}%",
-                            14.0f, theme.Text),
+                        new TextNode(disk.Name, maxWidth: GRAPH_WIDTH - 150, wrapping: TextWrapping.Ellipsis),
+                        new TextNode($"{FormatBytes(disk.UsedBytes)} / {FormatBytes(disk.TotalBytes)}  {percentage}%"),
                     ],
                 },
                 new BoxNode(GRAPH_WIDTH, BAR_HEIGHT)
                 {
-                    Style = new Style { BackgroundColor = theme.Text.MutedColor with { A = 0.35f }, BorderRadius = 5 },
+                    Style = new Style { BackgroundColor = ThemeManager.Current.Text.MutedColor with { A = 0.35f }, BorderRadius = 5 },
                     Children =
                     [
                         new BoxNode((int)MathF.Round(GRAPH_WIDTH * percentage / 100.0f), BAR_HEIGHT)

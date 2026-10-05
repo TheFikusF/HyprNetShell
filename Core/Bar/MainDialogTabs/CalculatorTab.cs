@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 
 using System.Globalization;
 using HyprNetShell.Core.Assets;
@@ -12,8 +13,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class CalculatorTab(
     ClipboardHistoryService clipboard,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab
+    TextInputCoordinator inputs) : IMainDialogTab
 {
     private readonly TextInputCoordinator.Input _expressionInput = inputs.Create(
         "",
@@ -22,6 +22,7 @@ internal sealed class CalculatorTab(
         4096,
         transform: FilterExpression,
         alwaysActive: true);
+
     private string _result = "";
 
 
@@ -65,7 +66,7 @@ internal sealed class CalculatorTab(
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 HorizontalAlignment = ItemsAlignment.Spread,
-                Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+                Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
                 {
                     BorderRadius = 8,
                     Padding = 24,
@@ -83,11 +84,10 @@ internal sealed class CalculatorTab(
                         Children =
                         [
                             new TextNode(_expressionInput.Value.Length == 0 ? "0" : _expressionInput.Value, 24,
-                                theme.Text.MutedColor),
-                            new TextNode(_result.Length == 0 ? "=" : "= " + _result, 34,
-                                theme.Text),
+                                ThemeManager.Current.Text.MutedColor),
+                            new TextNode(_result.Length == 0 ? "=" : "= " + _result, 34),
                             new TextNode("Press Enter to copy", 18,
-                                theme.Text.MutedColor),
+                                ThemeManager.Current.Text.MutedColor),
                         ],
                     },
                 ]

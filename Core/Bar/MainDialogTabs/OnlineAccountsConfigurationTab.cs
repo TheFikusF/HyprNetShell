@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.OnlineAccounts;
@@ -8,7 +9,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accounts, Theme theme) : IMainDialogTab
+internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accounts) : IMainDialogTab
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
 
@@ -51,7 +52,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                         new TextNode(
                             "ChatGPT sign-in mirrors Zed's current Codex OAuth integration. OpenAI does not publish it as a stable third-party API, so it may change.",
                             12,
-                            theme.Text.MutedColor,
+                            ThemeManager.Current.Text.MutedColor,
                             maxWidth: 920),
                     }
                     : []),
@@ -77,11 +78,11 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 Padding = new Insets(16, 10),
                 BorderRadius = 8,
-                BorderWidth = snapshot.Connected ? theme.Border.Width : 0,
+                BorderWidth = snapshot.Connected ? ThemeManager.Current.Border.Width : 0,
             },
             Children =
             [
@@ -91,19 +92,19 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                     Style = new Style { Spacing = 14 },
                     Children =
                     [
-                        new ImageNode(ProviderIcon(snapshot.Provider), 28, 28, snapshot.Connected ? theme.Active : theme.Text),
+                        new ImageNode(ProviderIcon(snapshot.Provider), 28, 28, snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Text),
                         new BoxNode
                         {
                             Direction = Direction.Vertical,
                             Style = new Style { Spacing = 4 },
                             Children =
                             [
-                                new TextNode(snapshot.Name, 17, theme.Text),
-                                new TextNode(snapshot.Description, 12, theme.Text.MutedColor, maxWidth: 600),
+                                new TextNode(snapshot.Name, 17),
+                                new TextNode(snapshot.Description, 12, ThemeManager.Current.Text.MutedColor, maxWidth: 600),
                                 new TextNode(
                                     accountStatus,
                                     12,
-                                    snapshot.Connected ? theme.Active : theme.Text.MutedColor,
+                                    snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor,
                                     maxWidth: 620),
                             ],
                         },
@@ -130,7 +131,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
 
     private BoxNode BuildButton(string label, string key, Action? action, bool active = false)
     {
-        var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(active ? theme.Active : theme.Panel);
+        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(active ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         if (action is null)
         {
             state.Hovered.Value = false;
@@ -143,13 +144,13 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             Opacity = action is null ? 0.55f : 1.0f,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(12, 7),
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new TextNode(label, 13, theme.Text)],
+            Children = [new TextNode(label, 13)],
         };
     }
 

@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering.Primitives;
@@ -10,31 +11,22 @@ internal sealed class SegmentedSwitch
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _states = [];
 
-    public BoxNode Build(
-        Theme theme,
-        IReadOnlyList<Item> items,
-        string selectedId,
-        Action<string> onSelected) => new()
+    public BoxNode Build(IReadOnlyList<Item> items, string selectedId, Action<string> onSelected) => new()
     {
         Direction = Direction.Horizontal,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Center,
-        Children =
-        [
-            ..items.Select((item, index) => BuildItem(theme, item, selectedId, onSelected, index, items.Count)),
-        ],
+        Children = [..items.Select((item, index) => BuildItem(item, selectedId, onSelected, index, items.Count))],
     };
 
-    private BoxNode BuildItem(
-        Theme theme,
-        Item item,
+    private BoxNode BuildItem(Item item,
         string selectedId,
         Action<string> onSelected,
         int index,
         int count)
     {
         var selected = item.Id.Equals(selectedId, StringComparison.Ordinal);
-        var normal = selected ? theme.Active : theme.Panel;
+        var normal = selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         var state = _states.GetState(item.Id, normal).UpdateColor(normal);
 
         return new BoxNode
@@ -43,9 +35,9 @@ internal sealed class SegmentedSwitch
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = selected ? null : () => onSelected(item.Id),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background, index == 0, index == count - 1) with
+            Style = ModulesCommon.ModuleStyle(state.Background, index == 0, index == count - 1) with
             {
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(8, 6),
             },
             Children = [item.Content],

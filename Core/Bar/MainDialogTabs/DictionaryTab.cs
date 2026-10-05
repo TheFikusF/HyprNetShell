@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -13,8 +14,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class DictionaryTab(
     DictionaryService dictionary,
     ClipboardHistoryService clipboard,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab, IDisposable
+    TextInputCoordinator inputs) : IMainDialogTab, IDisposable
 {
     private sealed class ResultState : ModulesCommon.BoxState
     {
@@ -34,6 +34,7 @@ internal sealed class DictionaryTab(
         "Type an English word or phrase...",
         MaximumQueryLength,
         alwaysActive: true);
+
     private DictionaryLookupResult _result = DictionaryLookupResult.Empty;
     private CancellationTokenSource? _lookupCancellation;
     private string _query = "";
@@ -165,7 +166,7 @@ internal sealed class DictionaryTab(
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = result.Items.Count == 0
-                ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, theme.Text.MutedColor)]
+                ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, ThemeManager.Current.Text.MutedColor)]
                 : result.Items
                     .VisibleItems(firstIndex, VisibleResultCount)
                     .Select(item => BuildResult(item.Item, item.Index, selectedIndex))
@@ -190,12 +191,11 @@ internal sealed class DictionaryTab(
                 content,
                 firstIndex,
                 result.Items.Count,
-                VisibleResultCount,
-                theme),
+                VisibleResultCount),
         };
         if (result.Errors.Count > 0)
         {
-            children.Add(new TextNode(string.Join(" · ", result.Errors), theme.Text, theme.Warning));
+            children.Add(new TextNode(string.Join(" · ", result.Errors), color: ThemeManager.Current.Warning));
         }
 
         return new BoxNode(Style.Spacer)
@@ -256,7 +256,7 @@ internal sealed class DictionaryTab(
     private BoxNode BuildResult(DictionaryResultItem item, int index, int selectedIndex)
     {
         var selected = index == selectedIndex;
-        var state = _resultStates.GetState(index, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _resultStates.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var details = item.Example is { Length: > 0 }
             ? $"Example: {item.Example}"
             : item.Attribution ?? "";
@@ -274,10 +274,10 @@ internal sealed class DictionaryTab(
                 }
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(8, 8, 8, 16),
                 Spacing = 4,
             },
@@ -285,38 +285,35 @@ internal sealed class DictionaryTab(
             [
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
-                    new TextNode(item.Heading, theme.Text.HeaderSize, theme.Text,
-                        maxWidth: 600, wrapping: TextWrapping.Wrap),
+                    new TextNode(item.Heading, ThemeManager.Current.Text.HeaderSize, maxWidth: 600, wrapping: TextWrapping.Wrap),
                     new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                     {
-                        new TextNode(item.Source, theme.Text, theme.Text.MutedColor),
+                        new TextNode(item.Source, color: ThemeManager.Current.Text.MutedColor),
                         BuildCopyButton(item, state.Copy),
                     },
                 },
-                new TextNode(item.Definition, theme.Text, theme.Text,
-                    maxWidth: 820, wrapping: TextWrapping.Wrap),
-                new TextNode(details, theme.Text, theme.Text.MutedColor,
-                    maxWidth: 820, wrapping: TextWrapping.Wrap),
+                new TextNode(item.Definition, maxWidth: 820, wrapping: TextWrapping.Wrap),
+                new TextNode(details, color: ThemeManager.Current.Text.MutedColor, maxWidth: 820, wrapping: TextWrapping.Wrap),
             ],
         };
     }
 
     private BoxNode BuildSearchButton(bool selected, bool isLookingUp)
     {
-        _searchState.UpdateColor(selected ? theme.Active : theme.Panel);
+        _searchState.UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode(46, 46)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = _searchState.Hovered,
             OnClick = isLookingUp ? null : SelectSearchAndActivate,
-            Style = ModulesCommon.ModuleStyle(theme, _searchState.Background) with
+            Style = ModulesCommon.ModuleStyle(_searchState.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = 0,
             },
-            Children = [new ImageNode(Icons.Search, 18, 18, isLookingUp ? theme.Text.MutedColor : theme.Text)],
+            Children = [new ImageNode(Icons.Search, 18, 18, isLookingUp ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text)],
         };
     }
 
@@ -325,21 +322,21 @@ internal sealed class DictionaryTab(
         var details = item.Example is { Length: > 0 }
             ? $"\nExample: {item.Example}"
             : "";
-        state.UpdateColor(theme.Panel);
+        state.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode(32, 32)
         {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => _ = clipboard.CopyTextAsync(GetTextToCopy(item)),
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Padding = 0,
                 ShadowColor = null,
             },
-            Children = [new ImageNode(Icons.Copy, 16, 16, theme.Text)],
+            Children = [new ImageNode(Icons.Copy, 16, 16, ThemeManager.Current.Text)],
         };
     }
 

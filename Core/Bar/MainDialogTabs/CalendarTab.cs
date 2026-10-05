@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Modules.CenterWidgets;
@@ -15,7 +16,7 @@ internal sealed class CalendarTab : IMainDialogTab
     private const int VisibleEventCount = 7;
 
     private readonly CalendarService _calendar;
-    private readonly Theme _theme;
+
     private readonly CalendarWidget _month;
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private DateOnly _selectedDate = DateOnly.FromDateTime(DateTime.Today);
@@ -27,11 +28,11 @@ internal sealed class CalendarTab : IMainDialogTab
 
     public bool HandleScroll => false;
 
-    internal CalendarTab(CalendarService calendar, Theme theme)
+    internal CalendarTab(CalendarService calendar)
     {
         _calendar = calendar;
-        _theme = theme;
-        _month = new CalendarWidget(calendar, theme, 400);
+
+        _month = new CalendarWidget(calendar, 400);
     }
 
     public void Activate()
@@ -111,7 +112,7 @@ internal sealed class CalendarTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events) => new (420)
+    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events) => new(420)
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -120,30 +121,25 @@ internal sealed class CalendarTab : IMainDialogTab
             MainDialogTabUi.BuildSectionHeader(_selectedDate.ToString("dddd, MMMM d"),
                 events.Count == 0 ? "No events" : $"{events.Count} event{(events.Count == 1 ? "" : "s")}"),
 
-            BuildEventsList(events, _firstEventIndex, VisibleEventCount,
-                _theme, _buttonStates, delta => ScrollEvents(delta, events.Count))
+            BuildEventsList(events, _firstEventIndex, VisibleEventCount, _buttonStates, delta => ScrollEvents(delta, events.Count))
         ],
     };
 
     internal static Node BuildEventsList(
         IReadOnlyList<CalendarOccurrence> events,
         int firstIndex,
-        int visibleEvents,
-        Theme theme,
-        Dictionary<string, ModulesCommon.BoxState> buttonStates,
+        int visibleEvents, Dictionary<string, ModulesCommon.BoxState> buttonStates,
         Action<float> onScroll) => events.Count == 0
-            ? MainDialogTabUi.BuildMessage(theme, "Nothing scheduled for this day.")
+            ? MainDialogTabUi.BuildMessage("Nothing scheduled for this day.")
             : BoundedListUi.BuildList(events,
-                (occurrence, index) => BuildEvent(occurrence, index, theme, buttonStates),
-                firstIndex, visibleEvents, theme, onScroll);
+                (occurrence, index) => BuildEvent(occurrence, index, buttonStates),
+                firstIndex, visibleEvents, onScroll);
 
     private static BoxNode BuildEvent(
         CalendarOccurrence occurrence,
-        int index,
-        Theme theme,
-        Dictionary<string, ModulesCommon.BoxState> buttonStates)
+        int index, Dictionary<string, ModulesCommon.BoxState> buttonStates)
     {
-        var state = buttonStates.GetState("event-" + index, theme.Panel).UpdateColor(theme.Panel);
+        var state = buttonStates.GetState("event-" + index, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
         var time = occurrence.IsAllDay
             ? "All day"
             : occurrence.End > occurrence.Start
@@ -156,7 +152,7 @@ internal sealed class CalendarTab : IMainDialogTab
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
@@ -167,12 +163,11 @@ internal sealed class CalendarTab : IMainDialogTab
             [
                 new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
                 {
-                    new TextNode(occurrence.Title, theme.Text.HeaderSize, theme.Text, maxWidth: 275, maxLines: 3, wrapping: TextWrapping.Wrap),
-                    new TextNode(time, theme.Text, theme.Text.MutedColor),
+                    new TextNode(occurrence.Title, ThemeManager.Current.Text.HeaderSize, maxWidth: 275, maxLines: 3, wrapping: TextWrapping.Wrap),
+                    new TextNode(time, color: ThemeManager.Current.Text.MutedColor),
                 },
                 ..(occurrence.Location is { Length: > 0 } location
-                    ? new Node[] { new TextNode(location, theme.Text, theme.Text.MutedColor, maxWidth: 380,
-                        wrapping: TextWrapping.Ellipsis) }
+                    ? new Node[] { new TextNode(location, color: ThemeManager.Current.Text.MutedColor, maxWidth: 380, wrapping: TextWrapping.Ellipsis) }
                     : []),
             ],
         };
@@ -180,7 +175,7 @@ internal sealed class CalendarTab : IMainDialogTab
 
     private BoxNode BuildButton(string label, string key, Action action, bool disabled)
     {
-        var state = _buttonStates.GetState(key, _theme.Panel).UpdateColor(_theme.Panel);
+        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -188,7 +183,7 @@ internal sealed class CalendarTab : IMainDialogTab
             IsHovered = disabled ? null : state.Hovered,
             OnClick = disabled ? null : action,
             Opacity = disabled ? 0.5f : 1,
-            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
@@ -197,8 +192,8 @@ internal sealed class CalendarTab : IMainDialogTab
             },
             Children =
             [
-                new ImageNode(Icons.Reboot, 16, 16, _theme.Text),
-                new TextNode(label, _theme.Text, _theme.Text),
+                new ImageNode(Icons.Reboot, 16, 16, ThemeManager.Current.Text),
+                new TextNode(label),
             ],
         };
     }

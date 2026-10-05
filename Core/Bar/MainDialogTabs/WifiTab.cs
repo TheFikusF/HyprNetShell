@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
@@ -18,13 +19,14 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
 
     private readonly NetworkModuleService service;
     private readonly TextInputCoordinator inputs;
-    private readonly Theme theme;
+
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private readonly Ref<float> _wifiSwitchAnimation = new();
     private readonly TextInputCoordinator.Input _passwordInput;
+
     private IReadOnlyList<WifiNetworkSnapshot> _networks = [];
     private Task? _scanTask;
     private Task? _operationTask;
@@ -42,12 +44,11 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
 
     internal WifiTab(
         NetworkModuleService service,
-        TextInputCoordinator inputs,
-        Theme theme)
+        TextInputCoordinator inputs)
     {
         this.service = service;
         this.inputs = inputs;
-        this.theme = theme;
+
         _passwordInput = inputs.Create(
             "",
             "",
@@ -203,7 +204,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         [
             new TextNode(network.Connected && network.Type.Equals("wifi", StringComparison.OrdinalIgnoreCase)
                 ? $"Connected to {network.Connection}"
-                : "Choose a wireless network", theme.Text.HeaderSize, theme.Text),
+                : "Choose a wireless network", ThemeManager.Current.Text.HeaderSize),
             new BoxNode
             {
                 OnClick = network.WifiAvailable ? () => SetWifiEnabled(!enabled) : null,
@@ -211,12 +212,12 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                 Style = Style.Spacer,
                 Children =
                 [
-                    new TextNode(enabled ? "On" : "Off", theme.Text, theme.Text.MutedColor),
+                    new TextNode(enabled ? "On" : "Off", color: ThemeManager.Current.Text.MutedColor),
                     new SwitchNode(enabled, _wifiSwitchAnimation)
                     {
-                        OffTrackColor = theme.Text.MutedColor,
-                        OnTrackColor = theme.Active,
-                        KnobColor = theme.Text,
+                        OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                        OnTrackColor = ThemeManager.Current.Active,
+                        KnobColor = ThemeManager.Current.Text,
                     },
                 ],
             },
@@ -229,7 +230,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         int firstIndex,
         bool busy)
     {
-        yield return ModulesCommon.BuildDivider(theme.Border, height: 12);
+        yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12);
         if (!enabled)
         {
             yield return BuildMessage("Wi-Fi is turned off");
@@ -262,15 +263,14 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
             content,
             firstIndex,
             networks.Count,
-            VisibleNetworkCount,
-            theme);
+            VisibleNetworkCount);
     }
 
     private BoxNode BuildNetworkRow(WifiNetworkSnapshot network, int index, bool busy)
     {
-        var rowState = _rowStates.GetState(network.Ssid, theme.Panel);
+        var rowState = _rowStates.GetState(network.Ssid, ThemeManager.Current.Panel);
         var selected = index == _selectedIndex;
-        var baseColor = selected ? Color.Lighten(theme.Panel, 0.1f) : theme.Panel;
+        var baseColor = selected ? Color.Lighten(ThemeManager.Current.Panel, 0.1f) : ThemeManager.Current.Panel;
         rowState.UpdateColor(baseColor);
         var security = IsSecured(network) ? network.Security : "Open";
 
@@ -280,10 +280,10 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => _selectedIndex = index,
-            Style = ModulesCommon.ModuleStyle(theme, rowState.Background) with
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
             },
             Children =
@@ -293,8 +293,8 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                     new RadioButtonNode(network.Active)
                     {
                         SelectedColor = Color.Orange,
-                        UnselectedColor = theme.Text.MutedColor,
-                        BackgroundColor = theme.Panel,
+                        UnselectedColor = ThemeManager.Current.Text.MutedColor,
+                        BackgroundColor = ThemeManager.Current.Panel,
                     },
                     WifiIcon(network.Signal),
                     new BoxNode
@@ -303,8 +303,8 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                         Style = new Style { Spacing = 2 },
                         Children =
                         [
-                            new TextNode(network.Ssid, theme.Text, theme.Text, maxWidth: 310),
-                            new TextNode(network.SavedConnectionName is null ? security : $"{security} · Saved", 12, theme.Text.MutedColor),
+                            new TextNode(network.Ssid, maxWidth: 310),
+                            new TextNode(network.SavedConnectionName is null ? security : $"{security} · Saved", 12, ThemeManager.Current.Text.MutedColor),
                         ],
                     },
                 },
@@ -328,8 +328,8 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         Style = new Style { Spacing = 14 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.QrCode, $"Share {network.Ssid}", maxTextWidth: 360),
-            new TextNode("Scan to connect to this Wi-Fi network", theme.Text, theme.Text.MutedColor),
+            ModulesCommon.BuildTextWithIcon(Icons.QrCode, $"Share {network.Ssid}", maxTextWidth: 360),
+            new TextNode("Scan to connect to this Wi-Fi network", color: ThemeManager.Current.Text.MutedColor),
             qrImage is null
                 ? BuildMessage("Reading network credentials...")
                 : new BoxNode
@@ -341,15 +341,15 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         ],
     };
 
-    private BoxNode BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new ()
+    private BoxNode BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new()
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 14 },
         Children =
         [
-            ModulesCommon.BuildTextWithIcon(theme, Icons.Lock, $"Connect to {network.Ssid}", maxTextWidth: 360),
-            new TextNode("Enter the network password", theme.Text, theme.Text.MutedColor),
+            ModulesCommon.BuildTextWithIcon(Icons.Lock, $"Connect to {network.Ssid}", maxTextWidth: 360),
+            new TextNode("Enter the network password", color: ThemeManager.Current.Text.MutedColor),
             inputs.Build(_passwordInput),
             new BoxNode
             {
@@ -366,38 +366,38 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
     };
 
     private BoxNode BuildButton(string text, string key, Action? action) =>
-        MainDialogTabUi.BuildButton(theme, _buttonStates, text, key, action);
+        MainDialogTabUi.BuildButton(_buttonStates, text, key, action);
 
     private BoxNode BuildIconButton(SvgAsset icon, string key, Action? action)
     {
-        var state = _buttonStates.GetState(key, theme.Panel).UpdateColor(theme.Panel);
-        return new (34, 34)
+        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
+        return new(34, 34)
         {
             IsHovered = state.Hovered,
             OnClick = action,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 7,
                 BorderWidth = 0,
                 Padding = 6,
             },
-            Children = [new ImageNode(icon, 16, 16, action is null ? theme.Text.MutedColor : theme.Text)],
+            Children = [new ImageNode(icon, 16, 16, action is null ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text)],
         };
     }
 
-    private Node BuildStatus(string? status) => MainDialogTabUi.BuildStatus(theme, status);
+    private Node BuildStatus(string? status) => MainDialogTabUi.BuildStatus(status);
 
-    private BoxNode BuildMessage(string message) => MainDialogTabUi.BuildMessage(theme, message);
+    private BoxNode BuildMessage(string message) => MainDialogTabUi.BuildMessage(message);
 
-    private ImageNode WifiIcon(int? signal) => new (Icons.WifiStrength[signal switch
+    private ImageNode WifiIcon(int? signal) => new(Icons.WifiStrength[signal switch
     {
         null or <= 25 => 0,
         <= 50 => 1,
         <= 75 => 2,
         _ => 3,
-    }], 18, 18, theme.Text);
+    }], 18, 18, ThemeManager.Current.Text);
 
 
 

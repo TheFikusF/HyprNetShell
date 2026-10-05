@@ -32,7 +32,7 @@ HyprNetShell/
 │   ├── Assets/                        [SvgAsset] declarations used by generated code
 │   ├── Bar/
 │   │   ├── StatusBar.cs               Composition root for modules and services
-│   │   ├── Theme.cs                   Shared visual theme values
+
 │   │   ├── Modules/                   Bar modules and center widgets
 │   │   └── MainDialogTabs/            Launcher, calculator, clipboard, wallpaper, config
 │   ├── Features/
@@ -45,6 +45,8 @@ HyprNetShell/
 │   └── Services/                      Shared service interfaces
 ├── GUI/
 │   ├── HyprNetShell.GUI.csproj        Custom UI/layout project
+│   ├── Theme.cs                       Shared visual theme values
+│   ├── ThemeManager.cs                Current application theme
 │   └── Layout/
 │       ├── Layout.cs                  Root layout, current input, Wayland input regions
 │       ├── Node.cs                    Base node and layout/style primitives
@@ -100,13 +102,15 @@ Use these locations consistently:
 - external state or side effects: `Core/Features/`;
 - immutable values passed from a service to UI: `Core/Models/`;
 - reusable process/platform helper: `Core/Platform/`;
-- shared theme values: `Core/Bar/Theme.cs`.
+- shared theme values: `GUI/Theme.cs`, accessed through `ThemeManager.Current`.
 
 Feature services should expose snapshots rather than allowing rendering code to mutate service internals. Command failures and unavailable hardware should normally produce an empty snapshot or preserve the previous snapshot instead of terminating the frame loop.
 
 ### GUI
 
 `GUI` is a small retained node system, not a wrapper around an external toolkit. Nodes measure, arrange, draw, and register interactive rectangles. Input originates in `Layout.Input`, and interactive nodes contribute rectangles through `Layout.AddInputRegion`.
+
+`ThemeManager.Current` owns the application theme; do not pass theme instances through modules or dialogs. Text and dropdown nodes use its text size/color when constructed unless explicitly overridden. Box borders use its border color when a nonzero border width is set without an explicit color. Rebuild retained text/dropdown nodes after replacing the theme to refresh their defaults.
 
 When adding a node:
 

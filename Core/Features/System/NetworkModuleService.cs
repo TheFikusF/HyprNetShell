@@ -276,8 +276,9 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
             var tunnels = ReadActiveTunnels(await activeConnectionsTask);
             if (tunnels.Any(tunnel => tunnel.IsTailscale))
             {
-                var peers = await ReadTailscalePeersAsync(cancellationToken);
+                var (peers, running) = await ReadTailscalePeersAsync(cancellationToken);
                 tunnels = tunnels
+                    .Where(tunnel => !tunnel.IsTailscale || running != false)
                     .Select(tunnel => tunnel.IsTailscale ? tunnel with { Peers = peers } : tunnel)
                     .ToArray();
             }
@@ -341,7 +342,17 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
     internal Task<WifiOperationResult> SetWifiEnabledAsync(bool enabled, CancellationToken cancellationToken) =>
         RunNmcliAsync(["radio", "wifi", enabled ? "on" : "off"], null, TimeSpan.FromSeconds(4), cancellationToken);
 
-    internal async Task<IReadOnlyList<WifiNetworkSnapshot>> ScanWifiNetworksAsync(CancellationToken cancellationToken)
+    internal async Task<WifiOperationResult> TurnOffTailscaleAsync()
+        {
+            var result = await RunNmcliAsync(["down"], null, TimeSpan.FromSeconds(5), _lifetime.Token, "tailscale");
+            if (!result.Success && !_lifetime.IsCancellationRequested)
+            {
+                AppLogger.Warning("Network", $"Could not turn off Tailscale: {result.Error}");
+            }
+            return result;
+        }
+
+        internal async Task<IReadOnlyList<WifiNetworkSnapshot>> ScanWifiNetworksAsync(CancellationToken cancellationToken)
     {
         var scanTask = CommandRunner.TryReadAsync(
             "nmcli",
@@ -525,7 +536,8 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         IReadOnlyList<string> arguments,
         string? standardInput,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string fileName = "nmcli")
     {
         Process? process = null;
         try
@@ -534,7 +546,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
             timeoutCts.CancelAfter(timeout);
             var startInfo = new ProcessStartInfo
             {
-                FileName = "nmcli",
+                FileName = fileName,
                 RedirectStandardInput = standardInput is not null,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -549,7 +561,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
             process = Process.Start(startInfo);
             if (process is null)
             {
-                return WifiOperationResult.Failed("Could not start nmcli");
+                return WifiOperationResult.Failed($"Could not start {fileName}");
             }
 
             var outputTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
@@ -574,12 +586,12 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetime.IsCancellationRequested)
         {
             TryKill(process);
-            return WifiOperationResult.Failed("The Wi-Fi operation was cancelled");
+            return WifiOperationResult.Failed($"The {fileName} operation was cancelled");
         }
         catch (OperationCanceledException)
         {
             TryKill(process);
-            return WifiOperationResult.Failed("The Wi-Fi operation timed out");
+            return WifiOperationResult.Failed($"The {fileName} operation timed out");
         }
         catch (Exception exception)
         {
@@ -649,7 +661,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         return tunnels;
     }
 
-    private static async Task<IReadOnlyList<TailscalePeerSnapshot>> ReadTailscalePeersAsync(
+    private static async Task<(IReadOnlyList<TailscalePeerSnapshot> Peers, bool? Running)> ReadTailscalePeersAsync(
         CancellationToken cancellationToken)
     {
         var json = await CommandRunner.TryReadAsync(
@@ -659,25 +671,27 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
             cancellationToken);
         if (string.IsNullOrWhiteSpace(json))
         {
-            return [];
+            return ([], null);
         }
 
         try
         {
             var status = JsonSerializer.Deserialize(json, TailscaleJsonContext.Default.TailscaleStatus);
-            return status?.Peer.Values
+            var peers = status?.Peer?.Values
+                .OfType<TailscalePeerStatus>()
                 .Where(peer => peer.Online)
                 .Select(peer => new TailscalePeerSnapshot(
                     PeerName(peer),
-                    peer.OS,
-                    peer.TailscaleIPs))
+                    peer.OS ?? "",
+                    peer.TailscaleIPs ?? []))
                 .OrderBy(peer => peer.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? [];
+            return (peers, status?.BackendState is { } state ? state.Equals("Running", StringComparison.OrdinalIgnoreCase) : null);
         }
         catch (JsonException exception)
         {
             AppLogger.Warning("Network", "Could not parse Tailscale device status", exception);
-            return [];
+            return ([], null);
         }
     }
 
@@ -688,7 +702,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
             return peer.HostName;
         }
 
-        var dnsName = peer.DNSName.TrimEnd('.');
+        var dnsName = peer.DNSName?.TrimEnd('.');
         return string.IsNullOrWhiteSpace(dnsName) ? "Unknown device" : dnsName;
     }
 

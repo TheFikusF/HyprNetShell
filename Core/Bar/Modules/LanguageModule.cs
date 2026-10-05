@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.GUI.Layout;
@@ -24,7 +25,7 @@ internal sealed class LanguageModule : IDrawableModule
 
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
-    private readonly Theme _theme;
+
     private readonly NodeWithPopup _node;
 
     private string _lastLayoutName = "";
@@ -33,14 +34,13 @@ internal sealed class LanguageModule : IDrawableModule
     public bool IsShown => _showUntil > DateTime.UtcNow;
 
     public LanguageModule(
-            HyprlandService hyprland,
-            IHyprctl hyprctl,
-            Theme theme,
-            PopupCoordinator popupCoordinator)
+        HyprlandService hyprland,
+        IHyprctl hyprctl,
+        PopupCoordinator popupCoordinator)
     {
         _hyprland = hyprland;
         _hyprctl = hyprctl;
-        _theme = theme;
+
         _node = new(popupCoordinator, "language_module", ignorePopupQueue: true)
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -71,8 +71,8 @@ internal sealed class LanguageModule : IDrawableModule
                 HorizontalAlignment = ItemsAlignment.Center,
                 OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName),
                 OnScroll = delta => ScrollLanguage(keyboardName, layoutName, delta),
-                Style = ModulesCommon.ModuleStyle(_theme, ModulesCommon.ToBackground(_theme, Color.FromHex("#0CC665"))),
-                Children = [new TextNode(alias, _theme.Text, _theme.Text)]
+                Style = ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.FromHex("#0CC665"))),
+                Children = [new TextNode(alias)]
             }
         ], () => BuildPopup(keyboardName));
     }
@@ -101,15 +101,15 @@ internal sealed class LanguageModule : IDrawableModule
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(_theme),
-        Children = [.._aliases.Keys.Select((layout, index) => BuildPopupRow(layout, keyboardName, index))]
+        Style = ModulesCommon.PopupStyle(),
+        Children = [.. _aliases.Keys.Select((layout, index) => BuildPopupRow(layout, keyboardName, index))]
     };
 
     private BoxNode BuildPopupRow(string text, string keyboardName, int index)
     {
         var alias = _aliases[text];
-        var normal = text == _lastLayoutName ? _theme.Active : _theme.Panel;
-        var fontSize = text == _lastLayoutName ? 20.0f : _theme.Text;
+        var normal = text == _lastLayoutName ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
+        var fontSize = text == _lastLayoutName ? 20.0f : ThemeManager.Current.Text;
         var state = _languagesRowStates.GetState(text, normal).UpdateColor(normal);
         return new BoxNode
         {
@@ -118,13 +118,13 @@ internal sealed class LanguageModule : IDrawableModule
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, index),
-            Style = ModulesCommon.ModuleStyle(_theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = text == _lastLayoutName ? _theme.Border.Width : 0,
+                BorderWidth = text == _lastLayoutName ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(0, text == _lastLayoutName ? 12 : 8)
             },
-            Children = [new TextNode(alias, fontSize, _theme.Text)]
+            Children = [new TextNode(alias, fontSize)]
         };
     }
 }

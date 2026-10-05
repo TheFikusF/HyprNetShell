@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Logging;
@@ -43,7 +44,7 @@ internal static class DesktopApplicationLaunch
     }
 }
 
-internal sealed class ApplicationResultInteraction(Theme theme)
+internal sealed class ApplicationResultInteraction()
 {
     private readonly AppIconResolver _icons = new();
     private readonly Dictionary<int, ApplicationButtonState> _states = [];
@@ -135,9 +136,7 @@ internal sealed class ApplicationResultInteraction(Theme theme)
             selected,
             _selectedColumn,
             state,
-            _icons,
-            theme,
-            () =>
+            _icons, () =>
             {
                 _selectedColumn = ApplicationSelectionColumn.Default;
                 activateDefault();
@@ -150,5 +149,5 @@ internal sealed class ApplicationResultInteraction(Theme theme)
             });
     }
 
-    private ApplicationButtonState State(int index) => _states.GetState(index, theme.Panel);
+    private ApplicationButtonState State(int index) => _states.GetState(index, ThemeManager.Current.Panel);
 }

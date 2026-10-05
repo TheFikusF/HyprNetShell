@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -10,7 +11,7 @@ public static class ModulesCommon
 {
     private static readonly AppIconResolver IconResolver = new();
 
-    public static Color ToBackground(Theme theme, Color color) => Color.Lerp(theme.Panel, color, 0.125f) with { A = 0.9f };
+    public static Color ToBackground(Color color) => Color.Lerp(ThemeManager.Current.Panel, color, 0.125f) with { A = 0.9f };
 
     public static Node BuildDivider(Color color, int? width = null, int height = 24) => new BoxNode(width, height)
     {
@@ -20,7 +21,7 @@ public static class ModulesCommon
         Children = [new BoxNode(height: 1) { Style = new Style { BackgroundColor = color } }]
     };
 
-    public static Node BuildTextWithIcon(Theme theme, SvgAsset icon, string text, Color? color = null,
+    public static Node BuildTextWithIcon(SvgAsset icon, string text, Color? color = null,
         Style style = default, int? width = null, int? maxTextWidth = null) =>
         new BoxNode(width)
         {
@@ -29,43 +30,41 @@ public static class ModulesCommon
             Style = style with { Spacing = 8 },
             Children =
             [
-                new ImageNode(icon, 18, 18, color ?? theme.Text),
-                new TextNode(text, theme.Text, color ?? theme.Text, maxTextWidth,
-                    maxTextWidth.HasValue ? TextWrapping.Ellipsis : TextWrapping.NoWrap),
+                new ImageNode(icon, 18, 18, color ?? ThemeManager.Current.Text),
+                new TextNode(text, color: color, maxWidth: maxTextWidth, wrapping: maxTextWidth.HasValue ? TextWrapping.Ellipsis : TextWrapping.NoWrap),
             ],
         };
 
-    public static Node BuildBadge(string text, Color fill, Theme theme) => new BoxNode(14, 14)
+    public static Node BuildBadge(string text, Color fill) => new BoxNode(14, 14)
     {
         Direction = Direction.Horizontal,
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(theme.Border.Radius) },
-        Children = { new TextNode(text, 8, theme.Text) },
+        Style = new Style { BackgroundColor = fill, BorderRadius = new BorderRadius(ThemeManager.Current.Border.Radius) },
+        Children = { new TextNode(text, 8) },
     };
 
-    public static Node BuildAppBadge(string className, int iconSize, Color fill, Theme theme)
+    public static Node BuildAppBadge(string className, int iconSize, Color fill)
     {
         var imagePath = IconResolver.TryResolve(className);
         return imagePath is null
-            ? BuildBadge(AppBadge(className), fill, theme)
+            ? BuildBadge(AppBadge(className), fill)
             : new ImageNode(imagePath, iconSize, iconSize);
     }
 
-    public static Style ModuleStyle(Theme theme, Color fill, bool left = true, bool right = true) => new()
+    public static Style ModuleStyle(Color fill, bool left = true, bool right = true) => new()
     {
         BackgroundColor = fill,
-        BorderColor = theme.Border,
-        BorderRadius = new BorderRadius(left ? theme.Border.Radius : 0, right ? theme.Border.Radius : 0,
-            right ? theme.Border.Radius : 0, left ? theme.Border.Radius : 0),
-        BorderWidth = new Insets(theme.Border.Width, right ? theme.Border.Width : 0,
-            theme.Border.Width, left ? theme.Border.Width : 0),
+        BorderRadius = new BorderRadius(left ? ThemeManager.Current.Border.Radius : 0, right ? ThemeManager.Current.Border.Radius : 0,
+            right ? ThemeManager.Current.Border.Radius : 0, left ? ThemeManager.Current.Border.Radius : 0),
+        BorderWidth = new Insets(ThemeManager.Current.Border.Width, right ? ThemeManager.Current.Border.Width : 0,
+            ThemeManager.Current.Border.Width, left ? ThemeManager.Current.Border.Width : 0),
         Padding = new Insets(8, 6),
         ShadowColor = Color.Black with { A = 0.45f },
         ShadowDistance = 4.0f
     };
 
-    public static Style PopupStyle(Theme theme) => ModuleStyle(theme, Color.FromRgb(0, 0, 0, 0.85f)) with
+    public static Style PopupStyle() => ModuleStyle(Color.FromRgb(0, 0, 0, 0.85f)) with
     {
         BorderRadius = 8,
         Padding = 8,
@@ -80,16 +79,16 @@ public static class ModulesCommon
         return string.IsNullOrWhiteSpace(className) ? "?" : className[..1].ToUpperInvariant();
     }
 
-    public static BoxNode CentralWidgetHeader(SvgAsset icon, string text, Action? onClick, BoxState state, Theme theme)
+    public static BoxNode CentralWidgetHeader(SvgAsset icon, string text, Action? onClick, BoxState state)
     {
-        state.UpdateColor(theme.Panel);
+        state.UpdateColor(ThemeManager.Current.Panel);
         return new(height: 34)
         {
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             OnClick = onClick,
             IsHovered = onClick is null ? null : state.Hovered,
-            Style = ModuleStyle(theme, state.Background) with
+            Style = ModuleStyle(state.Background) with
             {
                 Padding = new Insets(10, 0),
                 BorderRadius = 8,
@@ -98,8 +97,8 @@ public static class ModulesCommon
             },
             Children =
             [
-                new ImageNode(icon, 22, 22, theme.Text),
-                new TextNode(text, 22, theme.Text),
+                new ImageNode(icon, 22, 22, ThemeManager.Current.Text),
+                new TextNode(text, 22),
             ],
         };
     }

@@ -22,13 +22,14 @@ public class MarqueeTextNode : Node
     public MarqueeTextNode(
         string text,
         int visibleCharacters = 50,
-        float fontSize = 14.0f,
+        float? fontSize = null,
         Color? color = null)
     {
         _text = text;
         _visibleCharacters = Math.Max(1, visibleCharacters);
-        _fontSize = fontSize;
-        _color = color ?? Color.FromRgb(255, 255, 255);
+        _fontSize = fontSize ?? ThemeManager.Current.Text.Size;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(_fontSize);
+        _color = color ?? ThemeManager.Current.Text.Color;
     }
 
     public override void Draw(IRenderApi renderer, int x, int y)

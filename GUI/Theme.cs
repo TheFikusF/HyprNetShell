@@ -1,6 +1,6 @@
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar;
+namespace HyprNetShell.GUI;
 
 public sealed record Theme
 {
@@ -30,15 +30,17 @@ public sealed record Theme
     public Color Warning { get; init; }
     public Color Critical { get; init; }
 
+    public int IconSize { get; init; }
     public BorderParams Border { get; init; }
     public TextParams Text { get; init; }
 
-    public static Theme Default { get; } = new()
+    internal static Theme CreateDefault() => new()
     {
         Panel = Color.FromRgb(31, 35, 44, 0.9f),
         Active = Color.Lerp(Color.FromRgb(31, 35, 44, 0.92f), Color.Orange, 0.5f),
         Warning = Color.FromRgb(230, 126, 34, 0.9f),
         Critical = Color.FromRgb(231, 76, 60, 0.9f),
+        IconSize = 18,
         Text = new TextParams
         {
             Color = Color.White,

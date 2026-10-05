@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -15,7 +16,6 @@ internal sealed class PowerModule(
     DialogService dialogs,
     IHyprctl hyprctl,
     Action requestLockScreen,
-    Theme theme,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private readonly Ref<bool> _settingsHovered = new();
@@ -30,16 +30,16 @@ internal sealed class PowerModule(
     };
 
     public Node Draw() => _node.Draw([
-            new BoxNode(height: 52 - (int)(theme.Border.Width * 2))
+            new BoxNode(height: 52 - (int)(ThemeManager.Current.Border.Width * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,
                 Style =
-                    ModulesCommon.ModuleStyle(theme, ModulesCommon.ToBackground(theme, Color.FromRgb(210, 55, 55))) with
+                    ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.FromRgb(210, 55, 55))) with
                     {
                         BorderRadius = 12,
                         Padding = 8
                     },
-                Children = [new ImageNode(Icons.Power, 18, 18, theme.Text)],
+                Children = [new ImageNode(Icons.Power, 18, 18, ThemeManager.Current.Text)],
             },
         ],
         BuildPopup);
@@ -48,7 +48,7 @@ internal sealed class PowerModule(
     {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle(theme),
+        Style = ModulesCommon.PopupStyle(),
         Children =
         [
             BuildAction("Settings", Icons.Settings, Color.FromRgb(95, 120, 190), _settingsHovered, OpenSettings),
@@ -63,7 +63,7 @@ internal sealed class PowerModule(
 
     private BoxNode BuildAction(string label, SvgAsset icon, Color accent, Ref<bool> hovered, Action onClick)
     {
-        var background = ModulesCommon.ToBackground(theme, accent);
+        var background = ModulesCommon.ToBackground(accent);
         if (hovered)
         {
             background = Color.Lighten(background, 0.12f);
@@ -74,7 +74,7 @@ internal sealed class PowerModule(
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = hovered,
             OnClick = onClick,
-            Style = ModulesCommon.ModuleStyle(theme, background) with
+            Style = ModulesCommon.ModuleStyle(background) with
             {
                 BorderWidth = 0,
                 BorderRadius = 8,
@@ -82,8 +82,8 @@ internal sealed class PowerModule(
             },
             Children =
             [
-                new ImageNode(icon, 20, 20, theme.Text),
-                new TextNode(label, 14, theme.Text),
+                new ImageNode(icon, 20, 20, ThemeManager.Current.Text),
+                new TextNode(label, 14),
             ],
         };
     }

@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.Hyprland;
 
@@ -12,12 +13,11 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class ApplicationLauncherTab(
     IHyprctl hyprctl,
     Action closeDialog,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab, IDisposable
+    TextInputCoordinator inputs) : IMainDialogTab, IDisposable
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
     private readonly DesktopApplicationCatalog _catalog = new();
-    private readonly ApplicationResultInteraction _applicationResults = new(theme);
+    private readonly ApplicationResultInteraction _applicationResults = new();
     private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
         "",
         "",
@@ -133,8 +133,7 @@ internal sealed class ApplicationLauncherTab(
                     },
                     _firstIndex,
                     _filteredApplications.Count,
-                    BoundedListUi.DefaultVisibleItemCount,
-                    theme),
+                    BoundedListUi.DefaultVisibleItemCount),
             ],
         };
     }
@@ -160,9 +159,7 @@ internal sealed class ApplicationLauncherTab(
         bool selected,
         ApplicationSelectionColumn selectedColumn,
         ApplicationButtonState entryState,
-        AppIconResolver icons,
-        Theme theme,
-        Action activateDefault,
+        AppIconResolver icons, Action activateDefault,
         Action<int> activateAction)
     {
         var actionsSelected = selected &&
@@ -172,7 +169,7 @@ internal sealed class ApplicationLauncherTab(
         var iconPath = string.IsNullOrWhiteSpace(application.Icon)
             ? null
             : icons.TryResolveIcon(application.Icon);
-        entryState.UpdateColor(entrySelected ? theme.Active : theme.Panel);
+        entryState.UpdateColor(entrySelected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
 
         return new BoxNode
         {
@@ -186,10 +183,10 @@ internal sealed class ApplicationLauncherTab(
                     VerticalAlignment = ItemsAlignment.Center,
                     OnClick = activateDefault,
                     IsHovered = entryState.Hovered,
-                    Style = ModulesCommon.ModuleStyle(theme, entryState.Background) with
+                    Style = ModulesCommon.ModuleStyle(entryState.Background) with
                     {
                         BorderRadius = 8,
-                        BorderWidth = selected ? theme.Border.Width : 0,
+                        BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                         Padding = new Insets(16, 10),
                         Spacing = 14,
                     },
@@ -197,7 +194,7 @@ internal sealed class ApplicationLauncherTab(
                     [
                         iconPath is not null
                             ? new ImageNode(iconPath, 38, 38)
-                            : new ImageNode(Icons.Application, 38, 38, theme.Text),
+                            : new ImageNode(Icons.Application, 38, 38, ThemeManager.Current.Text),
                         new BoxNode
                         {
                             Direction = Direction.Vertical,
@@ -205,11 +202,8 @@ internal sealed class ApplicationLauncherTab(
                             Style = new Style { Spacing = 3 },
                             Children =
                             [
-                                new TextNode(application.Name, 18, theme.Text),
-                                new TextNode(
-                                    application.Comment ?? "",
-                                    theme.Text,
-                                    entrySelected ? theme.Text : theme.Text.MutedColor),
+                                new TextNode(application.Name, 18),
+                                new TextNode(application.Comment ?? "", color: entrySelected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
                             ],
                         },
                     ],
@@ -219,9 +213,7 @@ internal sealed class ApplicationLauncherTab(
                     actionIndex,
                     actionsSelected,
                     selected,
-                    entryState,
-                    theme,
-                    () => activateAction(actionIndex))),
+                    entryState, () => activateAction(actionIndex))),
             ],
         };
     }
@@ -231,22 +223,20 @@ internal sealed class ApplicationLauncherTab(
         int actionIndex,
         bool actionsSelected,
         bool entrySelected,
-        ApplicationButtonState entryState,
-        Theme theme,
-        Action activate)
+        ApplicationButtonState entryState, Action activate)
     {
         var selected = actionsSelected && actionIndex == entryState.ActionIndex;
         var state = entryState.Actions
-            .GetState(actionIndex, theme.Panel)
-            .UpdateColor(selected ? theme.Active : theme.Panel);
+            .GetState(actionIndex, ThemeManager.Current.Panel)
+            .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode(selected ? null : 32, 66)
         {
             OnClick = activate,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = entrySelected ? theme.Border.Width : 0,
+                BorderWidth = entrySelected ? ThemeManager.Current.Border.Width : 0,
                 Padding = selected ? new Insets(16, 10) : new Insets(4, 10),
                 Spacing = 8,
             },
@@ -259,11 +249,11 @@ internal sealed class ApplicationLauncherTab(
                     Style = new Style
                     {
                         BackgroundColor = Color.Black,
-                        BorderRadius = new BorderRadius(theme.Border.Radius),
+                        BorderRadius = new BorderRadius(ThemeManager.Current.Border.Radius),
                     },
-                    Children = [new TextNode((actionIndex + 1).ToString(), 14, theme.Text)],
+                    Children = [new TextNode((actionIndex + 1).ToString(), 14)],
                 },
-                selected ? new TextNode(action.Name, theme.Text, theme.Text) : new SpacerNode(),
+                selected ? new TextNode(action.Name) : new SpacerNode(),
             ],
         };
     }

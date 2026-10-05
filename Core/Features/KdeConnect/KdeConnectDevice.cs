@@ -23,9 +23,12 @@ internal sealed class KdeConnectDevice
     internal int ReconnectAttempts { get; set; }
     internal CancellationTokenSource? PairingTimeout { get; set; }
     internal bool Connecting { get; set; }
+    internal bool ConnectionFailed { get; set; }
+    internal string? LastConnectionFailure { get; set; }
+    internal DateTimeOffset NextConnectionWarningAt { get; set; }
 
     internal bool IsReachable => Channel is not null ||
-        DateTimeOffset.UtcNow - LastSeen < TimeSpan.FromSeconds(45);
+        (!ConnectionFailed && DateTimeOffset.UtcNow - LastSeen < TimeSpan.FromSeconds(45));
 
     internal KdeConnectDevice(string id, string name, string deviceType)
     {

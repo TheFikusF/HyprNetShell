@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
@@ -8,8 +9,7 @@ internal sealed class WeatherTemperatureRangeNode(
     double minimum,
     double maximum,
     double overallMinimum,
-    double overallMaximum,
-    Theme theme) : Node
+    double overallMaximum) : Node
 {
     public override int Width => 72;
     public override int Height => 8;
@@ -18,7 +18,7 @@ internal sealed class WeatherTemperatureRangeNode(
     {
         UpdateInteractionState(x, y);
         var track = new Rect(x, y, Width, Height);
-        renderer.FillRoundedRect(track, Height / 2f, Color.Lighten(theme.Panel, 0.15f));
+        renderer.FillRoundedRect(track, Height / 2f, Color.Lighten(ThemeManager.Current.Panel, 0.15f));
 
         var span = Math.Max(1, overallMaximum - overallMinimum);
         var start = (float)((minimum - overallMinimum) / span * Width);

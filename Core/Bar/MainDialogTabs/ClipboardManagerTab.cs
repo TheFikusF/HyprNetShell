@@ -1,4 +1,5 @@
 using System.Text;
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.System;
@@ -15,8 +16,7 @@ internal sealed class ClipboardManagerTab(
     ClipboardHistoryService history,
     KdeConnectService kdeConnect,
     Action closeDialog,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab
+    TextInputCoordinator inputs) : IMainDialogTab
 {
     private sealed class ActionButtonState : ModulesCommon.BoxState
     {
@@ -39,6 +39,7 @@ internal sealed class ClipboardManagerTab(
         "Search clipboard history...",
         4096,
         alwaysActive: true);
+
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -132,8 +133,7 @@ internal sealed class ClipboardManagerTab(
                     },
                     _firstIndex,
                     _filteredEntries.Count,
-                    BoundedListUi.DefaultVisibleItemCount,
-                    theme),
+                    BoundedListUi.DefaultVisibleItemCount),
             ],
         };
     }
@@ -142,7 +142,7 @@ internal sealed class ClipboardManagerTab(
     {
         var selected = index == _selectedIndex;
         var stateKey = $"{entry.MimeType}\0{entry.Hash}";
-        var state = _buttonsState.GetState(stateKey, theme.Panel).UpdateColor(selected ? theme.Active : theme.Panel);
+        var state = _buttonsState.GetState(stateKey, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Spread,
@@ -158,10 +158,10 @@ internal sealed class ClipboardManagerTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(16, 8),
                 Spacing = 14,
             },
@@ -175,11 +175,8 @@ internal sealed class ClipboardManagerTab(
                     [
                         entry.Image is not null
                             ? new ImageNode(entry.Image, 46, 46)
-                            : new ImageNode(Icons.Copy, 30, 30, theme.Text),
-                        new TextNode(entry.Preview, theme.Text, theme.Text,
-                            maxWidth: PREVIEW_MAX_WIDTH,
-                            wrapping: TextWrapping.Wrap,
-                            maxLines: 5),
+                            : new ImageNode(Icons.Copy, 30, 30, ThemeManager.Current.Text),
+                        new TextNode(entry.Preview, maxWidth: PREVIEW_MAX_WIDTH, wrapping: TextWrapping.Wrap, maxLines: 5),
                     ],
                 },
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
@@ -220,7 +217,7 @@ internal sealed class ClipboardManagerTab(
                 ? () => _ = kdeConnect.SendClipboardTextAsync(Encoding.UTF8.GetString(entry.Data))
                 : null,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
@@ -229,7 +226,7 @@ internal sealed class ClipboardManagerTab(
             },
             Children =
             [
-                new ImageNode(Icons.Smartphone, 18, 18, theme.Text)
+                new ImageNode(Icons.Smartphone, 18, 18, ThemeManager.Current.Text)
                 {
                     Opacity = state.IconOpacity,
                 },
@@ -261,7 +258,7 @@ internal sealed class ClipboardManagerTab(
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => history.TogglePinned(entry),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
@@ -270,7 +267,7 @@ internal sealed class ClipboardManagerTab(
             },
             Children =
             [
-                new ImageNode(entry.IsPinned && active ? Icons.PinOff : Icons.Pin, 18, 18, theme.Text)
+                new ImageNode(entry.IsPinned && active ? Icons.PinOff : Icons.Pin, 18, 18, ThemeManager.Current.Text)
                 {
                     Opacity = state.IconOpacity,
                 },
@@ -302,7 +299,7 @@ internal sealed class ClipboardManagerTab(
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => history.Delete(entry),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = 0,
                 BorderRadius = 8,
@@ -311,7 +308,7 @@ internal sealed class ClipboardManagerTab(
             },
             Children =
             [
-                new ImageNode(Icons.Delete, 18, 18, theme.Text)
+                new ImageNode(Icons.Delete, 18, 18, ThemeManager.Current.Text)
                 {
                     Opacity = state.IconOpacity,
                 },
@@ -333,14 +330,14 @@ internal sealed class ClipboardManagerTab(
                 ApplyFilter();
             })
         {
-            FontSize = theme.Text,
-            BackgroundColor = theme.Panel,
-            HoverColor = Color.Lighten(theme.Panel, 0.18f),
-            SelectedColor = theme.Active,
-            BorderColor = theme.Border,
-            BorderWidth = theme.Border.Width,
+            FontSize = ThemeManager.Current.Text,
+            BackgroundColor = ThemeManager.Current.Panel,
+            HoverColor = Color.Lighten(ThemeManager.Current.Panel, 0.18f),
+            SelectedColor = ThemeManager.Current.Active,
+
+            BorderWidth = ThemeManager.Current.Border.Width,
             BorderRadius = 8,
-            TextColor = theme.Text,
+            TextColor = ThemeManager.Current.Text,
         };
         _dateDropdown.SelectedIndex = (int)_dateRange;
         return _dateDropdown;

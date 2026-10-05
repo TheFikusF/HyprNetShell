@@ -52,7 +52,7 @@ internal sealed class CompositeWindowConfiguration
         var index = Array.FindIndex(_windows, window => window.Id == normalized.Id);
         if (index < 0)
         {
-            _windows = [.._windows, normalized];
+            _windows = [.. _windows, normalized];
         }
         else
         {
@@ -120,14 +120,13 @@ internal sealed class CompositeWindowConfiguration
 
     private void Persist()
     {
-        _configuration.Update(config => config.CompositeWindows = _windows
-            .Select(window => new CompositeWindowConfigurationValue
-            {
-                Id = window.Id,
-                Name = window.Name,
-                Hotkey = window.Hotkey,
-                TabIds = window.TabIds.ToList(),
-            })
-            .ToList());
+        _configuration.Update(config => config.CompositeWindows = _windows.Select(window => new CompositeWindowConfigurationValue
+        {
+            Id = window.Id,
+            Name = window.Name,
+            Hotkey = window.Hotkey,
+            TabIds = window.TabIds.ToList(),
+        })
+        .ToList());
     }
 }

@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.KdeConnect;
@@ -8,7 +9,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
-internal sealed class KdeConnectWidget(KdeConnectService service, Theme theme)
+internal sealed class KdeConnectWidget(KdeConnectService service)
 {
     public const int WIDTH = 300;
 
@@ -26,7 +27,7 @@ internal sealed class KdeConnectWidget(KdeConnectService service, Theme theme)
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 BorderRadius = 8,
                 Spacing = 8,
@@ -37,8 +38,7 @@ internal sealed class KdeConnectWidget(KdeConnectService service, Theme theme)
                     Icons.Smartphone,
                     "KDE Connect",
                     openTab,
-                    _titleState,
-                    theme),
+                    _titleState),
                 BuildSummary(device),
             ],
         };
@@ -52,7 +52,7 @@ internal sealed class KdeConnectWidget(KdeConnectService service, Theme theme)
             {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
-                Children = [new TextNode("No paired device", theme.Text, theme.Text.MutedColor)],
+                Children = [new TextNode("No paired device", color: ThemeManager.Current.Text.MutedColor)],
             };
         }
 
@@ -64,8 +64,8 @@ internal sealed class KdeConnectWidget(KdeConnectService service, Theme theme)
             Style = new Style { Spacing = 6 },
             Children =
             [
-                new TextNode(device.Name, theme.Text.HeaderSize, theme.Text, WIDTH - 24, TextWrapping.Ellipsis),
-                new TextNode(BuildStatus(device), theme.Text, theme.Text.MutedColor),
+                new TextNode(device.Name, ThemeManager.Current.Text.HeaderSize, maxWidth: WIDTH - 24, wrapping: TextWrapping.Ellipsis),
+                new TextNode(BuildStatus(device), color: ThemeManager.Current.Text.MutedColor),
             ],
         };
     }

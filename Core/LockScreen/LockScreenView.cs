@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.GUI.Layout;
@@ -15,7 +16,7 @@ public enum LockScreenStatus
     Error,
 }
 
-public sealed class LockScreenView(Theme theme)
+public sealed class LockScreenView()
 {
     public Node Build(
         int width,
@@ -34,8 +35,8 @@ public sealed class LockScreenView(Theme theme)
         };
 
         var statusColor = status is LockScreenStatus.Denied or LockScreenStatus.Error
-            ? theme.Critical
-            : theme.Text.MutedColor;
+            ? ThemeManager.Current.Critical
+            : ThemeManager.Current.Text.MutedColor;
 
         var now = DateTime.Now;
 
@@ -49,12 +50,12 @@ public sealed class LockScreenView(Theme theme)
                 {
                     Direction = Direction.Vertical,
                     Children = [
-                        new TextNode(now.ToString("HH:mm"), 64, theme.Text)
+                        new TextNode(now.ToString("HH:mm"), 64)
                         {
                             ShadowDistance = 2,
                             ShadowColor = Color.Black,
                         },
-                        new TextNode(now.ToString("dddd dd, MMM"), 18, theme.Text)
+                        new TextNode(now.ToString("dddd dd, MMM"), 18)
                         {
                             ShadowDistance = 2,
                             ShadowColor = Color.Black,
@@ -66,9 +67,9 @@ public sealed class LockScreenView(Theme theme)
                     Direction = Direction.Vertical,
                     HorizontalAlignment = ItemsAlignment.Center,
                     VerticalAlignment = ItemsAlignment.Center,
-                    Style = ModulesCommon.PopupStyle(theme) with
+                    Style = ModulesCommon.PopupStyle() with
                     {
-                        BorderColor = theme.Border.Color,
+
                         BorderRadius = 16,
                         Padding = new Insets(34),
                         Spacing = 18,
@@ -77,16 +78,16 @@ public sealed class LockScreenView(Theme theme)
                     },
                     Children =
                     [
-                        new TextNode(Environment.UserName, theme.Text.HeaderSize, theme.Text.MutedColor),
+                        new TextNode(Environment.UserName, ThemeManager.Current.Text.HeaderSize, ThemeManager.Current.Text.MutedColor),
                         new BoxNode(360, 52)
                         {
                             HorizontalAlignment = ItemsAlignment.Center,
                             VerticalAlignment = ItemsAlignment.Center,
-                            Style = ModulesCommon.ModuleStyle(theme, Color.Black with { A = 0.48f }) with
+                            Style = ModulesCommon.ModuleStyle(Color.Black with { A = 0.48f }) with
                             {
                                 BorderColor = status is LockScreenStatus.Denied or LockScreenStatus.Error
-                                    ? theme.Critical
-                                    : theme.Border,
+                                    ? ThemeManager.Current.Critical
+                                    : ThemeManager.Current.Border,
                                 BorderRadius = 10,
                                 Padding = new Insets(12, 8),
                                 ShadowColor = null,
@@ -96,15 +97,15 @@ public sealed class LockScreenView(Theme theme)
                                 new TextNode(
                                     bullets.Length == 0 ? "Password" : bullets,
                                     20,
-                                    bullets.Length == 0 ? theme.Text.MutedColor : theme.Text)
+                                    bullets.Length == 0 ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text)
                             ],
                         },
-                        new TextNode(statusText, theme.Text, statusColor),
+                        new TextNode(statusText, color: statusColor),
                     ],
                 }            ]
         };
 
-        return new LockScreenRootNode(width, height, background, panel, theme.Panel with { A = 1 });
+        return new LockScreenRootNode(width, height, background, panel, ThemeManager.Current.Panel with { A = 1 });
     }
 
     private sealed class LockScreenRootNode(

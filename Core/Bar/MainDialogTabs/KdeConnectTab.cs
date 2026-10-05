@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.KdeConnect;
@@ -11,7 +12,7 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
-internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IMainDialogTab, IDisposable
+internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab, IDisposable
 {
     private const int VisibleDeviceCount = 7;
 
@@ -125,9 +126,9 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
                     devices.Count == 0
                         ? "No devices"
                         : $"{devices.Count} device{(devices.Count == 1 ? "" : "s")}"),
-                ModulesCommon.BuildDivider(theme.Border, height: 12),
+                ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12),
                 BuildDeviceList(devices, firstIndex, busy),
-                MainDialogTabUi.BuildStatus(theme, status),
+                MainDialogTabUi.BuildStatus(status),
             ],
         };
     }
@@ -136,22 +137,21 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
     {
         if (devices.Count == 0)
         {
-            return MainDialogTabUi.BuildMessage(theme, "No KDE Connect devices found");
+            return MainDialogTabUi.BuildMessage("No KDE Connect devices found");
         }
 
         return BoundedListUi.BuildList(
             devices,
             (device, index) => BuildDeviceRow(device, index, busy),
             firstIndex,
-            VisibleDeviceCount,
-            theme);
+            VisibleDeviceCount);
     }
 
     private BoxNode BuildDeviceRow(KdeConnectDeviceSnapshot device, int index, bool busy)
     {
         var selected = index == _selectedIndex;
-        var rowState = _rowStates.GetState(device.Id, theme.Panel)
-            .UpdateColor(selected ? Color.Lighten(theme.Panel, 0.1f) : theme.Panel);
+        var rowState = _rowStates.GetState(device.Id, ThemeManager.Current.Panel)
+            .UpdateColor(selected ? Color.Lighten(ThemeManager.Current.Panel, 0.1f) : ThemeManager.Current.Panel);
 
         return new BoxNode
         {
@@ -159,25 +159,25 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => Select(index),
-            Style = ModulesCommon.ModuleStyle(theme, rowState.Background) with
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with
             {
                 BorderRadius = 8,
-                BorderWidth = selected ? theme.Border.Width : 0,
+                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
             },
             Children =
             [
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    new ImageNode(Icons.Smartphone, 18, 18, theme.Text),
+                    new ImageNode(Icons.Smartphone, 18, 18, ThemeManager.Current.Text),
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
                         Style = new Style { Spacing = 4 },
                         Children =
                         [
-                            new TextNode(device.Name, theme.Text, theme.Text, maxWidth: 300),
-                            new TextNode(BuildDeviceDetails(device), 14, theme.Text.MutedColor, maxWidth: 460),
+                            new TextNode(device.Name, maxWidth: 300),
+                            new TextNode(BuildDeviceDetails(device), 14, ThemeManager.Current.Text.MutedColor, maxWidth: 460),
                         ],
                     },
                 },
@@ -191,32 +191,24 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
         var actions = new List<Node>();
         if (device.PairingState == KdeConnectPairingState.IncomingRequest)
         {
-            actions.Add(MainDialogTabUi.BuildButton(
-                theme,
-                _buttonStates,
+            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
                 "Accept",
                 $"accept:{device.Id}",
                 busy || string.IsNullOrWhiteSpace(device.VerificationCode)
                     ? null
                     : () => AcceptPairing(device)));
-            actions.Add(MainDialogTabUi.BuildButton(
-                theme,
-                _buttonStates,
+            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
                 "Reject",
                 $"reject:{device.Id}",
                 busy ? null : () => RejectPairing(device)));
         }
         else if (device.IsPaired)
         {
-            actions.Add(MainDialogTabUi.BuildButton(
-                theme,
-                _buttonStates,
+            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
                 "Send clipboard",
                 $"clipboard:{device.Id}",
                 !busy && device.IsReachable ? () => SendClipboard(device) : null));
-            actions.Add(MainDialogTabUi.BuildButton(
-                theme,
-                _buttonStates,
+            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
                 "Unpair",
                 $"unpair:{device.Id}",
                 busy ? null : () => Unpair(device)));
@@ -224,9 +216,7 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
         else
         {
             var requestPending = device.PairingState == KdeConnectPairingState.OutgoingRequest;
-            actions.Add(MainDialogTabUi.BuildButton(
-                theme,
-                _buttonStates,
+            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
                 requestPending ? "Pairing requested" : "Pair",
                 $"pair:{device.Id}",
                 !busy && !requestPending && device.IsReachable ? () => RequestPairing(device) : null));
@@ -234,7 +224,7 @@ internal sealed class KdeConnectTab(KdeConnectService service, Theme theme) : IM
 
         return new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
         {
-            Children = [..actions],
+            Children = [.. actions],
         };
     }
 

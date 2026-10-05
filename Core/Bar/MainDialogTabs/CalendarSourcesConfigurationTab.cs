@@ -1,3 +1,4 @@
+using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -14,8 +15,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class CalendarSourcesConfigurationTab(
     CalendarService calendar,
-    TextInputCoordinator inputs,
-    Theme theme) : IMainDialogTab
+    TextInputCoordinator inputs) : IMainDialogTab
 {
     private const int URL_MAX_LENGTH = 2048;
     private const int URL_TEXT_MAX_WIDTH = 780;
@@ -31,6 +31,7 @@ internal sealed class CalendarSourcesConfigurationTab(
         transform: value => value.Trim(),
         clearOnEscape: true,
         pasteReplacesValue: true);
+
     private string _message = "";
     private bool _messageIsError;
     private int _firstSourceIndex;
@@ -92,8 +93,8 @@ internal sealed class CalendarSourcesConfigurationTab(
                 Style = new Style { Spacing = 4 },
                 Children =
                 [
-                    new TextNode("Calendar sources", 22, theme.Text),
-                    new TextNode(status, theme.Text, theme.Text.MutedColor),
+                    new TextNode("Calendar sources", 22),
+                    new TextNode(status, color: ThemeManager.Current.Text.MutedColor),
                 ],
             },
             BuildActionButton(
@@ -119,7 +120,7 @@ internal sealed class CalendarSourcesConfigurationTab(
                     ? "Loading Google calendars…"
                     : "No calendars available. Add a calendar URL or select Refresh."
                 : "No calendars available. Connect a Google account or add a calendar URL.";
-            return MainDialogTabUi.BuildMessage(theme, message);
+            return MainDialogTabUi.BuildMessage(message);
         }
 
         var content = new BoxNode
@@ -137,9 +138,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             content,
             _firstSourceIndex,
             sourceRows.Length,
-            VISIBLE_SOURCE_COUNT,
-            theme,
-            delta => ScrollSources(delta, sourceRows.Length));
+            VISIBLE_SOURCE_COUNT, delta => ScrollSources(delta, sourceRows.Length));
     }
 
     private Node BuildGoogleCalendarRow(GoogleCalendarSource source)
@@ -155,7 +154,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => calendar.SetGoogleCalendarEnabled(source.Id, !source.Enabled),
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 Padding = new Insets(16, 8),
                 BorderRadius = 8,
@@ -169,18 +168,18 @@ internal sealed class CalendarSourcesConfigurationTab(
                     Style = new Style { Spacing = 2 },
                     Children =
                     [
-                        new TextNode(source.Name, 16, theme.Text, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
+                        new TextNode(source.Name, 16, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
                         new TextNode(
                             source.Primary ? "Primary Google calendar" : source.Hidden ? "Hidden Google calendar" : "Google calendar",
                             12,
-                            theme.Text.MutedColor),
+                            ThemeManager.Current.Text.MutedColor),
                     ],
                 },
                 new SwitchNode(source.Enabled, animation)
                 {
-                    OffTrackColor = theme.Text.MutedColor,
-                    OnTrackColor = theme.Active,
-                    KnobColor = theme.Text,
+                    OffTrackColor = ThemeManager.Current.Text.MutedColor,
+                    OnTrackColor = ThemeManager.Current.Active,
+                    KnobColor = ThemeManager.Current.Text,
                 },
             ],
         };
@@ -203,8 +202,8 @@ internal sealed class CalendarSourcesConfigurationTab(
     };
 
     private Node BuildStatus() => string.IsNullOrWhiteSpace(_message)
-        ? new TextNode("Paste or type one HTTP(S) calendar URL, then select Add.", theme.Text, theme.Text.MutedColor)
-        : new TextNode(_message, theme.Text, _messageIsError ? theme.Critical : theme.Active, maxWidth: 900);
+        ? new TextNode("Paste or type one HTTP(S) calendar URL, then select Add.", color: ThemeManager.Current.Text.MutedColor)
+        : new TextNode(_message, color: _messageIsError ? ThemeManager.Current.Critical : ThemeManager.Current.Active, maxWidth: 900);
 
     private Node BuildUrlRow(string url)
     {
@@ -212,7 +211,7 @@ internal sealed class CalendarSourcesConfigurationTab(
         {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(theme, theme.Panel) with
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
             {
                 Padding = new Insets(16, 8),
                 BorderRadius = 8,
@@ -220,7 +219,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             },
             Children =
             [
-                new TextNode(url, theme.Text, theme.Text, URL_TEXT_MAX_WIDTH, TextWrapping.Ellipsis),
+                new TextNode(url, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
                 BuildActionButton("Remove", Icons.Delete, "remove:" + url, () => RemoveUrl(url)),
             ],
         };
@@ -234,11 +233,11 @@ internal sealed class CalendarSourcesConfigurationTab(
     {
         if (!_buttonStates.TryGetValue(key, out var state))
         {
-            state = new ModulesCommon.BoxState { Background = theme.Panel };
+            state = new ModulesCommon.BoxState { Background = ThemeManager.Current.Panel };
             _buttonStates[key] = state;
         }
 
-        state.UpdateColor(theme.Panel);
+        state.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode
         {
             HorizontalAlignment = ItemsAlignment.Center,
@@ -246,7 +245,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             IsHovered = action is null ? null : state.Hovered,
             OnClick = action,
             Opacity = action is null ? 0.5f : 1.0f,
-            Style = ModulesCommon.ModuleStyle(theme, state.Background) with
+            Style = ModulesCommon.ModuleStyle(state.Background) with
             {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
@@ -255,8 +254,8 @@ internal sealed class CalendarSourcesConfigurationTab(
             },
             Children =
             [
-                new ImageNode(icon, 16, 16, theme.Text),
-                new TextNode(label, theme.Text, theme.Text),
+                new ImageNode(icon, 16, 16, ThemeManager.Current.Text),
+                new TextNode(label),
             ],
         };
     }
