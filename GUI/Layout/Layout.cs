@@ -10,9 +10,17 @@ public class Layout : IDisposable
     internal static IRenderApi Renderer { get; private set; } = null!;
     public static LayoutInput Input { get; set; } = LayoutInput.None;
     private static readonly List<Rect> InputRegions = [];
-    private static readonly SortedDictionary<RenderLayer, List<Action<IRenderApi>>> LayerDraws = [];
-    private static readonly Dictionary<RenderLayer, List<Rect>> ActiveLayerInputRegions = [];
-    private static readonly Dictionary<ulong, Dictionary<RenderLayer, List<Rect>>> NextLayerInputRegions = [];
+    private static readonly RenderLayer[] RenderLayerOrder = Enum.GetValues<RenderLayer>().Order().ToArray();
+    private static readonly Dictionary<RenderLayer, List<Action<IRenderApi>>> LayerDraws = [];
+    private static readonly Dictionary<ulong, OutputLayerInputRegions> LayerInputRegionsByOutput = [];
+    private static OutputLayerInputRegions? _currentLayerInputRegions;
+
+    private sealed class OutputLayerInputRegions
+    {
+        public readonly Dictionary<RenderLayer, List<Rect>> Active = [];
+        public readonly Dictionary<RenderLayer, List<Rect>> Current = [];
+    }
+
     private static ulong _currentOutputId;
     private static RenderLayer _drawingLayer;
     private static bool _diagnosticsEnabled;
@@ -53,6 +61,14 @@ public class Layout : IDisposable
             VerticalAlignment = ItemsAlignment.Center,
             Style = style
         };
+    }
+
+    private static void ClearLayerDraws()
+    {
+        foreach (var draws in LayerDraws.Values)
+        {
+            draws.Clear();
+        }
     }
 
     public void AddNode(Node node)
@@ -132,23 +148,49 @@ public class Layout : IDisposable
     public static void BeginInputRegionFrame(ulong outputId)
     {
         InputRegions.Clear();
-        LayerDraws.Clear();
-        ActiveLayerInputRegions.Clear();
+        ClearLayerDraws();
         _currentOutputId = outputId;
-        if (NextLayerInputRegions.TryGetValue(outputId, out var previousRegions))
+        if (!LayerInputRegionsByOutput.TryGetValue(outputId, out var outputRegions))
         {
-            foreach (var (layer, regions) in previousRegions)
-            {
-                ActiveLayerInputRegions[layer] = [.. regions];
-            }
+            outputRegions = new OutputLayerInputRegions();
+            LayerInputRegionsByOutput.Add(outputId, outputRegions);
         }
-        NextLayerInputRegions[outputId] = [];
+        _currentLayerInputRegions = outputRegions;
+
+        foreach (var regions in outputRegions.Active.Values)
+        {
+            regions.Clear();
+        }
+
+        foreach (var (layer, regions) in outputRegions.Current)
+        {
+            if (!outputRegions.Active.TryGetValue(layer, out var activeRegions))
+            {
+                activeRegions = [];
+                outputRegions.Active.Add(layer, activeRegions);
+            }
+            // Blocking retains the previous snapshot plus current registrations;
+            // unregistering must affect only the next frame's snapshot.
+            activeRegions.AddRange(regions);
+            regions.Clear();
+        }
         _drawingLayer = RenderLayer.Bar;
+    }
+
+    public static void RemoveOutput(ulong outputId)
+    {
+        LayerInputRegionsByOutput.Remove(outputId);
+        if (_currentOutputId == outputId)
+        {
+            _currentLayerInputRegions = null;
+            InputRegions.Clear();
+            ClearLayerDraws();
+        }
     }
 
     public static void DrawLayers()
     {
-        foreach (var layer in Enum.GetValues<RenderLayer>().Order())
+        foreach (var layer in RenderLayerOrder)
         {
             if (!LayerDraws.TryGetValue(layer, out var draws))
             {
@@ -162,7 +204,7 @@ public class Layout : IDisposable
             }
         }
 
-        LayerDraws.Clear();
+        ClearLayerDraws();
     }
 
     public static void DrawOnLayer(RenderLayer layer, Action<IRenderApi> draw)
@@ -178,22 +220,26 @@ public class Layout : IDisposable
 
     internal static void RegisterLayerInputRegion(RenderLayer layer, Rect rect)
     {
-        if (!ActiveLayerInputRegions.TryGetValue(layer, out var activeRegions))
+        var outputRegions = _currentLayerInputRegions
+            ?? throw new InvalidOperationException("BeginInputRegionFrame must be called before registering input regions.");
+        if (!outputRegions.Active.TryGetValue(layer, out var activeRegions))
         {
             activeRegions = [];
-            ActiveLayerInputRegions.Add(layer, activeRegions);
+            outputRegions.Active.Add(layer, activeRegions);
         }
+
         if (!activeRegions.Contains(rect))
         {
             activeRegions.Add(rect);
         }
 
-        var nextRegionsByLayer = NextLayerInputRegions[_currentOutputId];
+        var nextRegionsByLayer = outputRegions.Current;
         if (!nextRegionsByLayer.TryGetValue(layer, out var nextRegions))
         {
             nextRegions = [];
             nextRegionsByLayer.Add(layer, nextRegions);
         }
+
         if (!nextRegions.Contains(rect))
         {
             nextRegions.Add(rect);
@@ -202,14 +248,17 @@ public class Layout : IDisposable
 
     internal static void UnregisterNextLayerInputRegion(RenderLayer layer, Rect rect)
     {
-        if (NextLayerInputRegions[_currentOutputId].TryGetValue(layer, out var regions))
+        var outputRegions = _currentLayerInputRegions
+            ?? throw new InvalidOperationException("BeginInputRegionFrame must be called before unregistering input regions.");
+        if (outputRegions.Current.TryGetValue(layer, out var regions))
         {
             regions.Remove(rect);
         }
     }
 
     internal static bool IsLowerLayerClickBlocked =>
-        ActiveLayerInputRegions.Any(pair => pair.Key > _drawingLayer && pair.Value.Any(Input.Contains));
+        _currentLayerInputRegions is not null &&
+        _currentLayerInputRegions.Active.Any(pair => pair.Key > _drawingLayer && pair.Value.Any(Input.Contains));
 
     public static IReadOnlyList<Rect> GetInputRegions() => InputRegions;
 

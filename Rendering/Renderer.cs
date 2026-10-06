@@ -28,14 +28,15 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly uint _roundedProgram;
     private readonly uint _roundedVao;
     private readonly uint _roundedVbo;
+    private readonly uint _roundedInstanceVbo;
+    private const int ROUNDED_INSTANCE_FLOATS = 24;
+    private readonly List<float> _roundedInstances = new();
+    private readonly List<float> _textureVertices = new();
+    private uint _batchTexture;
+    private uint _batchTextureProgram;
+    private int _batchTextureViewportLocation;
+    private int _batchTextureLocation;
     private readonly int _roundedViewportLocation;
-    private readonly int _roundedSizeLocation;
-    private readonly int _roundedRadiiLocation;
-    private readonly int _roundedColorLocation;
-    private readonly int _roundedModeLocation;
-    private readonly int _roundedThicknessLocation;
-    private readonly int _roundedInnerRadiiLocation;
-    private readonly int _roundedShadowDistanceLocation;
     private readonly int _roundedGradientDirectionLocation;
     private readonly int _roundedGradientOffsetLocation;
     private readonly int _roundedGradientStopCountLocation;
@@ -47,12 +48,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly uint _textureVbo;
     private readonly int _textureViewportLocation;
     private readonly int _textureLocation;
-    private readonly int _textureColorLocation;
+    private readonly int _textureVertexColorLocation;
 
     private readonly uint _svgTextureProgram;
     private readonly int _svgTextureViewportLocation;
     private readonly int _svgTextureLocation;
-    private readonly int _svgTextureColorLocation;
+    private readonly int _svgTextureVertexColorLocation;
 
     private readonly TextureRepository _textureRepository;
 
@@ -93,13 +94,6 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _roundedProgram = GlShaders.CreateProgram(
             _gl, GlShaders.ROUNDED_VERTEX, GlShaders.ROUNDED_FRAGMENT, "rounded shape");
         _roundedViewportLocation = _gl.GetUniformLocation(_roundedProgram, "uViewport");
-        _roundedSizeLocation = _gl.GetUniformLocation(_roundedProgram, "uSize");
-        _roundedRadiiLocation = _gl.GetUniformLocation(_roundedProgram, "uRadii");
-        _roundedColorLocation = _gl.GetUniformLocation(_roundedProgram, "uColor");
-        _roundedModeLocation = _gl.GetUniformLocation(_roundedProgram, "uMode");
-        _roundedThicknessLocation = _gl.GetUniformLocation(_roundedProgram, "uThickness");
-        _roundedInnerRadiiLocation = _gl.GetUniformLocation(_roundedProgram, "uInnerRadii");
-        _roundedShadowDistanceLocation = _gl.GetUniformLocation(_roundedProgram, "uShadowDistance");
         _roundedGradientDirectionLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientDirection");
         _roundedGradientOffsetLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientOffset");
         _roundedGradientStopCountLocation = _gl.GetUniformLocation(_roundedProgram, "uGradientStopCount");
@@ -109,12 +103,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _textureProgram = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "texture");
         _textureViewportLocation = _gl.GetUniformLocation(_textureProgram, "uViewport");
         _textureLocation = _gl.GetUniformLocation(_textureProgram, "uTexture");
-        _textureColorLocation = _gl.GetUniformLocation(_textureProgram, "uColor");
+        _textureVertexColorLocation = _gl.GetUniformLocation(_textureProgram, "uUseVertexColor");
         _svgTextureProgram = GlShaders.CreateProgram(
             _gl, GlShaders.TEXTURED_VERTEX, GlShaders.SVG_TEXTURE_FRAGMENT, "SVG texture");
         _svgTextureViewportLocation = _gl.GetUniformLocation(_svgTextureProgram, "uViewport");
         _svgTextureLocation = _gl.GetUniformLocation(_svgTextureProgram, "uTexture");
-        _svgTextureColorLocation = _gl.GetUniformLocation(_svgTextureProgram, "uColor");
+        _svgTextureVertexColorLocation = _gl.GetUniformLocation(_svgTextureProgram, "uUseVertexColor");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -131,21 +125,37 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _roundedVbo = _gl.GenBuffer();
         _gl.BindVertexArray(_roundedVao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedVbo);
-        _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(6 * 4 * sizeof(float)), null, BufferUsageARB.DynamicDraw);
-        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
+        ReadOnlySpan<float> unitQuad = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
+        fixed (float* data = unitQuad)
+        {
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(unitQuad.Length * sizeof(float)), data, BufferUsageARB.StaticDraw);
+        }
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), (void*)0);
         _gl.EnableVertexAttribArray(0);
-        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-        _gl.EnableVertexAttribArray(1);
+        _roundedInstanceVbo = _gl.GenBuffer();
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedInstanceVbo);
+        int[] attributeSizes = [4, 4, 4, 4, 4, 4];
+        var attributeOffset = 0;
+        for (uint attribute = 1; attribute <= attributeSizes.Length; attribute++)
+        {
+            var size = attributeSizes[attribute - 1];
+            _gl.VertexAttribPointer(attribute, size, VertexAttribPointerType.Float, false,
+                ROUNDED_INSTANCE_FLOATS * sizeof(float), (void*)(attributeOffset * sizeof(float)));
+            _gl.EnableVertexAttribArray(attribute);
+            _gl.VertexAttribDivisor(attribute, 1);
+            attributeOffset += size;
+        }
 
         _textureVao = _gl.GenVertexArray();
         _textureVbo = _gl.GenBuffer();
         _gl.BindVertexArray(_textureVao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _textureVbo);
-        _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(6 * 4 * sizeof(float)), null, BufferUsageARB.DynamicDraw);
-        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 8 * sizeof(float), (void*)0);
         _gl.EnableVertexAttribArray(0);
-        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 8 * sizeof(float), (void*)(2 * sizeof(float)));
         _gl.EnableVertexAttribArray(1);
+        _gl.VertexAttribPointer(2, 4, VertexAttribPointerType.Float, false, 8 * sizeof(float), (void*)(4 * sizeof(float)));
+        _gl.EnableVertexAttribArray(2);
 
         _font = new FontRenderer(_gl);
         _textureRepository = new TextureRepository(_gl);
@@ -162,8 +172,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     public void BeginFrame(int width, int height, Color clearColor)
     {
+        FlushPendingGeometry();
         ResetFrameMetrics();
-        _coloredVertices.Clear();
         _textureRepository.RemoveUnusedPathResources();
 
         Width = Math.Max(width, 1);
@@ -182,7 +192,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public void EndFrame()
     {
         OnFrameEnd?.Invoke();
-        FlushColoredGeometry();
+        FlushPendingGeometry();
         _gl.Flush();
     }
 
@@ -350,36 +360,30 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         float gradientOffset = 0.0f)
     {
         FlushColoredGeometry();
+        FlushTextureGeometry();
+        if (gradient is not null)
+        {
+            FlushRoundedGeometry();
+        }
 
         var padding = mode == ROUNDED_MODE_SHADOW ? MathF.Ceiling(shadowDistance) + 1.0f : 0.0f;
-        var left = rect.X - padding;
-        var top = rect.Y - padding;
-        var right = rect.X + rect.Width + padding;
-        var bottom = rect.Y + rect.Height + padding;
-        Span<float> vertices =
+        ReadOnlySpan<float> instance =
         [
-            left, top, -padding, -padding,
-            right, top, rect.Width + padding, -padding,
-            right, bottom, rect.Width + padding, rect.Height + padding,
-            left, top, -padding, -padding,
-            right, bottom, rect.Width + padding, rect.Height + padding,
-            left, bottom, -padding, rect.Height + padding,
+            rect.X, rect.Y, rect.Width, rect.Height,
+            radius.TopLeft, radius.TopRight, radius.BottomRight, radius.BottomLeft,
+            color.R, color.G, color.B, color.A,
+            thickness.Top, thickness.Right, thickness.Bottom, thickness.Left,
+            innerRadius.TopLeft, innerRadius.TopRight, innerRadius.BottomRight, innerRadius.BottomLeft,
+            mode, MathF.Max(shadowDistance, 0.0001f), padding, 0,
         ];
+        _roundedInstances.AddRange(instance);
+        RecordColoredDraw(6);
+        if (gradient is null)
+        {
+            return;
+        }
 
         _gl.UseProgram(_roundedProgram);
-        _gl.Uniform2(_roundedViewportLocation, (float)Width, (float)Height);
-        _gl.Uniform2(_roundedSizeLocation, rect.Width, rect.Height);
-        _gl.Uniform4(_roundedRadiiLocation, radius.TopLeft, radius.TopRight, radius.BottomRight, radius.BottomLeft);
-        _gl.Uniform4(_roundedColorLocation, color.R, color.G, color.B, color.A);
-        _gl.Uniform1(_roundedModeLocation, mode);
-        _gl.Uniform4(_roundedThicknessLocation, thickness.Top, thickness.Right, thickness.Bottom, thickness.Left);
-        _gl.Uniform4(
-            _roundedInnerRadiiLocation,
-            innerRadius.TopLeft,
-            innerRadius.TopRight,
-            innerRadius.BottomRight,
-            innerRadius.BottomLeft);
-        _gl.Uniform1(_roundedShadowDistanceLocation, MathF.Max(shadowDistance, 0.0001f));
         _gl.Uniform1(_roundedGradientDirectionLocation, (int)gradientDirection);
         _gl.Uniform1(_roundedGradientOffsetLocation, gradientOffset);
 
@@ -411,20 +415,28 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             _gl.Uniform1(_roundedGradientStopCountLocation, 0);
         }
 
-        _gl.BindVertexArray(_roundedVao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedVbo);
-        fixed (float* data = vertices)
+        FlushRoundedGeometry();
+    }
+
+    private void FlushRoundedGeometry()
+    {
+        if (_roundedInstances.Count == 0)
         {
-            _gl.BufferData(
-                BufferTargetARB.ArrayBuffer,
-                (nuint)(vertices.Length * sizeof(float)),
-                data,
-                BufferUsageARB.DynamicDraw);
+            return;
         }
 
-        RecordColoredDraw(6);
-        RecordBufferUpload(vertices.Length * sizeof(float));
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.UseProgram(_roundedProgram);
+        _gl.Uniform2(_roundedViewportLocation, (float)Width, (float)Height);
+        _gl.BindVertexArray(_roundedVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _roundedInstanceVbo);
+        var instances = CollectionsMarshal.AsSpan(_roundedInstances);
+        fixed (float* data = instances)
+        {
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(instances.Length * sizeof(float)), data, BufferUsageARB.DynamicDraw);
+        }
+        RecordBufferUpload(instances.Length * sizeof(float));
+        _gl.DrawArraysInstanced(PrimitiveType.Triangles, 0, 6, (uint)(instances.Length / ROUNDED_INSTANCE_FLOATS));
+        _roundedInstances.Clear();
     }
 
     private void DrawBorder(float x, float y, float width, float height, float thickness, Color color)
@@ -438,7 +450,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     public void DrawText(string text, float x, float y, float fontSize, Color color, float charDistance)
     {
         RecordTextDraw();
-        FlushColoredGeometry();
+        FlushPendingGeometry();
         _font.DrawText(text, x, y, fontSize, charDistance, color);
     }
 
@@ -454,6 +466,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
+        // Path lookups can delete replaced or idle textures referenced by a pending batch.
+        FlushPendingGeometry();
         var texture = _textureRepository.GetTexture(
             imagePath,
             Math.Max(1, (int)MathF.Ceiling(rect.Width * 2)),
@@ -465,7 +479,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
 
         DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-            _textureLocation, _textureColorLocation, rotationRadians);
+            _textureLocation, rotationRadians);
     }
 
     public void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0)
@@ -477,7 +491,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
         var texture = _textureRepository.GetTexture(image);
         DrawTexture(texture, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-            _textureLocation, _textureColorLocation, rotationRadians);
+            _textureLocation, rotationRadians);
     }
 
     public void DrawImage(
@@ -495,7 +509,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         if (texture is not null)
         {
             DrawTexture(texture.Value, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
-                _textureLocation, _textureColorLocation, rotationRadians);
+                _textureLocation, rotationRadians);
         }
     }
 
@@ -506,11 +520,19 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         uint program,
         int viewportLocation,
         int textureLocation,
-        int colorLocation,
         float rotationRadians = 0)
     {
         RecordTextureDraw();
         FlushColoredGeometry();
+        FlushRoundedGeometry();
+        if (_textureVertices.Count != 0 && (_batchTexture != texture.Id || _batchTextureProgram != program))
+        {
+            FlushTextureGeometry();
+        }
+        _batchTexture = texture.Id;
+        _batchTextureProgram = program;
+        _batchTextureViewportLocation = viewportLocation;
+        _batchTextureLocation = textureLocation;
 
         var x = rect.X;
         var y = rect.Y;
@@ -522,31 +544,49 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         var bottomRight = RotatePoint(x + width, y + height, rect, rotationRadians);
         var bottomLeft = RotatePoint(x, y + height, rect, rotationRadians);
 
-        Span<float> vertices =
+        ReadOnlySpan<float> vertices =
         [
-            topLeft.X, topLeft.Y, 0.0f, 0.0f,
-            topRight.X, topRight.Y, 1.0f, 0.0f,
-            bottomRight.X, bottomRight.Y, 1.0f, 1.0f,
-            topLeft.X, topLeft.Y, 0.0f, 0.0f,
-            bottomRight.X, bottomRight.Y, 1.0f, 1.0f,
-            bottomLeft.X, bottomLeft.Y, 0.0f, 1.0f,
+            topLeft.X, topLeft.Y, 0, 0, color.R, color.G, color.B, color.A,
+            topRight.X, topRight.Y, 1, 0, color.R, color.G, color.B, color.A,
+            bottomRight.X, bottomRight.Y, 1, 1, color.R, color.G, color.B, color.A,
+            topLeft.X, topLeft.Y, 0, 0, color.R, color.G, color.B, color.A,
+            bottomRight.X, bottomRight.Y, 1, 1, color.R, color.G, color.B, color.A,
+            bottomLeft.X, bottomLeft.Y, 0, 1, color.R, color.G, color.B, color.A,
         ];
+        _textureVertices.AddRange(vertices);
+    }
 
-        _gl.UseProgram(program);
-        _gl.Uniform2(viewportLocation, (float)Width, (float)Height);
-        _gl.Uniform1(textureLocation, 0);
-        _gl.Uniform4(colorLocation, color.R, color.G, color.B, color.A);
+    private void FlushTextureGeometry()
+    {
+        if (_textureVertices.Count == 0)
+        {
+            return;
+        }
+
+        _gl.UseProgram(_batchTextureProgram);
+        _gl.Uniform2(_batchTextureViewportLocation, (float)Width, (float)Height);
+        _gl.Uniform1(_batchTextureLocation, 0);
+        _gl.Uniform1(_batchTextureProgram == _textureProgram ? _textureVertexColorLocation : _svgTextureVertexColorLocation, 1);
+        // Uploads and font measurement can change bindings while this batch is pending.
         _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, texture.Id);
+        _gl.BindTexture(TextureTarget.Texture2D, _batchTexture);
         _gl.BindVertexArray(_textureVao);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _textureVbo);
+        var vertices = CollectionsMarshal.AsSpan(_textureVertices);
         fixed (float* data = vertices)
         {
             _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data, BufferUsageARB.DynamicDraw);
         }
-
         RecordBufferUpload(vertices.Length * sizeof(float));
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)(vertices.Length / 8));
+        _textureVertices.Clear();
+    }
+
+    private void FlushPendingGeometry()
+    {
+        FlushColoredGeometry();
+        FlushRoundedGeometry();
+        FlushTextureGeometry();
     }
 
     private static (float X, float Y) RotatePoint(float x, float y, Rect rect, float radians)
@@ -589,17 +629,19 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         if (color is null)
         {
             DrawTexture(texture.Value, rect, renderedColor, _textureProgram, _textureViewportLocation,
-                _textureLocation, _textureColorLocation, rotationRadians);
+                _textureLocation, rotationRadians);
         }
         else
         {
             DrawTexture(texture.Value, rect, renderedColor, _svgTextureProgram, _svgTextureViewportLocation,
-                _svgTextureLocation, _svgTextureColorLocation, rotationRadians);
+                _svgTextureLocation, rotationRadians);
         }
     }
 
     private void BeginColoredGeometry(int vertexCount)
     {
+        FlushRoundedGeometry();
+        FlushTextureGeometry();
         RecordColoredDraw(vertexCount);
         _coloredVertices.EnsureCapacity(_coloredVertices.Count + vertexCount * 6);
     }
@@ -623,6 +665,8 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
     private void DrawVertices(ReadOnlySpan<float> vertices, PrimitiveType primitiveType)
     {
+        FlushRoundedGeometry();
+        FlushTextureGeometry();
         const int FLOATS_PER_VERTEX = 6;
         var vertexCount = vertices.Length / FLOATS_PER_VERTEX;
         RecordColoredDraw(
@@ -812,9 +856,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
-        FlushColoredGeometry();
+        FlushPendingGeometry();
         _gl.DeleteBuffer(_vbo);
         _gl.DeleteVertexArray(_vao);
+        _gl.DeleteBuffer(_roundedInstanceVbo);
         _gl.DeleteBuffer(_roundedVbo);
         _gl.DeleteVertexArray(_roundedVao);
         _gl.DeleteBuffer(_textureVbo);

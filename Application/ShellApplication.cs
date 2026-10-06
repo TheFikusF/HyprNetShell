@@ -73,6 +73,14 @@ internal sealed class ShellLoop : IDisposable
     private readonly StatusBarServices _services = new();
     private readonly ScreenshotController _screenshots = new();
     private readonly Dictionary<ulong, StatusBar> _views = [];
+    private readonly Dictionary<ulong, SubmittedInputRegions> _submittedInputRegions = [];
+
+    private sealed class SubmittedInputRegions
+    {
+        public int Width;
+        public int Height;
+        public readonly List<Rect> Regions = [];
+    }
     private ulong? _focusedOutputId;
     private ulong? _dialogOwnerId;
 
@@ -103,7 +111,12 @@ internal sealed class ShellLoop : IDisposable
         {
             DisposeIfNeeded(view);
         }
+        foreach (var outputId in _views.Keys)
+        {
+            Layout.RemoveOutput(outputId);
+        }
         _views.Clear();
+        _submittedInputRegions.Clear();
         DisposeIfNeeded(_services);
     }
 
@@ -139,6 +152,8 @@ internal sealed class ShellLoop : IDisposable
         {
             DisposeIfNeeded(_views[removedId]);
             _views.Remove(removedId);
+            _submittedInputRegions.Remove(removedId);
+            Layout.RemoveOutput(removedId);
         }
 
         foreach (var output in _layer.Outputs)
@@ -256,7 +271,7 @@ internal sealed class ShellLoop : IDisposable
         Layout.DrawLayers();
 
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.SetInputRegions);
-        _layer.SetInputRegions(output.Id, Layout.GetInputRegions());
+        SubmitInputRegionsIfChanged(output);
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.SetInputRegions);
 
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.EndRender);
@@ -270,6 +285,28 @@ internal sealed class ShellLoop : IDisposable
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.SwapBuffers);
         _ = _layer.SwapBuffers(output.Id);
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.SwapBuffers);
+    }
+
+    private void SubmitInputRegionsIfChanged(HyprLayer.Output output)
+    {
+        var regions = Layout.GetInputRegions();
+        if (_submittedInputRegions.TryGetValue(output.Id, out var submitted) &&
+            submitted.Width == output.Width && submitted.Height == output.Height &&
+            submitted.Regions.SequenceEqual(regions))
+        {
+            return;
+        }
+
+        _layer.SetInputRegions(output.Id, regions);
+        if (submitted is null)
+        {
+            submitted = new SubmittedInputRegions();
+            _submittedInputRegions.Add(output.Id, submitted);
+        }
+        submitted.Width = output.Width;
+        submitted.Height = output.Height;
+        submitted.Regions.Clear();
+        submitted.Regions.AddRange(regions);
     }
 
     private void RenderScreenshotOverlay(HyprLayer.Output output)

@@ -37,6 +37,7 @@ internal sealed unsafe partial class FontRenderer : IDisposable
     private readonly Dictionary<string, byte[]> _fontBytes;
     private readonly Dictionary<int, SymbolAtlas[]> _symbolAtlases = new();
     private readonly Dictionary<ColorGlyphKey, ColorGlyph> _colorGlyphs = new();
+    private readonly List<float> _symbolVertices = new();
     private readonly uint _program;
     private readonly uint _colorProgram;
     private readonly uint _vao;
@@ -117,27 +118,23 @@ internal sealed unsafe partial class FontRenderer : IDisposable
         var cursorX = x;
         var cursorY = y;
 
-        _gl.UseProgram(_program);
-        _gl.Uniform2(_viewportLocation, (float)_viewportWidth, (float)_viewportHeight);
-        _gl.Uniform4(_colorLocation, color.R, color.G, color.B, color.A);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindVertexArray(_vao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        _symbolVertices.Clear();
+        uint atlasTexture = 0;
 
         foreach (var element in EnumerateTextElements(text))
         {
             if (!TryGetSymbolGlyph(element, fontSize, out var glyph))
             {
+                FlushSymbolGlyphs(atlasTexture, color);
                 cursorX += DrawColorGlyph(element, cursorX, y, fontSize, color) + charDistance;
-                _gl.UseProgram(_program);
-                _gl.Uniform2(_viewportLocation, (float)_viewportWidth, (float)_viewportHeight);
-                _gl.Uniform4(_colorLocation, color.R, color.G, color.B, color.A);
-                _gl.BindVertexArray(_vao);
-                _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
                 continue;
             }
 
-            _gl.BindTexture(TextureTarget.Texture2D, glyph.Atlas.Texture);
+            if (atlasTexture != glyph.Atlas.Texture)
+            {
+                FlushSymbolGlyphs(atlasTexture, color);
+                atlasTexture = glyph.Atlas.Texture;
+            }
 
             fixed (StbTrueType.stbtt_bakedchar* chars = glyph.Atlas.Chars)
             {
@@ -166,9 +163,11 @@ internal sealed unsafe partial class FontRenderer : IDisposable
                     continue;
                 }
 
-                DrawQuad(quad);
+                AppendSymbolQuad(quad);
             }
         }
+
+        FlushSymbolGlyphs(atlasTexture, color);
     }
 
     private float DrawColorGlyph(string textElement, float x, float baselineY, float fontSize, Color color)
@@ -222,9 +221,9 @@ internal sealed unsafe partial class FontRenderer : IDisposable
         return glyph.Advance;
     }
 
-    private void DrawQuad(StbTrueType.stbtt_aligned_quad quad)
+    private void AppendSymbolQuad(StbTrueType.stbtt_aligned_quad quad)
     {
-        Span<float> vertices =
+        _symbolVertices.AddRange(
         [
             quad.x0, quad.y0, quad.s0, quad.t0,
             quad.x1, quad.y0, quad.s1, quad.t0,
@@ -232,14 +231,35 @@ internal sealed unsafe partial class FontRenderer : IDisposable
             quad.x0, quad.y0, quad.s0, quad.t0,
             quad.x1, quad.y1, quad.s1, quad.t1,
             quad.x0, quad.y1, quad.s0, quad.t1,
-        ];
+        ]);
+    }
 
-        fixed (float* data = vertices)
+    private void FlushSymbolGlyphs(uint atlasTexture, Color color)
+    {
+        if (_symbolVertices.Count == 0)
         {
-            _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0, (nuint)(vertices.Length * sizeof(float)), data);
+            return;
         }
 
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        // Lazy atlas creation can change bindings while a run is pending.
+        _gl.UseProgram(_program);
+        _gl.Uniform2(_viewportLocation, (float)_viewportWidth, (float)_viewportHeight);
+        _gl.Uniform4(_colorLocation, color.R, color.G, color.B, color.A);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, atlasTexture);
+        _gl.BindVertexArray(_vao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+
+        // Each run contains whole 96-byte quads, preserving capacity for DrawColorGlyph.
+        var vertices = CollectionsMarshal.AsSpan(_symbolVertices);
+        fixed (float* data = vertices)
+        {
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data,
+                BufferUsageARB.DynamicDraw);
+        }
+
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)(vertices.Length / 4));
+        _symbolVertices.Clear();
     }
 
     private bool TryGetSymbolGlyph(string textElement, float fontSize, out SymbolGlyph glyph)

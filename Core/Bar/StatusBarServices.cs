@@ -9,6 +9,7 @@ using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Features.Spotify;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
+using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using HyprNetShell.Rendering;
@@ -58,6 +59,8 @@ public sealed class StatusBarServices : IDisposable
     private bool _lastNetworkConnected;
     private string _lastNetworkConnection = "";
     private HashSet<string> _lastConnectedBluetoothDevices = new(StringComparer.OrdinalIgnoreCase);
+
+    private BluetoothSnapshot? _lastBluetoothSnapshot;
     private int _lockScreenRequested;
     private bool _disposed;
 
@@ -225,13 +228,11 @@ public sealed class StatusBarServices : IDisposable
     private void CheckConnectionNotifications()
     {
         var network = Network.Snapshot;
-        var connectedBluetooth = Bluetooth.Snapshot.Devices
-            .Where(device => device.Connected)
-            .ToDictionary(device => device.Address, device => device.Name, StringComparer.OrdinalIgnoreCase);
+        var bluetooth = Bluetooth.Snapshot;
 
         if (!_connectionNotificationsInitialized)
         {
-            if (!network.WifiAvailable && !Bluetooth.Snapshot.Available)
+            if (!network.WifiAvailable && !bluetooth.Available)
             {
                 return;
             }
@@ -239,7 +240,11 @@ public sealed class StatusBarServices : IDisposable
             _connectionNotificationsInitialized = true;
             _lastNetworkConnected = network.Connected;
             _lastNetworkConnection = network.Connection;
-            _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _lastConnectedBluetoothDevices = bluetooth.Devices
+                .Where(device => device.Connected)
+                .Select(device => device.Address)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _lastBluetoothSnapshot = bluetooth;
             return;
         }
 
@@ -253,18 +258,27 @@ public sealed class StatusBarServices : IDisposable
             Notifications.ShowLocal("Network disconnected", _lastNetworkConnection, "wifi-off", storeInHistory: false);
         }
 
-        foreach (var device in connectedBluetooth.Where(device => !_lastConnectedBluetoothDevices.Contains(device.Key)))
+        if (!ReferenceEquals(bluetooth, _lastBluetoothSnapshot))
         {
-            Notifications.ShowLocal("Bluetooth connected", device.Value, "bluetooth-connected", storeInHistory: false);
-        }
-        foreach (var address in _lastConnectedBluetoothDevices.Where(address => !connectedBluetooth.ContainsKey(address)))
-        {
-            Notifications.ShowLocal("Bluetooth disconnected", address, "bluetooth-off", storeInHistory: false);
+            var connectedBluetooth = bluetooth.Devices
+                .Where(device => device.Connected)
+                .ToDictionary(device => device.Address, device => device.Name, StringComparer.OrdinalIgnoreCase);
+            foreach (var device in connectedBluetooth.Where(device => !_lastConnectedBluetoothDevices.Contains(device.Key)))
+            {
+                Notifications.ShowLocal("Bluetooth connected", device.Value, "bluetooth-connected", storeInHistory: false);
+            }
+            foreach (var address in _lastConnectedBluetoothDevices.Where(address => !connectedBluetooth.ContainsKey(address)))
+            {
+                Notifications.ShowLocal("Bluetooth disconnected", address, "bluetooth-off", storeInHistory: false);
+            }
+
+            _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _lastBluetoothSnapshot = bluetooth;
         }
 
         _lastNetworkConnected = network.Connected;
         _lastNetworkConnection = network.Connection;
-        _lastConnectedBluetoothDevices = connectedBluetooth.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     }
 
 

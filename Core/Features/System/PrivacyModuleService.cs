@@ -297,23 +297,8 @@ internal sealed class PrivacyModuleService : IBarDataService, IDisposable
         return null;
     }
 
-    private static bool ContainsAny(string? value, params ReadOnlySpan<string> candidates)
-    {
-        if (value is null)
-        {
-            return false;
-        }
-
-        foreach (var candidate in candidates)
-        {
-            if (value.Contains(candidate, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool ContainsAny(string? value, params IReadOnlyCollection<string> candidates) =>
+        value is not null && candidates.Any(x => value.Contains(x, StringComparison.OrdinalIgnoreCase));
 
     private static HashSet<string> SourceAliases(int id, JsonElement properties)
     {

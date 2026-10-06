@@ -13,24 +13,44 @@ internal sealed class DeviceBatteryService(
 
     private readonly Dictionary<string, DeviceState> _states = new(StringComparer.Ordinal);
     private DeviceBatteriesSnapshot _snapshot = DeviceBatteriesSnapshot.Empty;
+    private readonly List<DeviceBatterySnapshot> _devicesBuffer = [];
+    private BatterySnapshot? _lastLaptopSnapshot;
+    private BluetoothSnapshot? _lastBluetoothSnapshot;
+    private KdeConnectSnapshot? _lastKdeConnectSnapshot;
 
     internal DeviceBatteriesSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
     internal void Refresh()
     {
-        var devices = ReadDevices();
+        var laptop = laptopBattery.Snapshot;
+        var bluetoothSnapshot = bluetooth.Snapshot;
+        var kdeConnectSnapshot = kdeConnect.Snapshot;
+        if (Equals(laptop, _lastLaptopSnapshot) &&
+            ReferenceEquals(bluetoothSnapshot, _lastBluetoothSnapshot) &&
+            ReferenceEquals(kdeConnectSnapshot, _lastKdeConnectSnapshot))
+        {
+            return;
+        }
+
+        var devices = ReadDevices(laptop, bluetoothSnapshot, kdeConnectSnapshot);
         foreach (var device in devices)
         {
             CheckNotifications(device);
         }
 
         Volatile.Write(ref _snapshot, new DeviceBatteriesSnapshot(devices));
+        _lastLaptopSnapshot = laptop;
+        _lastBluetoothSnapshot = bluetoothSnapshot;
+        _lastKdeConnectSnapshot = kdeConnectSnapshot;
     }
 
-    private DeviceBatterySnapshot[] ReadDevices()
+    private DeviceBatterySnapshot[] ReadDevices(
+        BatterySnapshot laptop,
+        BluetoothSnapshot bluetoothSnapshot,
+        KdeConnectSnapshot kdeConnectSnapshot)
     {
-        var devices = new List<DeviceBatterySnapshot>();
-        var laptop = laptopBattery.Snapshot;
+        var devices = _devicesBuffer;
+        devices.Clear();
         if (laptop.Available)
         {
             devices.Add(new DeviceBatterySnapshot(
@@ -41,7 +61,7 @@ internal sealed class DeviceBatteryService(
                 laptop.IsCharging));
         }
 
-        devices.AddRange(bluetooth.Snapshot.Devices
+        devices.AddRange(bluetoothSnapshot.Devices
             .Where(static device => device.Connected && device.BatteryPercentage.HasValue)
             .Select(static device => new DeviceBatterySnapshot(
                 $"bluetooth:{device.Address}",
@@ -50,7 +70,7 @@ internal sealed class DeviceBatteryService(
                 Math.Clamp(device.BatteryPercentage!.Value, 0, 100),
                 null)));
 
-        devices.AddRange(kdeConnect.Snapshot.Devices
+        devices.AddRange(kdeConnectSnapshot.Devices
             .Where(static device => device.IsPaired && device.IsReachable && device.BatteryLevel.HasValue)
             .Select(static device => new DeviceBatterySnapshot(
                 $"kdeconnect:{device.Id}",

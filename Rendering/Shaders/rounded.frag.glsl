@@ -6,13 +6,13 @@ const int MODE_SHADOW = 3;
 const int MAX_GRADIENT_STOPS = 64;
 
 in vec2 vLocalPosition;
-uniform vec2 uSize;
-uniform vec4 uRadii;
-uniform vec4 uColor;
-uniform int uMode;
-uniform vec4 uThickness;
-uniform vec4 uInnerRadii;
-uniform float uShadowDistance;
+flat in vec2 vSize;
+flat in vec4 vRadii;
+flat in vec4 vColor;
+flat in int vMode;
+flat in vec4 vThickness;
+flat in vec4 vInnerRadii;
+flat in float vShadowDistance;
 uniform int uGradientDirection;
 uniform float uGradientOffset;
 uniform int uGradientStopCount;
@@ -91,37 +91,37 @@ vec4 gradientColor(float position)
 
 void main()
 {
-    float outerDistance = roundedRectDistance(vLocalPosition, uSize, uRadii);
+    float outerDistance = roundedRectDistance(vLocalPosition, vSize, vRadii);
     float alpha;
-    vec4 color = uColor;
+    vec4 color = vColor;
 
-    if (uMode == MODE_SHADOW)
+    if (vMode == MODE_SHADOW)
     {
         float antialiasWidth = max(fwidth(outerDistance), 0.0001);
         float outside = smoothstep(-antialiasWidth, antialiasWidth, outerDistance);
-        float falloff = clamp(1.0 - max(outerDistance, 0.0) / uShadowDistance, 0.0, 1.0);
+        float falloff = clamp(1.0 - max(outerDistance, 0.0) / vShadowDistance, 0.0, 1.0);
         alpha = outside * falloff * falloff;
     }
     else
     {
         alpha = coverage(outerDistance);
-        if (uMode == MODE_BORDER)
+        if (vMode == MODE_BORDER)
         {
-            vec2 innerOffset = vec2(uThickness.w, uThickness.x);
-            vec2 innerSize = uSize - vec2(
-                uThickness.w + uThickness.y,
-                uThickness.x + uThickness.z);
+            vec2 innerOffset = vec2(vThickness.w, vThickness.x);
+            vec2 innerSize = vSize - vec2(
+                vThickness.w + vThickness.y,
+                vThickness.x + vThickness.z);
             float innerDistance = roundedRectDistance(
                 vLocalPosition - innerOffset,
                 innerSize,
-                uInnerRadii);
+                vInnerRadii);
             alpha *= 1.0 - coverage(innerDistance);
         }
-        else if (uMode == MODE_GRADIENT)
+        else if (vMode == MODE_GRADIENT)
         {
             float position = uGradientDirection == 0
-                ? vLocalPosition.x / uSize.x
-                : vLocalPosition.y / uSize.y;
+                ? vLocalPosition.x / vSize.x
+                : vLocalPosition.y / vSize.y;
             if (uGradientOffset != 0.0)
             {
                 position = fract(position + uGradientOffset);

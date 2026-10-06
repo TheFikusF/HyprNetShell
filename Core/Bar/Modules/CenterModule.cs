@@ -254,7 +254,12 @@ internal sealed class CenterModule : IDrawableModule
             Style = ModulesCommon.PopupStyle(),
             Children =
             [
-                BuildCarouselPage(now),
+                new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch, ItemsAlignment.Stretch)
+                {
+                    BuildPageButton(-1, _previousPageState.UpdateColor(ThemeManager.Current.Panel)),
+                    BuildCarouselPage(now),
+                    BuildPageButton(1, _nextPageState.UpdateColor(ThemeManager.Current.Panel)),
+                },
                 BuildCarouselNavigation(),
                 ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12),
                 _notificationsWidget.Draw(snapshot),
@@ -262,37 +267,27 @@ internal sealed class CenterModule : IDrawableModule
         };
     }
 
-    private BoxNode BuildCarouselPage(DateTime now)
+    private BoxNode BuildCarouselPage(DateTime now) => new (new Style { Spacing = 12 })
     {
-        var previous = _previousPageState.UpdateColor(ThemeManager.Current.Panel);
-        var next = _nextPageState.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode(new Style { Spacing = 12 })
+        VerticalAlignment = ItemsAlignment.Stretch,
+        OnScroll = (x) => ChangeCarouselPage((int)MathF.Max(MathF.Min(MathF.Floor(x), 1), -1)),
+        Children = _activeCarouselPage switch
         {
-            VerticalAlignment = ItemsAlignment.Stretch,
-            OnScroll = (x) => ChangeCarouselPage((int)MathF.Max(MathF.Min(MathF.Floor(x), 1), -1)),
-            Children =
+            0 =>
             [
-                BuildPageButton(Icons.ChevronLeft, previous, () => ChangeCarouselPage(-1)),
-                .._activeCarouselPage switch
-                {
-                    0 =>
-                    [
-                        _calendar.Draw(now, OpenCalendar, showTooltips: true, handleScroll: false),
-                        _worldClocks.Draw(now, OpenWorldClocks),
-                        _weather.Draw(OpenWeather),
-                    ],
-                    1 =>
-                    [
-                        _todaysEvents.Draw(now, OpenCalendar),
-                        _chatGptLimits.Draw(),
-                    ],
-                    2 => [_kdeConnect.Draw(OpenKdeConnect)],
-                    _ => Array.Empty<Node>()
-                },
-                BuildPageButton(Icons.ChevronRight, next, () => ChangeCarouselPage(1)),
+                _calendar.Draw(now, OpenCalendar, showTooltips: true, handleScroll: false),
+                _worldClocks.Draw(now, OpenWorldClocks),
+                _weather.Draw(OpenWeather),
             ],
-        };
-    }
+            1 =>
+            [
+                _todaysEvents.Draw(now, OpenCalendar),
+                _chatGptLimits.Draw(),
+            ],
+            2 => [_kdeConnect.Draw(OpenKdeConnect)],
+            _ => Array.Empty<Node>()
+        },
+    };
 
     private BoxNode BuildCarouselNavigation() => new(height: 16)
     {
@@ -320,11 +315,11 @@ internal sealed class CenterModule : IDrawableModule
     private void ChangeCarouselPage(int direction) =>
         _activeCarouselPage = (_activeCarouselPage + direction + CAROUSEL_PAGE_COUNT) % CAROUSEL_PAGE_COUNT;
 
-    private BoxNode BuildPageButton(SvgAsset icon, ModulesCommon.BoxState state, Action action) => new(28)
+    private BoxNode BuildPageButton(int direction, ModulesCommon.BoxState state) => new(28)
     {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
-        OnClick = action,
+        OnClick = () => ChangeCarouselPage(direction),
         IsHovered = state.Hovered,
         Style = ModulesCommon.ModuleStyle(state.Background) with
         {
@@ -332,7 +327,7 @@ internal sealed class CenterModule : IDrawableModule
             BorderRadius = 8,
             BorderWidth = 0,
         },
-        Children = [new ImageNode(icon, 16, 16, ThemeManager.Current.Text)],
+        Children = [new ImageNode(direction > 0 ? Icons.ChevronRight : Icons.ChevronLeft, color: ThemeManager.Current.Text)],
     };
 
     private void OpenCalendar()
