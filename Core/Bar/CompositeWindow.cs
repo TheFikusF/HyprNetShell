@@ -1,10 +1,11 @@
 using HyprNetShell.GUI;
+using HyprNetShell.GUI.Layout;
+using HyprNetShell.GUI.Layout.Nodes;
+
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 
-using HyprNetShell.GUI.Layout;
-using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
