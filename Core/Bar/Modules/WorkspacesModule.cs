@@ -74,16 +74,15 @@ internal sealed class WorkspacesModule : IDrawableModule
                 Style = new Style
                 {
                     BackgroundColor = Color.FromRgb(0, 0, 0, 0.9f),
-                    Spacing = 4,
-
+                    Spacing = 8,
                     BorderRadius = new BorderRadius(0, ThemeManager.Current.Border.Radius, ThemeManager.Current.Border.Radius, 0),
-                    Padding = new Insets(8, 8),
+                    Padding = new Insets(8, 12, 8, 8),
                     ShadowColor = Color.Black with { A = 0.45f },
-                    ShadowDistance = 5.0f
+                    ShadowDistance = 4.0f
                 },
                 Children =
                 {
-                    ModulesCommon.BuildAppBadge(className, 14, ThemeManager.Current.Text.MutedColor),
+                    ModulesCommon.BuildAppBadge(className, ThemeManager.Current.IconSize, ThemeManager.Current.Text.MutedColor),
                     new TextNode(title.Length > 40 ? title[..37] + "..." : title),
                 },
             }
@@ -141,19 +140,17 @@ internal sealed class WorkspacesModule : IDrawableModule
         };
     }
 
-    private BoxNode BuildMonitorColumn(
-        string monitorName,
-        IReadOnlyList<WorkspaceSnapshot> workspaces) => new(400) {
-            Direction = Direction.Vertical,
-            VerticalAlignment = ItemsAlignment.Start,
-            HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
-            Children =
+    private BoxNode BuildMonitorColumn(string monitorName, IReadOnlyList<WorkspaceSnapshot> workspaces) => new(400) {
+        Direction = Direction.Vertical,
+        VerticalAlignment = ItemsAlignment.Start,
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        Style = Style.Spacer,
+        Children =
         [
             ModulesCommon.BuildTextWithIcon(Icons.Monitor, $"Monitor {monitorName}"),
-            ..workspaces.Select(workspace => WorkspaceModule(workspace)),
+            ..workspaces.Select(WorkspaceModule),
         ],
-        };
+    };
 
     private BoxNode WorkspaceModule(WorkspaceSnapshot workspace)
     {
@@ -172,15 +169,12 @@ internal sealed class WorkspacesModule : IDrawableModule
             Children =
             [
                 new TextNode($"Workspace {workspace.Id}"),
-                ..workspace.Windows.Select(x => new BoxNode
+                ..workspace.Windows.Select(x => new BoxNode(new Style { Spacing = 8, Padding = new Insets(0, 0, 0, 4) },
+                    horizontalAlignment: ItemsAlignment.Stretch,
+                    verticalAlignment: ItemsAlignment.Center)
                 {
-                    Style = new Style { Spacing = 8, Padding = new Insets(0, 0, 0, 4) },
-                    HorizontalAlignment = ItemsAlignment.Stretch,
-                    Children =
-                    [
-                        ModulesCommon.BuildAppBadge(x.ClassName, 14, ThemeManager.Current.Text.MutedColor),
-                        new TextNode(x.Title, wrapping: TextWrapping.Ellipsis)
-                    ]
+                    ModulesCommon.BuildAppBadge(x.ClassName, ThemeManager.Current.IconSize, ThemeManager.Current.Text.MutedColor),
+                    new TextNode(x.Title, wrapping: TextWrapping.Ellipsis)
                 }),
             ],
         };

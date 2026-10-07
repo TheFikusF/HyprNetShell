@@ -196,14 +196,17 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
 
     private BoxNode BuildNowPlaying(MusicSnapshot music) => new(height: POPUP_IMAGE_SIZE) {
         Direction = Direction.Horizontal,
+        HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
         Style = Style.Spacer,
         Children =
         [
             BuildPopupImage(music),
-            new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42, POPUP_IMAGE_SIZE)
+            new BoxNode(height: POPUP_IMAGE_SIZE)
             {
+                Flex = 1,
                 Direction = Direction.Vertical,
+                HorizontalAlignment = ItemsAlignment.Stretch,
                 VerticalAlignment = ItemsAlignment.Spread,
                 Style = new Style { Padding = new Insets(0, 12) },
                 Children =
@@ -211,6 +214,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
                         Style = new Style { Spacing = 6 },
                         Children =
                         [
@@ -222,11 +226,12 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
                     new BoxNode
                     {
                         Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Stretch,
                         Style = Style.Spacer,
                         Children =
                         [
                             BuildProgress(music),
-                            new BoxNode(POPUP_WIDTH - POPUP_IMAGE_SIZE - 42)
+                            new BoxNode
                             {
                                 Direction = Direction.Horizontal,
                                 HorizontalAlignment = ItemsAlignment.Center,
@@ -388,19 +393,19 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
 
     private Node BuildProgress(MusicSnapshot music)
     {
-        var width = POPUP_WIDTH - POPUP_IMAGE_SIZE - 42;
         var position = _progressDragging.Value ? _positionOverrideMicros : EffectivePosition(music);
         var ratio = music.LengthMicros > 0
             ? Math.Clamp((float)position / music.LengthMicros, 0.0f, 1.0f)
             : 0.0f;
 
-        return new BoxNode(width) {
+        return new BoxNode {
             Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 5 },
             Children =
             [
                 new SliderNode(
-                    width,
+                    null,
                     18,
                     ratio,
                     ThemeManager.Current.Panel,
@@ -408,7 +413,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
                     ThemeManager.Current.Text,
                     value => Seek(music, value),
                     _progressDragging),
-                new BoxNode(width)
+                new BoxNode
                 {
                     Direction = Direction.Horizontal,
                     HorizontalAlignment = ItemsAlignment.Spread,

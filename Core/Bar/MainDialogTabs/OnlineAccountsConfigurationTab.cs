@@ -44,17 +44,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                 MainDialogTabUi.BuildSectionHeader(
                     "Online accounts",
                     connectedCount == 0 ? "Credentials stored with Secret Service" : $"{connectedCount} connected"),
-                ..snapshots.Select(BuildProviderRow),
-                ..(snapshots.Any(snapshot => snapshot.Provider == OnlineAccountProvider.ChatGpt)
-                    ? new Node[]
-                    {
-                        new TextNode(
-                            "ChatGPT sign-in mirrors Zed's current Codex OAuth integration. OpenAI does not publish it as a stable third-party API, so it may change.",
-                            12,
-                            ThemeManager.Current.Text.MutedColor,
-                            maxWidth: 920),
-                    }
-                    : []),
+                ..snapshots.Select(BuildProviderRow)
             ],
         };
     }
@@ -73,20 +63,20 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             ? snapshot.AccountName ?? "Connected"
             : "Not connected");
 
-        return new BoxNode(height: 104) {
+        return new BoxNode() {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
-                Padding = new Insets(16, 10),
                 BorderRadius = 8,
                 BorderWidth = snapshot.Connected ? ThemeManager.Current.Border.Width : 0,
+                Padding = new Insets(12, 12)
             },
             Children =
             [
                 new BoxNode
                 {
                     VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 14 },
+                    Style = new Style { Spacing = 12 },
                     Children =
                     [
                         new ImageNode(ProviderIcon(snapshot.Provider), 28, 28, snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Text),
@@ -96,12 +86,11 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                             Style = new Style { Spacing = 4 },
                             Children =
                             [
-                                new TextNode(snapshot.Name, 17),
-                                new TextNode(snapshot.Description, 12, ThemeManager.Current.Text.MutedColor, maxWidth: 600),
+                                new TextNode(snapshot.Name, ThemeManager.Current.Text.HeaderSize),
+                                new TextNode(snapshot.Description, color: ThemeManager.Current.Text.MutedColor, maxWidth: 600),
                                 new TextNode(
                                     accountStatus,
-                                    12,
-                                    snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor,
+                                    color: snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor,
                                     maxWidth: 620),
                             ],
                         },
@@ -111,7 +100,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                 {
                     Direction = Direction.Vertical,
                     HorizontalAlignment = ItemsAlignment.Stretch,
-                    Style = new Style { Spacing = 6 },
+                    Style = new Style { Spacing = 8 },
                     Children =
                     [
                         BuildButton(
@@ -141,11 +130,11 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = new Insets(12, 7),
+                Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
-            Children = [new TextNode(label, 13)],
+            Children = [new TextNode(label)],
         };
     }
 

@@ -63,6 +63,25 @@ public abstract class Node
         get;
     }
 
+    /// <summary>
+    /// Main-axis share in a stretch-aligned parent. Null preserves equal-share stretching;
+    /// zero keeps intrinsic size, and positive values divide the remaining space proportionally.
+    /// Explicitly sized nodes remain fixed.
+    /// </summary>
+    public float? Flex
+    {
+        get;
+        init
+        {
+            if (value.HasValue && (!float.IsFinite(value.Value) || value.Value < 0))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value));
+            }
+
+            field = value;
+        }
+    }
+
     public float Opacity { get; set; } = 1;
 
     public Style Style { get; set; } = new Style();

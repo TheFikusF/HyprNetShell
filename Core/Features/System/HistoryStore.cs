@@ -7,23 +7,23 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class HistoryStore : IDisposable
 {
-    internal const int DefaultLimit = 200;
-    internal const int MinimumLimit = 25;
-    internal const int MaximumLimit = 2000;
-    internal const int LimitStep = 25;
+    internal const int DEFAULT_LIMIT = 200;
+    internal const int MINIMUM_LIMIT = 25;
+    internal const int MAXIMUM_LIMIT = 2000;
+    internal const int LIMIT_STEP = 25;
 
-    private const long MaximumNotificationImageBytes = 256L * 1024 * 1024;
-    private const long MaximumClipboardBytes = 256L * 1024 * 1024;
-    private const string NotificationLimitKey = "notification_limit";
-    private const string ClipboardLimitKey = "clipboard_limit";
+    private const long MAXIMUM_NOTIFICATION_IMAGE_BYTES = 256L * 1024 * 1024;
+    private const long MAXIMUM_CLIPBOARD_BYTES = 256L * 1024 * 1024;
+    private const string NOTIFICATION_LIMIT_KEY = "notification_limit";
+    private const string CLIPBOARD_LIMIT_KEY = "clipboard_limit";
 
     private readonly Lock _gate = new();
     private readonly string _connectionString;
     private bool _available;
     private bool _disposed;
 
-    public int NotificationLimit { get; private set; } = DefaultLimit;
-    public int ClipboardLimit { get; private set; } = DefaultLimit;
+    public int NotificationLimit { get; private set; } = DEFAULT_LIMIT;
+    public int ClipboardLimit { get; private set; } = DEFAULT_LIMIT;
     public event Action? LimitsChanged;
 
     public HistoryStore()
@@ -49,8 +49,8 @@ internal sealed class HistoryStore : IDisposable
             {
                 using var connection = OpenConnection();
                 InitializeSchema(connection);
-                NotificationLimit = ReadLimit(connection, NotificationLimitKey);
-                ClipboardLimit = ReadLimit(connection, ClipboardLimitKey);
+                NotificationLimit = ReadLimit(connection, NOTIFICATION_LIMIT_KEY);
+                ClipboardLimit = ReadLimit(connection, CLIPBOARD_LIMIT_KEY);
                 PruneNotifications(connection);
                 PruneClipboard(connection);
                 if (!OperatingSystem.IsWindows())
@@ -315,7 +315,7 @@ internal sealed class HistoryStore : IDisposable
         }
 
         NotificationLimit = value;
-        SaveLimit(NotificationLimitKey, value, PruneNotifications);
+        SaveLimit(NOTIFICATION_LIMIT_KEY, value, PruneNotifications);
     }
 
     public void SetClipboardLimit(int value)
@@ -327,7 +327,7 @@ internal sealed class HistoryStore : IDisposable
         }
 
         ClipboardLimit = value;
-        SaveLimit(ClipboardLimitKey, value, PruneClipboard);
+        SaveLimit(CLIPBOARD_LIMIT_KEY, value, PruneClipboard);
     }
 
     private void SaveLimit(string key, int value, Action<SqliteConnection, SqliteTransaction?> prune)
@@ -362,7 +362,7 @@ internal sealed class HistoryStore : IDisposable
         LimitsChanged?.Invoke();
     }
 
-    private static int NormalizeLimit(int value) => Math.Clamp(value, MinimumLimit, MaximumLimit);
+    private static int NormalizeLimit(int value) => Math.Clamp(value, MINIMUM_LIMIT, MAXIMUM_LIMIT);
 
     private SqliteConnection OpenConnection()
     {
@@ -421,7 +421,7 @@ internal sealed class HistoryStore : IDisposable
         command.CommandText = "SELECT value FROM settings WHERE key = $key";
         command.Parameters.AddWithValue("$key", key);
         var value = command.ExecuteScalar() as string;
-        return int.TryParse(value, out var parsed) ? NormalizeLimit(parsed) : DefaultLimit;
+        return int.TryParse(value, out var parsed) ? NormalizeLimit(parsed) : DEFAULT_LIMIT;
     }
 
     private void PruneNotifications(SqliteConnection connection, SqliteTransaction? transaction = null)
@@ -452,7 +452,7 @@ internal sealed class HistoryStore : IDisposable
                     FROM notifications)
                 WHERE running_bytes > $maximum_bytes)
             """;
-        sizeCommand.Parameters.AddWithValue("$maximum_bytes", MaximumNotificationImageBytes);
+        sizeCommand.Parameters.AddWithValue("$maximum_bytes", MAXIMUM_NOTIFICATION_IMAGE_BYTES);
         sizeCommand.ExecuteNonQuery();
     }
 
@@ -484,7 +484,7 @@ internal sealed class HistoryStore : IDisposable
                     FROM clipboard_entries)
                 WHERE running_bytes > $maximum_bytes)
             """;
-        sizeCommand.Parameters.AddWithValue("$maximum_bytes", MaximumClipboardBytes);
+        sizeCommand.Parameters.AddWithValue("$maximum_bytes", MAXIMUM_CLIPBOARD_BYTES);
         sizeCommand.ExecuteNonQuery();
     }
 

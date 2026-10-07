@@ -58,7 +58,22 @@ internal static class NotificationCard
                     Children =
                     [
                         BuildContent(notification, svgIcon, iconPath, service, state),
-                        BuildCloseButton(notification.Id, service, state),
+                        new BoxNode
+                        {
+                            Flex = 0,
+                            Direction = Direction.Horizontal,
+                            HorizontalAlignment = ItemsAlignment.End,
+                            VerticalAlignment = ItemsAlignment.Center,
+                            Style = Style.Spacer,
+                            Children =
+                            [
+                                new TextNode(
+                                    FormatReceivedAt(notification.ReceivedAt, DateTime.Now),
+                                    ThemeManager.Current.Text.SmallSize,
+                                    ThemeManager.Current.Text.MutedColor),
+                                BuildCloseButton(notification.Id, service, state),
+                            ],
+                        },
                     ],
                 },
                 ..BuildActions(notification, service, state),
@@ -90,7 +105,9 @@ internal static class NotificationCard
                 new TextNode(notification.Title, 16, wrapping: TextWrapping.Ellipsis),
                 new TextNode(notification.Body, wrapping: TextWrapping.Wrap, maxLines: 3),
             ];
+
         return new BoxNode {
+            Flex = 1,
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
@@ -118,7 +135,7 @@ internal static class NotificationCard
                             [
                                 new TextNode(
                                     notification.AppName,
-                                    11,
+                                    ThemeManager.Current.Text.SmallSize,
                                     ThemeManager.Current.Text.MutedColor,
                                     wrapping: TextWrapping.Ellipsis),
                             ]
@@ -127,6 +144,40 @@ internal static class NotificationCard
                 },
             ],
         };
+    }
+
+    private static string FormatReceivedAt(DateTime receivedAt, DateTime now)
+    {
+        receivedAt = receivedAt.ToLocalTime();
+        if (now - receivedAt < TimeSpan.FromMinutes(1))
+        {
+            return "now";
+        }
+
+        var days = (now.Date - receivedAt.Date).Days;
+        if (days == 0)
+        {
+            return receivedAt.ToString("HH:mm");
+        }
+
+        var months = (now.Year - receivedAt.Year) * 12 + now.Month - receivedAt.Month;
+        if (now.Date < receivedAt.Date.AddMonths(months))
+        {
+            months--;
+        }
+
+        if (months >= 12)
+        {
+            var years = months / 12;
+            return $"{years} {(years == 1 ? "year" : "years")} ago";
+        }
+
+        if (months >= 1)
+        {
+            return $"{months} {(months == 1 ? "month" : "months")} ago";
+        }
+
+        return $"{days} {(days == 1 ? "day" : "days")} ago";
     }
 
     private static BoxNode BuildCloseButton(
@@ -211,14 +262,17 @@ internal static class NotificationCard
         {
             yield return new ImageNode(notification.ImageData, width, height);
         }
+
         else if (notification.StoredImage is not null)
         {
             yield return new ImageNode(notification.StoredImage, width, height);
         }
+
         else if (svgIcon is not null)
         {
             yield return new ImageNode(svgIcon, 32, 32, ThemeManager.Current.Text);
         }
+
         else if (!string.IsNullOrWhiteSpace(iconPath))
         {
             yield return new ImageNode(iconPath, 32, 32);

@@ -1,111 +1,58 @@
-<img width="1920" height="69" alt="image" src="https://github.com/user-attachments/assets/96eabc48-c185-4ef3-b153-fb05bbcba1c5" />
+<img width="1920" height="69" alt="HyprNetShell status bar" src="https://github.com/user-attachments/assets/96eabc48-c185-4ef3-b153-fb05bbcba1c5" />
 
 # HyprNetShell
 
-HyprNetShell is an experimental Linux status bar and desktop shell for Hyprland, written in C# and C. It creates a Wayland `wlr-layer-shell` surface through a small native library and renders a custom interface directly with OpenGL.
+An experimental Linux status bar and desktop shell for **Hyprland**, written in C# and C. It uses a small native Wayland layer-shell library, a custom layout/input system, and direct OpenGL rendering—no GTK, Qt, Avalonia, SDL, or GLFW.
 
-The project includes Hyprland workspaces, system and media controls, notifications, a system tray, and an application launcher. It uses its own layout and input system instead of GTK, Qt, Avalonia, SDL, or GLFW.
+Features include workspaces, system and media controls, notifications, a system tray, an application launcher, clipboard history, wallpapers, screenshots, and a lock screen.
 
-## Repository structure
+This is a work in progress, not a polished drop-in desktop. Hyprland is the intended environment; other layer-shell compositors may support the bar, but Hyprland-specific features will not work there.
 
-```text
-Application/    Shell orchestration, lock screen, screenshots, and launch helpers
-Core/           Bar composition, modules, models, and system/Hyprland services
-GUI/            Custom retained node layout and input system
-Rendering/      OpenGL renderer, text, image, and SVG support
-Generators/     Roslyn source generator for embedded SVG assets
-Native/         Native library plus managed Wayland/PInvoke wrappers
-assets/         Embedded fonts, icons, SVGs, and images
-Program.cs      Thin command-line mode dispatcher
-```
+## Build and run
 
-See [`AGENTS.md`](AGENTS.md) for a more detailed project map.
+You need:
 
-## Build
+- Linux x86-64 and a running Hyprland session;
+- .NET 10 SDK, a C11 compiler, `pkg-config`, Meson, and Ninja;
+- development files for Wayland client/EGL, EGL/OpenGL, xkbcommon, and PAM, plus `wayland-scanner`;
+- GLib/GIO runtime libraries. WirePlumber 0.5 development files are optional for the native audio integration.
 
-### Requirements
+Wayland protocol XML files are vendored; no separate `wlr-protocols` package is needed.
 
-- Linux x86-64 running Hyprland or another compositor with `zwlr_layer_shell_v1`
-- .NET 10 SDK
-- A C11 compiler and `pkg-config`
-- Meson and Ninja
-- Wayland client and Wayland EGL development files
-- EGL/OpenGL development files
-- xkbcommon development files
-- `wayland-scanner`
-- GLib/GIO runtime libraries
-
-The layer-shell protocol XML is vendored in `Native/protocols/`, so a separate `wlr-protocols` package is not required.
-
-Runtime features additionally use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-clipboard`, `hyprpaper`, and `hyprsunset`. Media metadata and controls use MPRIS over the session D-Bus.
-
-Online account credentials require a Freedesktop Secret Service provider such as GNOME Keyring, KDE Wallet, or KeePassXC with Secret Service enabled. HyprNetShell does not fall back to plaintext credential files.
-
-### Steps
-
-From the repository root, build the native libraries and managed solution through the project script:
+From the repository root:
 
 ```bash
-./build.sh build
+./build.sh run       # Build native + managed code, then launch
+./build.sh build     # Build only
+./build.sh publish   # Create a self-contained NativeAOT bundle
 ```
 
-The native and managed sides can also be built independently:
+Run inside your Wayland session. `./build.sh help` lists all commands; `native` and `managed` can build each side separately. A managed-only build still needs the native library built first.
 
-```bash
-./build.sh native
-./build.sh managed
-```
+Runtime integrations use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-copy`/`wl-paste`, `hyprpaper`, and `hyprsunset`. Install the tools for the features you want. Media controls use MPRIS over the session D-Bus.
 
-Build and run HyprNetShell from inside a compatible Wayland session:
+**Gentoo:** see [`packaging/gentoo/`](packaging/gentoo/README.md) for the binary ebuild, overlay setup, runtime dependencies, and lock-screen PAM policy.
 
-```bash
-./build.sh run
-```
+## Optional online accounts
 
-Run `./build.sh help` for the complete command list and argument-forwarding behavior.
+**Settings → Accounts** supports Google, Spotify, and ChatGPT sign-in. Credentials are stored through a Freedesktop Secret Service provider such as GNOME Keyring, KDE Wallet, or KeePassXC—not plaintext files.
 
-The managed build copies `Native/build/libhypr_layer.so` into the executable output directory. If the native library is missing, the build emits a warning and the application cannot start.
+Client IDs can be entered in Settings or supplied through `HYPRNETSHELL_GOOGLE_CLIENT_ID`, `HYPRNETSHELL_SPOTIFY_CLIENT_ID`, and `HYPRNETSHELL_OPENAI_CLIENT_ID`. Embedded build values take priority over environment variables, then saved settings.
 
-## Online account setup
+- **Google:** create a **Desktop app** OAuth client. Also supply `HYPRNETSHELL_GOOGLE_CLIENT_SECRET` from its credential JSON; this value is not saved in settings.
+- **Spotify:** use Authorization Code with PKCE and register `http://127.0.0.1:5543/auth/callback` exactly. No client secret is needed.
+- **ChatGPT:** uses OpenAI's first-party Codex OAuth flow, not a stable third-party API; upstream changes may break it. No client secret is needed.
 
-The Settings → Accounts tab supports Google, Spotify, and ChatGPT sign-in. Client IDs can be saved directly in that tab, supplied through the environment, or embedded during publishing. Resolution uses this priority:
+`build.sh` embeds supplied OAuth values from the environment or the local, gitignored `credentials.sh` during managed builds and publishing. Do not put private credentials in builds you share.
 
-1. client ID embedded by `build.sh`;
-2. environment variable;
-3. value saved in `config.json` through Settings → Accounts.
+## Code layout
 
-The supported environment variables are:
+`Application/` handles startup and shell orchestration; `Core/` contains features and bar modules; `GUI/` provides layout and controls; `Rendering/` owns OpenGL drawing; `Native/` handles Wayland and interop; `Generators/` embeds SVG assets.
 
-```bash
-export HYPRNETSHELL_GOOGLE_CLIENT_ID="your-google-desktop-client-id"
-export HYPRNETSHELL_GOOGLE_CLIENT_SECRET="your-google-desktop-client-secret"
-export HYPRNETSHELL_SPOTIFY_CLIENT_ID="your-spotify-client-id"
-export HYPRNETSHELL_OPENAI_CLIENT_ID="your-openai-client-id"
-```
+See [`AGENTS.md`](AGENTS.md) for architecture, development conventions, and validation commands.
 
-Create the Google credential as a **Desktop app** OAuth client and supply both values from its downloaded credential JSON. Google assumes installed apps cannot keep the desktop `client_secret` confidential; PKCE protects each authorization-code exchange, while the static value may still be required by Google's token endpoint. The secret is intentionally excluded from `config.json`, the settings UI, status snapshots, and logs. Supply it through `HYPRNETSHELL_GOOGLE_CLIENT_SECRET` or the gitignored `credentials.sh` when building or running through `build.sh`.
+## License
 
-For Spotify, use Authorization Code with PKCE and register the exact loopback redirect URI `http://127.0.0.1:5543/auth/callback`. Spotify permits HTTP for explicit loopback IP addresses, but not for ordinary remote hosts or `localhost`. Do not configure client secrets for Spotify or ChatGPT.
+HyprNetShell's original code is licensed under the [MIT License](LICENSE).
 
-The initial Google connection requests identity scopes only, and the initial Spotify connection requests no optional scopes. Feature-specific permissions will be added alongside the features that need them.
-
-ChatGPT sign-in currently mirrors Zed's Codex OAuth flow. This uses OpenAI's first-party OAuth registration and is not published as a stable third-party integration API, so it may stop working if OpenAI changes that flow.
-
-The script embeds non-empty values from the environment or the local, gitignored `credentials.sh` in every managed build. For a self-contained NativeAOT build, run:
-
-```bash
-./build.sh publish
-```
-
-`build.sh publish` accepts additional `dotnet publish` arguments.
-
-The profile also creates
-`bin/Release/net10.0/linux-x64/publish/HyprNetShell-0.1.0-linux-x64.tar.xz`,
-ready for the Gentoo binary ebuild or a GitHub release.
-
-## Gentoo installation
-
-A binary-package ebuild and local-overlay instructions are available under
-[`packaging/gentoo/`](packaging/gentoo/README.md). The ebuild installs the
-NativeAOT bundle, runtime feature dependencies, and the PAM policy required by
-the in-house lock screen.
+Third-party dependencies and bundled assets retain their upstream licenses. This includes [Lucide icons](assets/icons/lucide/LICENSE), fonts under `assets/fonts/`, and Wayland protocol definitions under `Native/protocols/` (which include their license notices). The MIT License does not replace those licenses or their attribution requirements.

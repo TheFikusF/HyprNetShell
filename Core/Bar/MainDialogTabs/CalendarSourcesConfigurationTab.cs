@@ -18,7 +18,7 @@ internal sealed class CalendarSourcesConfigurationTab(
     TextInputCoordinator inputs) : IMainDialogTab
 {
     private const int URL_MAX_LENGTH = 2048;
-    private const int URL_TEXT_MAX_WIDTH = 780;
+
     private const int VISIBLE_SOURCE_COUNT = 6;
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
@@ -43,10 +43,7 @@ internal sealed class CalendarSourcesConfigurationTab(
     public void Activate()
     {
         inputs.Configure(_urlInput, _ => ClearMessage(), AddUrl);
-        inputs.Activate(_urlInput);
     }
-
-
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -80,19 +77,21 @@ internal sealed class CalendarSourcesConfigurationTab(
         };
     }
 
-    private Node BuildHeader(string status) => new BoxNode {
-        HorizontalAlignment = ItemsAlignment.Spread,
+    private BoxNode BuildHeader(string status) => new() {
+        HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Center,
         Children =
         [
             new BoxNode
             {
+                Flex = 1,
                 Direction = Direction.Vertical,
+                HorizontalAlignment = ItemsAlignment.Stretch,
                 Style = new Style { Spacing = 4 },
                 Children =
                 [
                     new TextNode("Calendar sources", 22),
-                    new TextNode(status, color: ThemeManager.Current.Text.MutedColor),
+                    new TextNode(status, color: ThemeManager.Current.Text.MutedColor, wrapping: TextWrapping.Ellipsis),
                 ],
             },
             BuildActionButton(
@@ -111,6 +110,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             .Select(source => (Func<Node>)(() => BuildGoogleCalendarRow(source)))
             .Concat(urls.Select(url => (Func<Node>)(() => BuildUrlRow(url))))
             .ToArray();
+
         if (sourceRows.Length == 0)
         {
             var message = calendar.GoogleAccountConnected
@@ -124,7 +124,7 @@ internal sealed class CalendarSourcesConfigurationTab(
         var content = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 8 },
+            Style = Style.Spacer,
             Children = sourceRows
                 .VisibleItems(_firstSourceIndex, VISIBLE_SOURCE_COUNT)
                 .Select(item => item.Item())
@@ -138,7 +138,7 @@ internal sealed class CalendarSourcesConfigurationTab(
             VISIBLE_SOURCE_COUNT, delta => ScrollSources(delta, sourceRows.Length));
     }
 
-    private Node BuildGoogleCalendarRow(GoogleCalendarSource source)
+    private BoxNode BuildGoogleCalendarRow(GoogleCalendarSource source)
     {
         if (!_googleSwitchAnimations.TryGetValue(source.Id, out var animation))
         {
@@ -147,7 +147,7 @@ internal sealed class CalendarSourcesConfigurationTab(
         }
 
         return new BoxNode(height: 58) {
-            HorizontalAlignment = ItemsAlignment.Spread,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => calendar.SetGoogleCalendarEnabled(source.Id, !source.Enabled),
             Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
@@ -159,14 +159,16 @@ internal sealed class CalendarSourcesConfigurationTab(
             [
                 new BoxNode
                 {
+                    Flex = 1,
                     Direction = Direction.Vertical,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style { Spacing = 2 },
                     Children =
                     [
-                        new TextNode(source.Name, 16, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
+                        new TextNode(source.Name, ThemeManager.Current.Text.HeaderSize, wrapping: TextWrapping.Ellipsis),
                         new TextNode(
                             source.Primary ? "Primary Google calendar" : source.Hidden ? "Hidden Google calendar" : "Google calendar",
-                            12,
+                            ThemeManager.Current.Text.SmallSize,
                             ThemeManager.Current.Text.MutedColor),
                     ],
                 },
@@ -180,13 +182,19 @@ internal sealed class CalendarSourcesConfigurationTab(
         };
     }
 
-    private Node BuildUrlEditor() => new BoxNode {
+    private BoxNode BuildUrlEditor() => new() {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = new Style { Spacing = 8 },
+        Style = Style.Spacer,
         Children =
         [
-            inputs.Build(_urlInput),
+            new BoxNode
+            {
+                Flex = 1,
+                Direction = Direction.Vertical,
+                HorizontalAlignment = ItemsAlignment.Stretch,
+                Children = [inputs.Build(_urlInput)],
+            },
             BuildActionButton(
                 "Add",
                 Icons.Add,
@@ -195,27 +203,30 @@ internal sealed class CalendarSourcesConfigurationTab(
         ],
     };
 
-    private Node BuildStatus() => string.IsNullOrWhiteSpace(_message)
-        ? new TextNode("Paste or type one HTTP(S) calendar URL, then select Add.", color: ThemeManager.Current.Text.MutedColor)
-        : new TextNode(_message, color: _messageIsError ? ThemeManager.Current.Critical : ThemeManager.Current.Active, maxWidth: 900);
+    private TextNode BuildStatus() => string.IsNullOrWhiteSpace(_message)
+        ? new TextNode("Paste or type one HTTP(S) calendar URL, then select Add.", color: ThemeManager.Current.Text.MutedColor, wrapping: TextWrapping.Wrap)
+        : new TextNode(_message, color: _messageIsError ? ThemeManager.Current.Critical : ThemeManager.Current.Active, wrapping: TextWrapping.Wrap);
 
-    private Node BuildUrlRow(string url)
-    {
-        return new BoxNode(height: 52) {
-            HorizontalAlignment = ItemsAlignment.Spread,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
-                Padding = new Insets(16, 8),
-                BorderRadius = 8,
-                BorderWidth = 0,
+    private BoxNode BuildUrlRow(string url) => new(height: 52) {
+        HorizontalAlignment = ItemsAlignment.Stretch,
+        VerticalAlignment = ItemsAlignment.Center,
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
+            Padding = new Insets(16, 8),
+            BorderRadius = 8,
+            BorderWidth = 0,
+        },
+        Children =
+        [
+            new BoxNode
+            {
+                Flex = 1,
+                Direction = Direction.Vertical,
+                HorizontalAlignment = ItemsAlignment.Stretch,
+                Children = [new TextNode(url, wrapping: TextWrapping.Ellipsis)],
             },
-            Children =
-            [
-                new TextNode(url, maxWidth: URL_TEXT_MAX_WIDTH, wrapping: TextWrapping.Ellipsis),
-                BuildActionButton("Remove", Icons.Delete, "remove:" + url, () => RemoveUrl(url)),
-            ],
-        };
-    }
+            BuildActionButton("Remove", Icons.Delete, "remove:" + url, () => RemoveUrl(url)),
+        ],
+    };
 
     private BoxNode BuildActionButton(
         string label,
@@ -231,6 +242,7 @@ internal sealed class CalendarSourcesConfigurationTab(
 
         state.UpdateColor(ThemeManager.Current.Panel);
         return new BoxNode {
+            Flex = 0,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = action is null ? null : state.Hovered,

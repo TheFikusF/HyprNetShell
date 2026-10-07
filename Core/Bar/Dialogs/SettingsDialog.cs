@@ -42,6 +42,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
                 tabs,
                 openCompositeWindow,
                 _textInputs)),
+            new Tab(new InfoConfigurationTab(services)),
         ];
     }
 
@@ -142,7 +143,8 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         var target = tab.State.Hovered ? Color.Lighten(normal, 0.12f) : normal;
         tab.State.Background = Color.LerpSmooth(tab.State.Background, target, 18, Renderer.DeltaTime);
 
-        return new BoxNode {
+        var iconOnly = tab.Content is InfoConfigurationTab;
+        return new BoxNode(width: iconOnly ? 46 : null, height: 46) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => SelectTab(index),
@@ -152,7 +154,9 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
             },
-            Children = [new ImageNode(tab.Content.Icon, color: ThemeManager.Current.Text), tab.Content.Title],
+            Children = iconOnly
+                ? [new ImageNode(tab.Content.Icon, color: ThemeManager.Current.Text)]
+                : [new ImageNode(tab.Content.Icon, color: ThemeManager.Current.Text), tab.Content.Title],
         };
     }
 

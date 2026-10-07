@@ -516,6 +516,24 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             _textureLocation, rotationRadians);
     }
 
+    public void DrawRoundedImage(RawImageData image, Rect rect, float radius, Color color)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        FlushPendingGeometry();
+        _gl.UseProgram(_textureProgram);
+        var radiusLocation = _gl.GetUniformLocation(_textureProgram, "uCornerRadius");
+        _gl.Uniform1(radiusLocation, Math.Clamp(radius, 0, Math.Min(rect.Width, rect.Height) / 2));
+        _gl.Uniform2(_gl.GetUniformLocation(_textureProgram, "uImageSize"), rect.Width, rect.Height);
+        DrawImage(image, rect, color);
+        // Rounded-image uniforms must not affect subsequent unrounded texture batches.
+        FlushTextureGeometry();
+        _gl.Uniform1(radiusLocation, 0f);
+    }
+
     public void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0)
     {
         if (rect.Width <= 0 || rect.Height <= 0)

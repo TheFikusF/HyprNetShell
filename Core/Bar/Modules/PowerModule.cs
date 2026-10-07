@@ -35,7 +35,7 @@ internal sealed class PowerModule(
                 Style =
                     ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.FromRgb(210, 55, 55))) with
                     {
-                        BorderRadius = 12,
+                        BorderRadius = 8,
                         Padding = 8
                     },
                 Children = [new ImageNode(Icons.Power, 18, 18, ThemeManager.Current.Text)],

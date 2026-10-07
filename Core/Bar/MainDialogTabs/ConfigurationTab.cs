@@ -174,14 +174,14 @@ internal sealed class ConfigurationTab(
                 Style = new Style { Spacing = 8 },
                 Children =
                 [
-                    BuildValueButton("-", () => setValue(value - HistoryStore.LimitStep), decreaseState),
+                    BuildValueButton("-", () => setValue(value - HistoryStore.LIMIT_STEP), decreaseState),
                     new BoxNode(92, 34)
                     {
                         HorizontalAlignment = ItemsAlignment.Center,
                         VerticalAlignment = ItemsAlignment.Center,
                         Children = [new TextNode(value.ToString(), 16)],
                     },
-                    BuildValueButton("+", () => setValue(value + HistoryStore.LimitStep), increaseState),
+                    BuildValueButton("+", () => setValue(value + HistoryStore.LIMIT_STEP), increaseState),
                 ],
             },
         ],

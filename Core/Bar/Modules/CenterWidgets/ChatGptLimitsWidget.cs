@@ -50,7 +50,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
                 VerticalAlignment = ItemsAlignment.Center,
                 Children =
                 [
-                    new TextNode(snapshot.Status ?? "Limits unavailable", color: ThemeManager.Current.Text.MutedColor, maxWidth: WIDTH - 32, wrapping: TextWrapping.Wrap),
+                    new TextNode(snapshot.Status ?? "Limits unavailable", color: ThemeManager.Current.Text.MutedColor, wrapping: TextWrapping.Wrap),
                 ],
             };
             yield break;
@@ -64,7 +64,6 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
 
     private BoxNode BuildWindow(ChatGptLimitWindow window)
     {
-        const int BAR_WIDTH = WIDTH - 24;
         var used = Math.Clamp(window.UsedPercent, 0, 100);
         var color = used >= 90 ? ThemeManager.Current.Critical : used >= 70 ? ThemeManager.Current.Warning : ThemeManager.Current.Active;
         var reset = window.ResetsAt is { } resetsAt ? $"Resets {FormatReset(resetsAt)}" : "Reset unknown";
@@ -79,8 +78,9 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
                     new TextNode(window.Label),
                     new TextNode($"{used:0}% used", color: color),
                 },
-                new BoxNode(BAR_WIDTH, 8)
+                new BoxNode(height: 8)
                 {
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     Style = new Style
                     {
                         BackgroundColor = Color.Lighten(ThemeManager.Current.Panel, 0.16f),
@@ -88,9 +88,14 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
                     },
                     Children =
                     [
-                        new BoxNode(Math.Max(1, (int)Math.Round(BAR_WIDTH * used / 100)), 8)
+                        new BoxNode(height: 8)
                         {
+                            Flex = (float)used,
                             Style = new Style { BackgroundColor = color, BorderRadius = 999 },
+                        },
+                        new BoxNode(height: 8)
+                        {
+                            Flex = (float)(100 - used),
                         },
                     ],
                 },

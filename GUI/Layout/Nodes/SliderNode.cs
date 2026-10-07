@@ -5,7 +5,7 @@ using HyprNetShell.Rendering.Primitives;
 namespace HyprNetShell.GUI.Layout.Nodes;
 
 public sealed class SliderNode(
-    int width,
+    int? width,
     int height,
     float value,
     Color trackColor,
@@ -13,13 +13,25 @@ public sealed class SliderNode(
     Color thumbColor,
     Action<float> onValueChanged,
     Ref<bool> dragging,
-    float scrollStep = 0.05f) : Node
+    float scrollStep = 0.05f) : Node, IWidthBoundNode
 {
     private const float TRACK_HEIGHT = 6.0f;
     private const float THUMB_SIZE = 14.0f;
 
-    public override int Width { get; } = width;
+    private int _resolvedWidth;
+
+    public bool AcceptsWidthBound => !width.HasValue;
+    public override int Width => width ?? _resolvedWidth;
     public override int Height { get; } = height;
+
+    public void SetMaxWidth(int maxWidth, bool stretch)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxWidth);
+        if (AcceptsWidthBound)
+        {
+            _resolvedWidth = stretch ? maxWidth : 0;
+        }
+    }
 
     public override void Draw(IRenderApi renderer, int x, int y)
     {
@@ -30,6 +42,7 @@ public sealed class SliderNode(
         {
             dragging.Value = true;
         }
+
         else if (!Layout.Input.PointerDown || !acceptsInput)
         {
             dragging.Value = false;

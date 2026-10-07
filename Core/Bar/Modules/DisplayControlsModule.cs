@@ -241,7 +241,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
     private SliderNode BuildManualTemperatureSlider(DisplayControlsSnapshot controls)
     {
         var value = EffectiveValue("temperature", controls.TemperatureKelvin);
-        return new SliderNode(340, 14,
+        return new SliderNode(null, 14,
             (value - TemperatureCurveMath.MINIMUM_TEMPERATURE) /
             (float)(TemperatureCurveMath.MAXIMUM_TEMPERATURE - TemperatureCurveMath.MINIMUM_TEMPERATURE),
             ThemeManager.Current.Text.MutedColor, Color.Orange, ThemeManager.Current.Text,
@@ -273,7 +273,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
                         new TextNode(valueText),
                     ],
                 },
-                new SliderNode(340, 14, normalizedValue, ThemeManager.Current.Text.MutedColor, Color.Orange,
+                new SliderNode(null, 14, normalizedValue, ThemeManager.Current.Text.MutedColor, Color.Orange,
                     ThemeManager.Current.Text, onValueChanged, GetSliderDragging(key)),
             ],
         };

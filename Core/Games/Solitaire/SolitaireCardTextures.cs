@@ -6,8 +6,8 @@ namespace HyprNetShell.Core.Games.Solitaire;
 
 internal sealed class SolitaireCardTextures
 {
-    internal const int Width = 60;
-    internal const int Height = 86;
+    internal const int WIDTH = 60;
+    internal const int HEIGHT = 86;
 
     private readonly RawImageData[,] _faces = new RawImageData[4, 13];
 
@@ -58,7 +58,7 @@ internal sealed class SolitaireCardTextures
         symbol = SecurityElement.Escape(symbol) ?? symbol;
 
         return $$"""
-            <svg xmlns="http://www.w3.org/2000/svg" width="{{Width}}" height="{{Height}}" viewBox="0 0 {{Width}} {{Height}}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="{{WIDTH}}" height="{{HEIGHT}}" viewBox="0 0 {{WIDTH}} {{HEIGHT}}">
               <defs>
                 <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0" stop-color="#fffef8"/>
@@ -85,7 +85,7 @@ internal sealed class SolitaireCardTextures
     }
 
     private static string BackSvg() => $$"""
-        <svg xmlns="http://www.w3.org/2000/svg" width="{{Width}}" height="{{Height}}" viewBox="0 0 {{Width}} {{Height}}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="{{WIDTH}}" height="{{HEIGHT}}" viewBox="0 0 {{WIDTH}} {{HEIGHT}}">
           <defs>
             <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stop-color="#2c68ad"/>

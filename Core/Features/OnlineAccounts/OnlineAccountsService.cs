@@ -574,7 +574,7 @@ internal sealed class OnlineAccountsService : IDisposable
         OnlineAccountProvider.ChatGpt => new(
             provider,
             "ChatGPT",
-            "Connect a ChatGPT subscription using the same OAuth flow currently used by Zed.",
+            "Connect a ChatGPT to monitor your subscription usage limits.",
             ResolveClientId(provider).ClientId,
             null,
             "https://auth.openai.com/oauth/authorize",

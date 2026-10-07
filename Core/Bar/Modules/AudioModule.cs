@@ -384,21 +384,21 @@ internal sealed class AudioModule(
                 new BoxNode
                 {
                     Direction = Direction.Horizontal,
-                    HorizontalAlignment = ItemsAlignment.Spread,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     VerticalAlignment = ItemsAlignment.Center,
                     Style = new Style { Padding = new Insets(16, 0, 4, 0), Spacing = 8 },
                     Children =
                     [
                         new SliderNode(
-                            292,
+                            null,
                             14,
                             volume / 100.0f,
                             ThemeManager.Current.Text.MutedColor,
                             Color.Orange,
                             ThemeManager.Current.Text,
                             value => SetVolume(device, (int)MathF.Round(value * 100.0f)),
-                            GetSliderDragging(device.Id)),
-                        new TextNode($"{volume}%"),
+                            GetSliderDragging(device.Id)) { Flex = 1 },
+                        new TextNode($"{volume}%") { Flex = 0 },
                     ],
                 }
             ],

@@ -39,6 +39,7 @@ public interface IRenderApi
     void DrawImageShadow(SvgAsset asset, Rect rect, Color shadowColor, float blurRadius,
         float offsetX = 0, float offsetY = 2);
     void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
+    void DrawRoundedImage(RawImageData image, Rect rect, float radius, Color color);
     void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawImage(
         SvgAsset asset,

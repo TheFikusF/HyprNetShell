@@ -28,6 +28,7 @@ public sealed class OverviewController : IDisposable
     private const float THUMBNAIL_CAPTION_HEIGHT = 44f;
     private const float THUMBNAIL_ICON_SIZE = 52f;
     private const float THUMBNAIL_ICON_TOP = -12f;
+    private const float WORKSPACE_BADGE_PADDING = 12f;
     private const int OVERVIEW_PADDING = 24;
 
     private readonly HyprlandService _hyprland;
@@ -63,7 +64,7 @@ public sealed class OverviewController : IDisposable
     private static double Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
 
     private readonly record struct WindowIdentity(string Address, string Title, int WorkspaceId, string MonitorName, int Width, int Height, string ClassName, string InitialClassName);
-    private sealed record Preview(string Address, string Title, string Subtitle, Rect Bounds, string? IconPath)
+    private sealed record Preview(string Address, string Title, string Subtitle, int WorkspaceId, Rect Bounds, string? IconPath)
     {
         public WindowThumbnailFrame? Frame
         {
@@ -476,7 +477,7 @@ public sealed class OverviewController : IDisposable
                     var window = windows[i];
                     var w = ratios[i] * bestHeight;
                     _previews.Add(new Preview(window.Address, window.Title,
-                        $"{window.MonitorName} · Workspace {window.WorkspaceId}", new Rect(x, y, w, bestHeight),
+                        $"{window.MonitorName} · Workspace {window.WorkspaceId}", window.WorkspaceId, new Rect(x, y, w, bestHeight),
                                                 _icons.TryResolve(window.ClassName) ?? _icons.TryResolve(window.InitialClassName)));
                     x += w + THUMBNAILS_GAP;
                 }
@@ -485,7 +486,8 @@ public sealed class OverviewController : IDisposable
             BuildNavigationGraph();
             if (!_previews.Any(p => p.Address == _selected))
             {
-                _selected = _previews.FirstOrDefault()?.Address;
+                _selected = (_previews.FirstOrDefault(preview => preview.WorkspaceId == _openedWorkspaceId)
+                                    ?? _previews.FirstOrDefault())?.Address;
             }
         }
         else
@@ -579,7 +581,7 @@ public sealed class OverviewController : IDisposable
                     var fit = Math.Min(rect.Width / frame.Image.Width, rect.Height / frame.Image.Height);
                     var image = new Rect(rect.X + (rect.Width - frame.Image.Width * fit) / 2,
                         rect.Y + (rect.Height - frame.Image.Height * fit) / 2, frame.Image.Width * fit, frame.Image.Height * fit);
-                    renderer.DrawImage(frame.Image, image, Color.White.PushOpacity(progress));
+                    renderer.DrawRoundedImage(frame.Image, image, 6, Color.White.PushOpacity(progress));
                 }
                 else
                 {
@@ -588,7 +590,8 @@ public sealed class OverviewController : IDisposable
                 }
                 if (preview.Address == owner._selected)
                 {
-                    renderer.StrokeRect(new Rect(rect.X - 4, rect.Y - 4, rect.Width + 8, rect.Height + 8), 2, Color.White.PushOpacity(progress));
+                    renderer.FillRoundedBorder(new Rect(rect.X - 4, rect.Y - 4, rect.Width + 8, rect.Height + 8),
+                                            10, theme.Border.Width, Color.White.PushOpacity(progress));
                 }
 
                 var iconSize = Math.Min(THUMBNAIL_ICON_SIZE * scale, rect.Width);
@@ -606,6 +609,20 @@ public sealed class OverviewController : IDisposable
                     renderer.DrawImageShadow(Icons.Application, iconRect, iconShadow, 6 * scale, offsetY: 2 * scale);
                     renderer.DrawImage(Icons.Application, iconRect, theme.Text.Color, opacity: progress);
                 }
+
+                var workspaceText = preview.WorkspaceId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var workspaceTextWidth = renderer.MeasureText(workspaceText, theme.Text.HeaderSize);
+                var badgeWidth = workspaceTextWidth + 20;
+                var badgeHeight = theme.Text.HeaderSize + 12;
+                var badgeX = rect.Width >= badgeWidth + 2 * WORKSPACE_BADGE_PADDING
+                    ? rect.X + WORKSPACE_BADGE_PADDING
+                    : rect.X + (rect.Width - badgeWidth) / 2;
+                var badge = new Rect(badgeX, rect.Y + rect.Height - WORKSPACE_BADGE_PADDING - badgeHeight, badgeWidth, badgeHeight);
+                renderer.FillRoundedRect(badge, 6, theme.Panel.PushOpacity(progress));
+                renderer.FillRoundedBorder(badge, 6, 1, theme.Border.Color.PushOpacity(progress));
+                renderer.DrawText(workspaceText, badge.X + (badgeWidth - workspaceTextWidth) / 2,
+                    badge.Y + (badgeHeight + theme.Text.HeaderSize * 0.72f) / 2,
+                    theme.Text.HeaderSize, theme.Text.Color.PushOpacity(progress));
 
                 DrawCaption(renderer, preview.Title, rect.X, rect.Y + rect.Height + 20, rect.Width, theme.Text.Size, theme.Text.Color.PushOpacity(progress));
                 DrawCaption(renderer, preview.Subtitle, rect.X, rect.Y + rect.Height + 38, rect.Width, theme.Text.SmallSize, theme.Text.MutedColor.PushOpacity(progress));
