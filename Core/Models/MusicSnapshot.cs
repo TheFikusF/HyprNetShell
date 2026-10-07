@@ -27,7 +27,16 @@ public record MusicSnapshot(
     public bool IsSpotify => Bus.Contains("spotify", StringComparison.OrdinalIgnoreCase);
     public DateTime PositionObservedAtUtc { get; init; } = DateTime.UtcNow;
     public IReadOnlyList<QueuedSong> Queue { get; init; } = [];
-    public string? SpotifyCurrentUri { get; init; }
-    public bool? ShuffleEnabled { get; init; }
-    public MusicRepeatMode? RepeatMode { get; init; }
+    public string? SpotifyCurrentUri
+    {
+        get; init;
+    }
+    public bool? ShuffleEnabled
+    {
+        get; init;
+    }
+    public MusicRepeatMode? RepeatMode
+    {
+        get; init;
+    }
 }

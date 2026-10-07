@@ -10,7 +10,7 @@ namespace HyprNetShell.Application.LockScreen;
 
 internal static class LockScreenApplication
 {
-    private const string PamPolicyPath = "/etc/pam.d/hyprnetshell";
+    private const string PAM_POLICY_PATH = "/etc/pam.d/hyprnetshell";
 
     internal static int Run(string? backgroundToken = null)
     {
@@ -32,11 +32,11 @@ internal static class LockScreenApplication
 
     internal static void Start(HyprLayer layer, StatusBarServices services)
     {
-        if (!File.Exists(PamPolicyPath))
+        if (!File.Exists(PAM_POLICY_PATH))
         {
             services.ShowShellNotification(
                 "Lock screen unavailable",
-                $"Install the PAM policy at {PamPolicyPath} first.",
+                $"Install the PAM policy at {PAM_POLICY_PATH} first.",
                 "lock");
             return;
         }
@@ -51,8 +51,7 @@ internal static class LockScreenApplication
                 throw new InvalidOperationException("Could not determine the HyprNetShell executable path.");
             }
 
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = processPath,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -82,10 +81,10 @@ internal static class LockScreenApplication
 
     private static int RunLockScreen(string? backgroundToken)
     {
-        if (!File.Exists(PamPolicyPath))
+        if (!File.Exists(PAM_POLICY_PATH))
         {
             throw new InvalidOperationException(
-                $"The lock screen PAM policy is not installed. See Native/pam/README.md and install it as {PamPolicyPath}.");
+                $"The lock screen PAM policy is not installed. See Native/pam/README.md and install it as {PAM_POLICY_PATH}.");
         }
 
         var backgrounds = LockScreenBackground.Receive(backgroundToken);
@@ -97,7 +96,9 @@ internal static class LockScreenApplication
 
         using var renderer = new Renderer((int)HyprLayer.TARGET_FRAMERATE, HyprLayer.GetProcAddress);
         var view = new LockScreenView();
-        var opaqueBackground = ThemeManager.Current.Panel with { A = 1 };
+        var opaqueBackground = ThemeManager.Current.Panel with {
+            A = 1
+        };
 
         while (sessionLock.Update())
         {
@@ -155,8 +156,7 @@ internal static class LockScreenApplication
     }
 
     private static LockScreenStatus GetStatus(SessionLockAuthenticationState authenticationState) =>
-        authenticationState switch
-        {
+        authenticationState switch {
             SessionLockAuthenticationState.Pending or SessionLockAuthenticationState.Success =>
                 LockScreenStatus.Authenticating,
             SessionLockAuthenticationState.Denied => LockScreenStatus.Denied,

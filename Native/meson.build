@@ -50,6 +50,8 @@ foreach protocol_definition : [
   ['ext-image-capture-source-v1', image_capture_source_xml],
   ['ext-image-copy-capture-v1', image_copy_capture_xml],
   ['ext-data-control-v1', data_control_xml],
+  ['hyprland-toplevel-mapping-v1', files('protocols/hyprland-toplevel-mapping-v1.xml')],
+  ['wlr-foreign-toplevel-management-unstable-v1', files('protocols/wlr-foreign-toplevel-management-unstable-v1.xml')],
 ]
   protocol_name = protocol_definition[0]
   protocol = protocol_definition[1]

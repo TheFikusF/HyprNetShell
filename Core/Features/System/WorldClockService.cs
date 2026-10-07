@@ -14,7 +14,10 @@ internal sealed class WorldClockService
 
     public static WorldClockService Shared { get; } = new();
 
-    public IReadOnlyList<WorldClock> AvailableClocks { get; }
+    public IReadOnlyList<WorldClock> AvailableClocks
+    {
+        get;
+    }
 
     public IReadOnlyList<WorldClock> SelectedClocks
     {

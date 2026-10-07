@@ -28,7 +28,10 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard)
         internal int MaximumLength { get; } = maximumLength;
         internal Action<string>? ValueChanged { get; set; } = valueChanged;
         internal Func<string, string>? Transform { get; } = transform;
-        internal Func<string, bool>? Submit { get; set; }
+        internal Func<string, bool>? Submit
+        {
+            get; set;
+        }
         internal bool ClearOnEscape { get; } = clearOnEscape;
         internal bool AlwaysActive { get; } = alwaysActive;
         internal bool PasteReplacesValue { get; } = pasteReplacesValue;
@@ -99,14 +102,12 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard)
         var background = active && !input.AlwaysActive ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         if (hasLabel)
         {
-            return new BoxNode
-            {
+            return new BoxNode {
                 Direction = Direction.Vertical,
                 HorizontalAlignment = ItemsAlignment.Stretch,
                 VerticalAlignment = ItemsAlignment.Start,
                 OnClick = () => _activeInput = input,
-                Style = ModulesCommon.ModuleStyle(background) with
-                {
+                Style = ModulesCommon.ModuleStyle(background) with {
                     Padding = 12,
                     BorderRadius = 8,
                     BorderWidth = active && !input.AlwaysActive ? ThemeManager.Current.Border.Width : 0,
@@ -120,13 +121,11 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard)
             };
         }
 
-        return new BoxNode(height: 46)
-        {
+        return new BoxNode(height: 46) {
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => _activeInput = input,
-            Style = ModulesCommon.ModuleStyle(background) with
-            {
+            Style = ModulesCommon.ModuleStyle(background) with {
                 Padding = new Insets(ThemeManager.Current.Text.Size, 8),
                 BorderRadius = 8,
                 BorderWidth = active && !input.AlwaysActive ? ThemeManager.Current.Border.Width : 0,

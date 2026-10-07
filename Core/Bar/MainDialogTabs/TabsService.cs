@@ -12,7 +12,10 @@ internal sealed class TabsService : IDisposable
     private readonly IReadOnlyDictionary<string, IMainDialogTab> _tabsById;
 
     internal IReadOnlyList<IMainDialogTab> Tabs => _tabs;
-    internal TextInputCoordinator Inputs { get; }
+    internal TextInputCoordinator Inputs
+    {
+        get;
+    }
 
     internal TabsService(
         ClipboardHistoryService clipboardHistory,

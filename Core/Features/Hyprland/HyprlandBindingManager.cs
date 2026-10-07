@@ -203,7 +203,7 @@ internal sealed class HyprlandBindingManager : IDisposable
         Binding[] bindings;
         lock (_bindingsLock)
         {
-            bindings = [.._bindings.Values];
+            bindings = [.. _bindings.Values];
             _bindings.Clear();
         }
 
@@ -249,6 +249,9 @@ internal sealed class HyprlandBindingManager : IDisposable
     {
         public string Keys { get; } = keys;
         public Action Callback { get; } = callback;
-        public CancellationTokenRegistration CancellationRegistration { get; set; }
+        public CancellationTokenRegistration CancellationRegistration
+        {
+            get; set;
+        }
     }
 }

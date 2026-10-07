@@ -195,6 +195,58 @@ Do not silently swallow runtime failures. Any caught exception or unsuccessful e
 - Do not add comments that merely narrate code; document non-obvious protocol, ownership, and concurrency constraints.
 - Avoid new dependencies when the existing architecture or platform APIs can solve the task cleanly.
 
+## Formatting rules and mandatory final pass
+
+`.editorconfig` is the formatting baseline. These rules apply to all new and edited source files. The mandatory full-solution formatter may also update other source files; do not make unrelated functional changes or manually edit generated output.
+
+### Blocks and spacing
+
+- Use braces for every control-flow body, even a single statement. Never write `if (condition) DoSomething();` or a nonempty inline control-flow block.
+- Use Allman braces: opening and closing braces each have their own line, with four-space indentation in C#.
+- Only object declarations/initializers and empty blocks may keep `{ }` on the same line. An empty block such as `catch (OperationCanceledException) { }` is permitted, not required; existing logging and cancellation rules still apply.
+- After a closing brace, leave exactly one empty line before any following code, including `else`, `catch`, and `finally`. Consecutive enclosing closing braces and punctuation belonging to the same expression (such as `};` or `});`) do not need intervening empty lines. Do not insert a trailing empty line when no code follows.
+
+```csharp
+if (condition)
+{
+    DoSomething();
+}
+
+DoSomethingElse();
+```
+
+### Type member order and names
+
+Within each type, use this order:
+
+1. Nested types (inner classes, records, structs, enums, and interfaces).
+2. Constants.
+3. Readonly fields.
+4. Remaining private fields, then any other mutable fields.
+5. Properties (including getter/setter properties) and events.
+6. Constructors.
+7. Methods.
+
+Keep members in their existing relative order within each group unless another change requires reordering. Preserve field-initializer dependencies and runtime behavior when moving declarations; do not reorder initializers unsafely just to meet the grouping rule.
+
+Constants, including local constants, must use `UPPER_CASE` with underscores between words. Keep other names consistent with the surrounding code: PascalCase for types, properties, and methods; camelCase for parameters and locals; preserve the existing private-field prefix convention. Update references when renaming constants.
+
+### Required post-edit workflow
+
+Agents may write intermediate code in any format, but formatting is **mandatory after all functional edits are complete**, before final validation and the final response:
+
+1. Run the full-solution repository formatter from the repository root after all edits are complete. Do not restrict it with `--include` or enumerate edited files:
+
+   ```bash
+   dotnet format HyprNetShell.slnx --no-restore --exclude-diagnostics IDE1006
+   ```
+
+   Running this full-solution command after the last edit is required; an editor's Format File action or a file-scoped formatting command is not a substitute. Use the full `dotnet format`, not just `dotnet format whitespace`, so missing-brace and other supported analyzer fixes can run too. Exclude `IDE1006` because its naming code-fix provider does not support solution-wide Fix All; this does not disable the naming rule. Manually rename noncompliant constants in edited files to `UPPER_CASE` and update all references.
+2. Manually finish rules the built-in formatter cannot reliably enforce: member grouping, `UPPER_CASE` word boundaries, inline-brace exceptions, and exactly one blank line after closing braces. `.editorconfig` cannot express member ordering, and the experimental block-spacing option is not a complete closing-brace-spacing check. If the formatter expands a permitted inline initializer or empty block, leaving it expanded is valid.
+3. For edited native C/header files, use `clang-format` on only those files with Allman braces, four-space indentation, and single-line nonempty blocks/control bodies disabled, then manually check the same applicable block-spacing and naming rules. For other file types, use their existing formatter when available and check `.editorconfig` whitespace rules; do not introduce a dependency just for formatting.
+4. Review the final diff for unintended changes and rerun the relevant build/validation. If any subsequent edits are made, repeat the full-solution formatting command before final validation and the final response.
+5. Report which formatting command ran. If a formatter is unavailable or fails, do not claim formatting passed: perform the manual rule check and explicitly report the limitation.
+
 ## Build and validation
 
 Use the project script to build native code before managed code:
@@ -238,4 +290,5 @@ Before finishing a change, check the relevant items:
 - Are new owned resources disposed during shutdown?
 - Are asset paths included by `Core/HyprNetShell.Core.csproj` and recognized by the generator?
 - Does the change remain compatible with NativeAOT and source-generated JSON?
+- Were all added/edited source files formatted after the last edits, manually checked for rules the formatter cannot enforce, and the formatting result reported?
 - Were the most specific available build/validation commands run?

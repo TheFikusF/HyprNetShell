@@ -6,14 +6,14 @@ namespace HyprNetShell.Core.Bar.Common;
 
 internal static class BoundedListUi
 {
-    public const int DefaultVisibleItemCount = 7;
+    public const int DEFAULT_VISIBLE_ITEM_COUNT = 7;
 
     public static void MoveSelection(
         ref int selectedIndex,
         ref int firstIndex,
         int direction,
         int itemCount,
-        int visibleItemCount = DefaultVisibleItemCount)
+        int visibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT)
     {
         if (itemCount <= 0)
         {
@@ -30,7 +30,7 @@ internal static class BoundedListUi
         ref int selectedIndex,
         ref int firstIndex,
         int itemCount,
-        int visibleItemCount = DefaultVisibleItemCount)
+        int visibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT)
     {
         if (itemCount <= 0)
         {
@@ -47,7 +47,7 @@ internal static class BoundedListUi
         ref int firstIndex,
         int direction,
         int itemCount,
-        int visibleItemCount = DefaultVisibleItemCount)
+        int visibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(visibleItemCount, 1);
         firstIndex = Math.Clamp(
@@ -59,7 +59,7 @@ internal static class BoundedListUi
     public static void NormalizeViewport(
         ref int firstIndex,
         int itemCount,
-        int visibleItemCount = DefaultVisibleItemCount)
+        int visibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(visibleItemCount, 1);
         firstIndex = Math.Clamp(firstIndex, 0, Math.Max(0, itemCount - visibleItemCount));
@@ -68,7 +68,7 @@ internal static class BoundedListUi
     public static IEnumerable<(T Item, int Index)> VisibleItems<T>(
         this IReadOnlyCollection<T> items,
         int firstIndex,
-        int visibleItemCount = DefaultVisibleItemCount)
+        int visibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT)
     {
         var start = Math.Clamp(firstIndex, 0, Math.Max(0, items.Count - 1));
         return items
@@ -88,8 +88,7 @@ internal static class BoundedListUi
             return content;
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Stretch,
             OnScroll = onScroll,
             VerticalAlignment = ItemsAlignment.Start,
@@ -112,8 +111,7 @@ internal static class BoundedListUi
         IReadOnlyCollection<T> items,
         Func<T, int, Node> renderItem,
         int firstItem,
-        int visibleItems, Action<float>? onScroll = null) => BuildScrollableResults(new BoxNode
-        {
+        int visibleItems, Action<float>? onScroll = null) => BuildScrollableResults(new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,

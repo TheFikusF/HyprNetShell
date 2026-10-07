@@ -13,7 +13,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialogTab, IDisposable
 {
-    private const int VisibleDeviceCount = 7;
+    private const int VISIBLE_DEVICE_COUNT = 7;
 
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -46,7 +46,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 ref _selectedIndex,
                 ref _firstIndex,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
         }
 
         if (EffectivePowered(service.Snapshot))
@@ -97,7 +97,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
         }
     }
 
@@ -151,7 +151,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 ref _selectedIndex,
                 ref _firstIndex,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
             devices = _devices;
             pairDevice = _pairDevice;
             status = _status;
@@ -160,8 +160,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
             busy = _operationTask is { IsCompleted: false };
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
@@ -200,7 +199,11 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
             else
             {
                 synchronized.Add(device.Paired
-                    ? device with { Connected = false, BatteryPercentage = null, Paired = false }
+                    ? device with {
+                        Connected = false,
+                        BatteryPercentage = null,
+                        Paired = false
+                    }
                     : device);
             }
 
@@ -212,8 +215,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
         return synchronized;
     }
 
-    private BoxNode BuildHeader(BluetoothSnapshot snapshot, bool powered, bool scanning, bool busy) => new BoxNode
-    {
+    private BoxNode BuildHeader(BluetoothSnapshot snapshot, bool powered, bool scanning, bool busy) => new BoxNode {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         Children =
@@ -274,13 +276,12 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
             yield break;
         }
 
-        var content = new BoxNode
-        {
+        var content = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = devices
-                .VisibleItems(firstIndex, VisibleDeviceCount)
+                .VisibleItems(firstIndex, VISIBLE_DEVICE_COUNT)
                 .Select(item => BuildDeviceRow(item.Item, item.Index, busy))
                 .ToArray(),
         };
@@ -289,7 +290,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
             content,
             firstIndex,
             devices.Count,
-            VisibleDeviceCount);
+            VISIBLE_DEVICE_COUNT);
     }
 
     private BoxNode BuildDeviceRow(BluetoothDeviceSnapshot device, int index, bool busy)
@@ -299,14 +300,12 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
             .UpdateColor(selected ? Color.Lighten(ThemeManager.Current.Panel, 0.1f) : ThemeManager.Current.Panel);
         var stateText = device.Connected ? "Connected" : device.Paired ? "Paired" : "Available";
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => _selectedIndex = index,
-            Style = ModulesCommon.ModuleStyle(rowState.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
@@ -350,8 +349,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
         };
     }
 
-    private BoxNode BuildPairPopup(BluetoothDeviceSnapshot device, bool busy) => new BoxNode
-    {
+    private BoxNode BuildPairPopup(BluetoothDeviceSnapshot device, bool busy) => new BoxNode {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 14 },
@@ -503,7 +501,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 ref _selectedIndex,
                 ref _firstIndex,
                 devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
         }
     }
 

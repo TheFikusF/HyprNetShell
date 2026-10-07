@@ -47,7 +47,10 @@ public sealed class Gradient
     {
     }
 
-    public IReadOnlyList<Stop> Stops { get; }
+    public IReadOnlyList<Stop> Stops
+    {
+        get;
+    }
 
     public Color Evaluate(float position)
     {

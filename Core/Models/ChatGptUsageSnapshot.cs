@@ -12,7 +12,10 @@ internal sealed record ChatGptUsageSnapshot(
     DateTimeOffset? UpdatedAt,
     string? Status)
 {
-    internal static ChatGptUsageSnapshot Disconnected { get; } = new(
+    internal static ChatGptUsageSnapshot Disconnected
+    {
+        get;
+    } = new(
         false,
         null,
         [],

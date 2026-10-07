@@ -17,8 +17,7 @@ internal sealed unsafe partial class FontRenderer : IDisposable
     private const string FALLBACK_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.LiberationMono-Regular.ttf";
     private const string EMOJI_FONT_RESOURCE_NAME = "HyprNetShell.Fonts.NotoColorEmoji.ttf";
 
-    private readonly Dictionary<string, UnicodeRange[]> _symbolRanges = new()
-    {
+    private readonly Dictionary<string, UnicodeRange[]> _symbolRanges = new() {
         [PRIMARY_FONT_RESOURCE_NAME] =
         [
             new(0x0000, 0x01FF), // Basic Latin printable ASCII.
@@ -53,8 +52,7 @@ internal sealed unsafe partial class FontRenderer : IDisposable
     public FontRenderer(GL gl)
     {
         _gl = gl;
-        _fontBytes = new Dictionary<string, byte[]>
-        {
+        _fontBytes = new Dictionary<string, byte[]> {
             [PRIMARY_FONT_RESOURCE_NAME] = ReadEmbeddedFont(PRIMARY_FONT_RESOURCE_NAME),
             [FALLBACK_FONT_RESOURCE_NAME] = ReadEmbeddedFont(FALLBACK_FONT_RESOURCE_NAME)
         };
@@ -529,13 +527,40 @@ internal sealed unsafe partial class FontRenderer : IDisposable
             }
             finally
             {
-                if (layout != IntPtr.Zero) g_object_unref(layout);
-                if (context != IntPtr.Zero) cairo_destroy(context);
-                if (surface != IntPtr.Zero) cairo_surface_destroy(surface);
-                if (measureLayout != IntPtr.Zero) g_object_unref(measureLayout);
-                if (measureContext != IntPtr.Zero) cairo_destroy(measureContext);
-                if (measureSurface != IntPtr.Zero) cairo_surface_destroy(measureSurface);
-                if (font != IntPtr.Zero) pango_font_description_free(font);
+                if (layout != IntPtr.Zero)
+                {
+                    g_object_unref(layout);
+                }
+
+                if (context != IntPtr.Zero)
+                {
+                    cairo_destroy(context);
+                }
+
+                if (surface != IntPtr.Zero)
+                {
+                    cairo_surface_destroy(surface);
+                }
+
+                if (measureLayout != IntPtr.Zero)
+                {
+                    g_object_unref(measureLayout);
+                }
+
+                if (measureContext != IntPtr.Zero)
+                {
+                    cairo_destroy(measureContext);
+                }
+
+                if (measureSurface != IntPtr.Zero)
+                {
+                    cairo_surface_destroy(measureSurface);
+                }
+
+                if (font != IntPtr.Zero)
+                {
+                    pango_font_description_free(font);
+                }
             }
         }
 
@@ -584,8 +609,7 @@ internal sealed unsafe partial class FontRenderer : IDisposable
         {
             try
             {
-                using var process = Process.Start(new ProcessStartInfo
-                {
+                using var process = Process.Start(new ProcessStartInfo {
                     FileName = "fc-match",
                     ArgumentList = { "--format=%{file}", "Noto Color Emoji" },
                     RedirectStandardOutput = true,

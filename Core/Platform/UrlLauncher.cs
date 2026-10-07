@@ -30,8 +30,7 @@ internal sealed class UrlLauncher(
             window => window.Title,
             StringComparer.Ordinal);
 
-        using var process = Process.Start(new ProcessStartInfo
-        {
+        using var process = Process.Start(new ProcessStartInfo {
             FileName = uri.AbsoluteUri,
             UseShellExecute = true,
         }) ?? throw new InvalidOperationException("Could not open the system browser.");

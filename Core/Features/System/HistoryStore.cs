@@ -29,8 +29,7 @@ internal sealed class HistoryStore : IDisposable
     public HistoryStore()
     {
         var databasePath = GetDatabasePath();
-        _connectionString = new SqliteConnectionStringBuilder
-        {
+        _connectionString = new SqliteConnectionStringBuilder {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = true,

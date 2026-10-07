@@ -26,8 +26,12 @@ public sealed class HyprLayer : IDisposable
     private ulong _topologySerial;
     private bool _hasTopologySerial;
 
+    internal IntPtr NativeHandle => _layer;
     public IReadOnlyList<Output> Outputs => _readOnlyOutputs;
-    public bool TopologyChanged { get; private set; }
+    public bool TopologyChanged
+    {
+        get; private set;
+    }
     public int ReturnCode => _layer == IntPtr.Zero ? _returnCode : NativeMethods.hypr_layer_has_error(_layer);
 
     public HyprLayer(int reservedHeight)
@@ -64,13 +68,25 @@ public sealed class HyprLayer : IDisposable
             Id = id;
         }
 
-        public ulong Id { get; }
+        public ulong Id
+        {
+            get;
+        }
         public string Name { get; internal set; } = "";
-        public int Width { get; internal set; }
-        public int Height { get; internal set; }
+        public int Width
+        {
+            get; internal set;
+        }
+        public int Height
+        {
+            get; internal set;
+        }
         public LayoutInput Input { get; internal set; } = LayoutInput.None;
         public int PressedKey { get; internal set; } = -1;
-        public bool ControlPressed { get; internal set; }
+        public bool ControlPressed
+        {
+            get; internal set;
+        }
         public string TextInput { get; internal set; } = "";
 
         internal void UpdateInput(IntPtr layer)
@@ -87,7 +103,9 @@ public sealed class HyprLayer : IDisposable
                     pointerDown && !_lastPointerDown,
                     true,
                     scrollDelta)
-                : LayoutInput.None with { ScrollDelta = scrollDelta };
+                : LayoutInput.None with {
+                    ScrollDelta = scrollDelta
+                };
             PressedKey = NativeMethods.hypr_layer_take_key(layer, Id);
             ControlPressed = NativeMethods.hypr_layer_take_key_control(layer, Id) != 0;
 

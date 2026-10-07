@@ -46,8 +46,7 @@ internal sealed class PrivacyModuleService : IBarDataService, IDisposable
         _graph = graph;
         try
         {
-            _devices = new FileSystemWatcher("/dev", "video*")
-            {
+            _devices = new FileSystemWatcher("/dev", "video*") {
                 NotifyFilter = NotifyFilters.FileName,
             };
             _devices.Created += OnDevicesChanged;
@@ -95,15 +94,16 @@ internal sealed class PrivacyModuleService : IBarDataService, IDisposable
         var directCameraApplications = _directCameraApplications;
         if (directCameraApplications.Count > 0)
         {
-            snapshot = snapshot with
-            {
+            snapshot = snapshot with {
                 CameraApplications = MergeApplications(snapshot.CameraApplications, directCameraApplications),
             };
         }
 
         if (_audioService.Snapshot.IsRecording && snapshot.MicrophoneApplications.Count == 0)
         {
-            snapshot = snapshot with { MicrophoneApplications = ["Unknown application"] };
+            snapshot = snapshot with {
+                MicrophoneApplications = ["Unknown application"]
+            };
         }
 
         Volatile.Write(ref _snapshot, snapshot);
@@ -339,8 +339,7 @@ internal sealed class PrivacyModuleService : IBarDataService, IDisposable
             return false;
         }
 
-        return property.ValueKind switch
-        {
+        return property.ValueKind switch {
             JsonValueKind.Number => property.TryGetInt32(out value),
             JsonValueKind.String => int.TryParse(property.GetString(), NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out value),
@@ -461,8 +460,7 @@ internal sealed class PrivacyModuleService : IBarDataService, IDisposable
             return null;
         }
 
-        return property.ValueKind switch
-        {
+        return property.ValueKind switch {
             JsonValueKind.String => property.GetString(),
             JsonValueKind.Number => property.GetRawText(),
             _ => null,

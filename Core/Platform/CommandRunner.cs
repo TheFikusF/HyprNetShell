@@ -8,8 +8,7 @@ internal static class CommandRunner
     {
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = fileName,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -39,8 +38,7 @@ internal static class CommandRunner
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
 
-            process = Process.Start(new ProcessStartInfo
-            {
+            process = Process.Start(new ProcessStartInfo {
                 FileName = fileName,
                 Arguments = arguments,
                 RedirectStandardOutput = true,
@@ -81,8 +79,7 @@ internal static class CommandRunner
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
 
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = fileName,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

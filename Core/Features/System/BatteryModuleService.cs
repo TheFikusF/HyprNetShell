@@ -167,8 +167,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
         string path,
         string expectedInterface) =>
         connection.AddMatchAsync(
-            new MatchRule
-            {
+            new MatchRule {
                 Type = MessageType.Signal,
                 Path = path,
                 Interface = PROPERTIES_INTERFACE,
@@ -220,8 +219,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
 
     private ValueTask<IDisposable> AddNameOwnerSubscriptionAsync(DBusConnection connection) =>
         connection.AddMatchAsync(
-            new MatchRule
-            {
+            new MatchRule {
                 Type = MessageType.Signal,
                 Interface = Dbus.BUS_INTERFACE,
                 Member = "NameOwnerChanged",
@@ -618,7 +616,9 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
                 return;
             }
 
-            _powerProfiles = _powerProfiles with { Active = profile };
+            _powerProfiles = _powerProfiles with {
+                Active = profile
+            };
             PublishSnapshotLocked();
         }
 
@@ -800,8 +800,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
         return false;
     }
 
-    private static string BatteryStateName(uint state) => state switch
-    {
+    private static string BatteryStateName(uint state) => state switch {
         1 => "Charging",
         2 => "Discharging",
         3 => "Empty",
@@ -851,7 +850,10 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
     {
         Snapshot = _batteryAvailable
             ? new BatterySnapshot(true, device, _percentage, _status, _chargeLimit, _powerProfiles)
-            : BatterySnapshot.Empty with { ChargeLimit = _chargeLimit, PowerProfiles = _powerProfiles };
+            : BatterySnapshot.Empty with {
+                ChargeLimit = _chargeLimit,
+                PowerProfiles = _powerProfiles
+            };
     }
 
     private DBusConnection? GetConnection()

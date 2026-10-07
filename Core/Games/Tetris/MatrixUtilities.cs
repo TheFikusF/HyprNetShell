@@ -4,7 +4,7 @@ internal static class MatrixUtilities
 {
     internal static T?[,] RotateCounterClockwise<T>(T?[,] matrix, int size)
     {
-        var result = new T?[TetrisGame.TetraminoSize, TetrisGame.TetraminoSize];
+        var result = new T?[TetrisGame.TETRAMINO_SIZE, TetrisGame.TETRAMINO_SIZE];
         for (var i = 0; i < size; i++)
         {
             for (var j = 0; j < size; j++)
@@ -17,7 +17,7 @@ internal static class MatrixUtilities
 
     internal static T?[,] RotateClockwise<T>(T?[,] matrix, int size)
     {
-        var result = new T?[TetrisGame.TetraminoSize, TetrisGame.TetraminoSize];
+        var result = new T?[TetrisGame.TETRAMINO_SIZE, TetrisGame.TETRAMINO_SIZE];
         for (var i = 0; i < size; i++)
         {
             for (var j = 0; j < size; j++)

@@ -7,8 +7,8 @@ public readonly record struct Color(float R, float G, float B, float A)
     public static Color FromRgb(byte r, byte g, byte b, float a = 1.0f) => new(r / 255.0f, g / 255.0f, b / 255.0f, a);
 
     public static Color FromHex(string hex) => hex.Length == 7 || hex.Length == 9
-        ? FromRgb(byte.Parse(hex[1..3], NumberStyles.HexNumber), 
-            byte.Parse(hex[3..5], NumberStyles.HexNumber), 
+        ? FromRgb(byte.Parse(hex[1..3], NumberStyles.HexNumber),
+            byte.Parse(hex[3..5], NumberStyles.HexNumber),
             byte.Parse(hex[5..7], NumberStyles.HexNumber),
             hex.Length == 9 ? float.Parse(hex[7..9], NumberStyles.HexNumber) / 255.0f : 1.0f)
         : throw new FormatException();
@@ -29,6 +29,6 @@ public readonly record struct Color(float R, float G, float B, float A)
     public static readonly Color Lazure = FromRgb(0, 255, 255);
     public static readonly Color White = FromRgb(255, 255, 255);
     public static readonly Color Black = FromRgb(0, 0, 0);
-    
+
     public Color PushOpacity(float opacity) => this with { A = A * opacity };
 }

@@ -15,7 +15,10 @@ internal enum ApplicationSelectionColumn
 
 internal sealed class ApplicationButtonState : ModulesCommon.BoxState
 {
-    internal int ActionIndex { get; set; }
+    internal int ActionIndex
+    {
+        get; set;
+    }
     internal Dictionary<int, ModulesCommon.BoxState> Actions { get; } = [];
 }
 
@@ -95,8 +98,7 @@ internal sealed class ApplicationResultInteraction()
             state.ActionIndex += direction == SelectionDirection.Right ? 1 : -1;
         }
 
-        (state.ActionIndex, _selectedColumn) = direction switch
-        {
+        (state.ActionIndex, _selectedColumn) = direction switch {
             SelectionDirection.Right when
                 _selectedColumn == ApplicationSelectionColumn.Actions &&
                 state.ActionIndex >= application.Actions.Count =>

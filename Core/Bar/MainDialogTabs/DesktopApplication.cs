@@ -264,8 +264,7 @@ internal sealed class DesktopApplicationCatalog : IDisposable
     {
         try
         {
-            return Directory.EnumerateFiles(directory, "*.desktop", new EnumerationOptions
-            {
+            return Directory.EnumerateFiles(directory, "*.desktop", new EnumerationOptions {
                 IgnoreInaccessible = true,
                 RecurseSubdirectories = true,
             }).Order(StringComparer.Ordinal).ToArray();

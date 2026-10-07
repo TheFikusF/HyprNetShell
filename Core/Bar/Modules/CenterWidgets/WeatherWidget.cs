@@ -20,13 +20,11 @@ internal sealed class WeatherWidget(WeatherService weather)
         var state = weather.Snapshot;
         var refreshing = weather.IsRefreshing;
 
-        return new BoxNode(WIDTH)
-        {
+        return new BoxNode(WIDTH) {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 Spacing = 8,
             },
@@ -53,8 +51,7 @@ internal sealed class WeatherWidget(WeatherService weather)
         }
 
         var currentCondition = weather.GetCondition(state.CurrentWeatherCode);
-        yield return new BoxNode
-        {
+        yield return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Padding = new Insets(0, 12) },
@@ -79,8 +76,7 @@ internal sealed class WeatherWidget(WeatherService weather)
     {
         var condition = weather.GetCondition(day.WeatherCode);
         var label = day.Date == DateOnly.FromDateTime(DateTime.Today) ? $"> {day.Date:ddd}" : $"  {day.Date:ddd}";
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Children =

@@ -73,8 +73,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     {
     }
 
-    public Node Draw() => new BoxNode
-    {
+    public Node Draw() => new BoxNode {
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 12 },
         Children =
@@ -103,8 +102,7 @@ internal sealed class CompositeWindowsConfigurationTab(
 
     private BoxNode BuildWindowList()
     {
-        return new BoxNode(245)
-        {
+        return new BoxNode(245) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
@@ -117,13 +115,11 @@ internal sealed class CompositeWindowsConfigurationTab(
     {
         var selected = !_isNew && index == _selectedIndex;
         var state = _buttonStates.GetState("window-" + window.Id, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             IsHovered = state.Hovered,
             OnClick = () => Select(index),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 12,
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
@@ -145,8 +141,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     {
         var orderedTabs = OrderedTabs().ToArray();
         var columnLength = (orderedTabs.Length + 1) / 2;
-        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Start)
-        {
+        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Start) {
             Children =
             [
                 ..orderedTabs
@@ -183,8 +178,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     {
         var selectedIndex = _tabs.IndexOf(tab.Id);
         var selected = selectedIndex >= 0;
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             Style = Style.Spacer,
@@ -222,15 +216,13 @@ internal sealed class CompositeWindowsConfigurationTab(
             state.Hovered.Value = false;
         }
 
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = enabled ? state.Hovered : null,
             OnClick = enabled ? () => MoveTab(tabId, offset) : null,
             Opacity = enabled ? 1.0f : 0.35f,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 8,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -264,8 +256,7 @@ internal sealed class CompositeWindowsConfigurationTab(
         (_tabs[index], _tabs[target]) = (_tabs[target], _tabs[index]);
     }
 
-    private BoxNode BuildActions() => new()
-    {
+    private BoxNode BuildActions() => new() {
         HorizontalAlignment = ItemsAlignment.End,
         Style = Style.Spacer,
         Children =
@@ -289,13 +280,11 @@ internal sealed class CompositeWindowsConfigurationTab(
         bool selected = false)
     {
         var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = action,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,

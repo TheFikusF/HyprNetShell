@@ -21,13 +21,19 @@ public enum Direction
 
 public interface IWidthBoundNode
 {
-    bool AcceptsWidthBound { get; }
+    bool AcceptsWidthBound
+    {
+        get;
+    }
     void SetMaxWidth(int maxWidth, bool stretch);
 }
 
 public interface IHeightBoundNode
 {
-    bool AcceptsHeightBound { get; }
+    bool AcceptsHeightBound
+    {
+        get;
+    }
     void SetMaxHeight(int maxHeight, bool stretch);
 }
 
@@ -42,22 +48,40 @@ public struct Style
     public Color? ShadowColor;
     public float ShadowDistance;
 
-    public static readonly Style Empty = new ();
+    public static readonly Style Empty = new();
     public static readonly Style Spacer = new() { Spacing = 8 };
 }
 
 public abstract class Node
 {
-    public virtual int Width { get; }
-    public virtual int Height { get; }
+    public virtual int Width
+    {
+        get;
+    }
+    public virtual int Height
+    {
+        get;
+    }
 
     public float Opacity { get; set; } = 1;
 
     public Style Style { get; set; } = new Style();
-    internal bool LastHovered { get; private set; }
-    internal bool LastHoveredThrough { get; private set; }
-    internal bool LastClicked { get; private set; }
-    internal bool LastClickedThrough { get; private set; }
+    internal bool LastHovered
+    {
+        get; private set;
+    }
+    internal bool LastHoveredThrough
+    {
+        get; private set;
+    }
+    internal bool LastClicked
+    {
+        get; private set;
+    }
+    internal bool LastClickedThrough
+    {
+        get; private set;
+    }
     internal bool LastHoveredInTree => LastHovered || LastHoveredThrough;
     internal bool LastClickedInTree => LastClicked || LastClickedThrough;
 
@@ -96,8 +120,14 @@ public abstract class Node
 
 public class SpacerNode : Node
 {
-    public override int Width { get; }
-    public override int Height { get; }
+    public override int Width
+    {
+        get;
+    }
+    public override int Height
+    {
+        get;
+    }
 
     public SpacerNode(int width = 0, int height = 0)
     {

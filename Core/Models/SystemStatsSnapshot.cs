@@ -16,7 +16,10 @@ public sealed record SystemStatsSnapshot(
     IReadOnlyList<float> UploadHistory,
     IReadOnlyList<DiskUsageSnapshot> Disks)
 {
-    public static SystemStatsSnapshot Empty { get; } = new(
+    public static SystemStatsSnapshot Empty
+    {
+        get;
+    } = new(
         null, null, null, null, null, 0, 0, [], [], [], [], [], [], []);
 }
 

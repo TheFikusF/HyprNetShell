@@ -20,7 +20,10 @@ internal sealed class ClipboardManagerTab(
 {
     private sealed class ActionButtonState : ModulesCommon.BoxState
     {
-        public float IconOpacity { get; set; }
+        public float IconOpacity
+        {
+            get; set;
+        }
     }
 
     private sealed class ClipboardButtonState : ModulesCommon.BoxState
@@ -94,8 +97,7 @@ internal sealed class ClipboardManagerTab(
             RefreshEntries();
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
@@ -133,7 +135,7 @@ internal sealed class ClipboardManagerTab(
                     },
                     _firstIndex,
                     _filteredEntries.Count,
-                    BoundedListUi.DefaultVisibleItemCount),
+                    BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
             ],
         };
     }
@@ -143,8 +145,7 @@ internal sealed class ClipboardManagerTab(
         var selected = index == _selectedIndex;
         var stateKey = $"{entry.MimeType}\0{entry.Hash}";
         var state = _buttonsState.GetState(stateKey, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
@@ -158,8 +159,7 @@ internal sealed class ClipboardManagerTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(16, 8),
@@ -196,8 +196,12 @@ internal sealed class ClipboardManagerTab(
     {
         var available = entry.Image is null && kdeConnect.Snapshot.Devices.Any(
             static device => device.IsPaired && device.IsReachable);
-        var transparent = Color.White with { A = 0.0f };
-        var hover = Color.White with { A = 0.3f };
+        var transparent = Color.White with {
+            A = 0.0f
+        };
+        var hover = Color.White with {
+            A = 0.3f
+        };
         state.Background = Color.LerpSmooth(
             state.Background,
             available && state.Hovered.Value ? hover : transparent,
@@ -209,16 +213,14 @@ internal sealed class ClipboardManagerTab(
             18.0f,
             Renderer.DeltaTime);
 
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = available
                 ? () => _ = kdeConnect.SendClipboardTextAsync(Encoding.UTF8.GetString(entry.Data))
                 : null,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -239,8 +241,12 @@ internal sealed class ClipboardManagerTab(
         bool active,
         ActionButtonState state)
     {
-        var transparent = Color.White with { A = 0.0f };
-        var hover = Color.White with { A = 0.3f };
+        var transparent = Color.White with {
+            A = 0.0f
+        };
+        var hover = Color.White with {
+            A = 0.3f
+        };
         state.Background = Color.LerpSmooth(
             state.Background,
             state.Hovered.Value ? hover : transparent,
@@ -252,14 +258,12 @@ internal sealed class ClipboardManagerTab(
             18.0f,
             Renderer.DeltaTime);
 
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => history.TogglePinned(entry),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -280,8 +284,12 @@ internal sealed class ClipboardManagerTab(
         bool active,
         ActionButtonState state)
     {
-        var transparent = Color.White with { A = 0.0f };
-        var hover = Color.White with { A = 0.3f };
+        var transparent = Color.White with {
+            A = 0.0f
+        };
+        var hover = Color.White with {
+            A = 0.3f
+        };
         state.Background = Color.LerpSmooth(
             state.Background,
             state.Hovered.Value ? hover : transparent,
@@ -293,14 +301,12 @@ internal sealed class ClipboardManagerTab(
             18.0f,
             Renderer.DeltaTime);
 
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => history.Delete(entry),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -328,8 +334,7 @@ internal sealed class ClipboardManagerTab(
             {
                 _dateRange = (HistoryDateRange)selected;
                 ApplyFilter();
-            })
-        {
+            }) {
             FontSize = ThemeManager.Current.Text,
             BackgroundColor = ThemeManager.Current.Panel,
             HoverColor = Color.Lighten(ThemeManager.Current.Panel, 0.18f),

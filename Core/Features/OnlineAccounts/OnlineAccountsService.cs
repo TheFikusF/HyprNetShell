@@ -31,17 +31,17 @@ internal sealed record OnlineAccountSnapshot(
 
 internal sealed class OnlineAccountsService : IDisposable
 {
-    private const string GoogleClientIdVariable = "HYPRNETSHELL_GOOGLE_CLIENT_ID";
-    private const string GoogleClientSecretVariable = "HYPRNETSHELL_GOOGLE_CLIENT_SECRET";
-    private const string SpotifyClientIdVariable = "HYPRNETSHELL_SPOTIFY_CLIENT_ID";
-    private const string OpenAiClientIdVariable = "HYPRNETSHELL_OPENAI_CLIENT_ID";
-    private const string GoogleClientIdMetadata = "HyprNetShellGoogleClientId";
-    private const string GoogleClientSecretMetadata = "HyprNetShellGoogleClientSecret";
-    private const string SpotifyClientIdMetadata = "HyprNetShellSpotifyClientId";
-    private const string OpenAiClientIdMetadata = "HyprNetShellOpenAiClientId";
-    private const int SpotifyCallbackPort = 5543;
-    private const string GoogleCalendarScopes = "https://www.googleapis.com/auth/calendar.readonly";
-    private const string SpotifyPlaybackScopes =
+    private const string GOOGLE_CLIENT_ID_VARIABLE = "HYPRNETSHELL_GOOGLE_CLIENT_ID";
+    private const string GOOGLE_CLIENT_SECRET_VARIABLE = "HYPRNETSHELL_GOOGLE_CLIENT_SECRET";
+    private const string SPOTIFY_CLIENT_ID_VARIABLE = "HYPRNETSHELL_SPOTIFY_CLIENT_ID";
+    private const string OPEN_AI_CLIENT_ID_VARIABLE = "HYPRNETSHELL_OPENAI_CLIENT_ID";
+    private const string GOOGLE_CLIENT_ID_METADATA = "HyprNetShellGoogleClientId";
+    private const string GOOGLE_CLIENT_SECRET_METADATA = "HyprNetShellGoogleClientSecret";
+    private const string SPOTIFY_CLIENT_ID_METADATA = "HyprNetShellSpotifyClientId";
+    private const string OPEN_AI_CLIENT_ID_METADATA = "HyprNetShellOpenAiClientId";
+    private const int SPOTIFY_CALLBACK_PORT = 5543;
+    private const string GOOGLE_CALENDAR_SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
+    private const string SPOTIFY_PLAYBACK_SCOPES =
         "user-read-playback-state user-read-currently-playing user-modify-playback-state";
 
     private static readonly IReadOnlyDictionary<string, string> EmbeddedClientIds =
@@ -124,7 +124,7 @@ internal sealed class OnlineAccountsService : IDisposable
     {
         var credential = await GetAccessCredentialAsync(
             OnlineAccountProvider.Google,
-            GoogleCalendarScopes,
+            GOOGLE_CALENDAR_SCOPES,
             cancellationToken);
         return credential is null
             ? null
@@ -132,7 +132,7 @@ internal sealed class OnlineAccountsService : IDisposable
     }
 
     internal async Task<string?> GetSpotifyAccessTokenAsync(CancellationToken cancellationToken) =>
-        (await GetAccessCredentialAsync(OnlineAccountProvider.Spotify, SpotifyPlaybackScopes, cancellationToken))
+        (await GetAccessCredentialAsync(OnlineAccountProvider.Spotify, SPOTIFY_PLAYBACK_SCOPES, cancellationToken))
         ?.AccessToken;
 
     internal async Task<ChatGptAccessCredential?> GetChatGptAccessCredentialAsync(
@@ -187,15 +187,13 @@ internal sealed class OnlineAccountsService : IDisposable
                 return null;
             }
 
-            var parameters = new Dictionary<string, string>
-            {
+            var parameters = new Dictionary<string, string> {
                 ["grant_type"] = "refresh_token",
                 ["client_id"] = definition.ClientId,
                 ["refresh_token"] = credential.RefreshToken,
             };
             AddClientSecret(parameters, definition.ClientSecret);
-            using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint)
-            {
+            using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint) {
                 Content = new FormUrlEncodedContent(parameters),
             };
             using var response = await SendAsync(request, cancellationToken);
@@ -216,8 +214,7 @@ internal sealed class OnlineAccountsService : IDisposable
                 return null;
             }
 
-            var updated = credential with
-            {
+            var updated = credential with {
                 AccessToken = token.AccessToken,
                 RefreshToken = token.RefreshToken ?? credential.RefreshToken,
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, token.ExpiresIn)),
@@ -435,8 +432,7 @@ internal sealed class OnlineAccountsService : IDisposable
         string verifier,
         CancellationToken cancellationToken)
     {
-        var parameters = new Dictionary<string, string>
-        {
+        var parameters = new Dictionary<string, string> {
             ["grant_type"] = "authorization_code",
             ["client_id"] = definition.ClientId,
             ["code"] = code,
@@ -444,8 +440,7 @@ internal sealed class OnlineAccountsService : IDisposable
             ["code_verifier"] = verifier,
         };
         AddClientSecret(parameters, definition.ClientSecret);
-        using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint)
-        {
+        using var request = new HttpRequestMessage(HttpMethod.Post, definition.TokenEndpoint) {
             Content = new FormUrlEncodedContent(parameters),
         };
         using var response = await SendAsync(request, cancellationToken);
@@ -458,7 +453,7 @@ internal sealed class OnlineAccountsService : IDisposable
                 providerError?.Contains("client_secret is missing", StringComparison.OrdinalIgnoreCase) == true)
             {
                 providerError =
-                    $"client_secret is missing — set {GoogleClientSecretVariable} from the Desktop app credential JSON";
+                    $"client_secret is missing — set {GOOGLE_CLIENT_SECRET_VARIABLE} from the Desktop app credential JSON";
             }
 
             var detail = providerError is null ? "" : $": {providerError.TrimEnd().TrimEnd('.')}";
@@ -548,8 +543,7 @@ internal sealed class OnlineAccountsService : IDisposable
         !string.IsNullOrWhiteSpace(definition.ClientId) &&
         (definition.Provider != OnlineAccountProvider.Google || !string.IsNullOrWhiteSpace(definition.ClientSecret));
 
-    private OAuthProviderDefinition CreateDefinition(OnlineAccountProvider provider) => provider switch
-    {
+    private OAuthProviderDefinition CreateDefinition(OnlineAccountProvider provider) => provider switch {
         OnlineAccountProvider.Google => new(
             provider,
             "Google",
@@ -558,11 +552,10 @@ internal sealed class OnlineAccountsService : IDisposable
             ResolveGoogleClientSecret(),
             "https://accounts.google.com/o/oauth2/v2/auth",
             "https://oauth2.googleapis.com/token",
-            $"openid email profile {GoogleCalendarScopes}",
+            $"openid email profile {GOOGLE_CALENDAR_SCOPES}",
             [],
             "127.0.0.1",
-            new Dictionary<string, string>
-            {
+            new Dictionary<string, string> {
                 ["access_type"] = "offline",
                 ["prompt"] = "consent",
             }),
@@ -574,8 +567,8 @@ internal sealed class OnlineAccountsService : IDisposable
             null,
             "https://accounts.spotify.com/authorize",
             "https://accounts.spotify.com/api/token",
-            SpotifyPlaybackScopes,
-            [SpotifyCallbackPort],
+            SPOTIFY_PLAYBACK_SCOPES,
+            [SPOTIFY_CALLBACK_PORT],
             "127.0.0.1",
             new Dictionary<string, string>()),
         OnlineAccountProvider.ChatGpt => new(
@@ -589,8 +582,7 @@ internal sealed class OnlineAccountsService : IDisposable
             "openid profile email offline_access",
             [1455, 1457],
             "localhost",
-            new Dictionary<string, string>
-            {
+            new Dictionary<string, string> {
                 ["id_token_add_organizations"] = "true",
                 ["codex_cli_simplified_flow"] = "true",
                 ["originator"] = "hyprnetshell",
@@ -600,11 +592,10 @@ internal sealed class OnlineAccountsService : IDisposable
 
     private (string ClientId, string? Source) ResolveClientId(OnlineAccountProvider provider)
     {
-        var metadataName = provider switch
-        {
-            OnlineAccountProvider.Google => GoogleClientIdMetadata,
-            OnlineAccountProvider.Spotify => SpotifyClientIdMetadata,
-            OnlineAccountProvider.ChatGpt => OpenAiClientIdMetadata,
+        var metadataName = provider switch {
+            OnlineAccountProvider.Google => GOOGLE_CLIENT_ID_METADATA,
+            OnlineAccountProvider.Spotify => SPOTIFY_CLIENT_ID_METADATA,
+            OnlineAccountProvider.ChatGpt => OPEN_AI_CLIENT_ID_METADATA,
             _ => throw new ArgumentOutOfRangeException(nameof(provider)),
         };
         if (EmbeddedClientIds.GetValueOrDefault(metadataName)?.Trim() is { Length: > 0 } embedded)
@@ -612,11 +603,10 @@ internal sealed class OnlineAccountsService : IDisposable
             return (embedded, "Embedded");
         }
 
-        var variableName = provider switch
-        {
-            OnlineAccountProvider.Google => GoogleClientIdVariable,
-            OnlineAccountProvider.Spotify => SpotifyClientIdVariable,
-            OnlineAccountProvider.ChatGpt => OpenAiClientIdVariable,
+        var variableName = provider switch {
+            OnlineAccountProvider.Google => GOOGLE_CLIENT_ID_VARIABLE,
+            OnlineAccountProvider.Spotify => SPOTIFY_CLIENT_ID_VARIABLE,
+            OnlineAccountProvider.ChatGpt => OPEN_AI_CLIENT_ID_VARIABLE,
             _ => throw new ArgumentOutOfRangeException(nameof(provider)),
         };
         if (Environment.GetEnvironmentVariable(variableName)?.Trim() is { Length: > 0 } environment)
@@ -630,12 +620,12 @@ internal sealed class OnlineAccountsService : IDisposable
 
     private static string? ResolveGoogleClientSecret()
     {
-        if (EmbeddedClientIds.GetValueOrDefault(GoogleClientSecretMetadata)?.Trim() is { Length: > 0 } embedded)
+        if (EmbeddedClientIds.GetValueOrDefault(GOOGLE_CLIENT_SECRET_METADATA)?.Trim() is { Length: > 0 } embedded)
         {
             return embedded;
         }
 
-        return Environment.GetEnvironmentVariable(GoogleClientSecretVariable)?.Trim() is { Length: > 0 } environment
+        return Environment.GetEnvironmentVariable(GOOGLE_CLIENT_SECRET_VARIABLE)?.Trim() is { Length: > 0 } environment
             ? environment
             : null;
     }
@@ -643,8 +633,7 @@ internal sealed class OnlineAccountsService : IDisposable
     private string ConfiguredClientId(OnlineAccountProvider provider)
     {
         var accounts = _configuration.Snapshot.OnlineAccounts;
-        return (provider switch
-        {
+        return (provider switch {
             OnlineAccountProvider.Google => accounts.GoogleClientId,
             OnlineAccountProvider.Spotify => accounts.SpotifyClientId,
             OnlineAccountProvider.ChatGpt => accounts.OpenAiClientId,
@@ -659,8 +648,7 @@ internal sealed class OnlineAccountsService : IDisposable
         string nonce,
         string challenge)
     {
-        var parameters = new Dictionary<string, string>(definition.AdditionalAuthorizationParameters)
-        {
+        var parameters = new Dictionary<string, string>(definition.AdditionalAuthorizationParameters) {
             ["client_id"] = definition.ClientId,
             ["redirect_uri"] = redirectUri,
             ["response_type"] = "code",
@@ -702,10 +690,9 @@ internal sealed class OnlineAccountsService : IDisposable
             var description = root.TryGetProperty("error_description", out var descriptionProperty)
                 ? ReadOAuthErrorValue(descriptionProperty)
                 : null;
-            return (error, description) switch
-            {
-                ({ Length: > 0 }, { Length: > 0 }) => $"{error} — {description}",
-                ({ Length: > 0 }, _) => error,
+            return (error, description) switch {
+                ( { Length: > 0 }, { Length: > 0 }) => $"{error} — {description}",
+                ( { Length: > 0 }, _) => error,
                 (_, { Length: > 0 }) => description,
                 _ => null,
             };
@@ -739,11 +726,10 @@ internal sealed class OnlineAccountsService : IDisposable
             : value.TryGetProperty("status", out var statusProperty)
                 ? ReadOAuthErrorValue(statusProperty)
                 : null;
-        return (code, message) switch
-        {
-            ({ Length: > 0 }, { Length: > 0 }) => $"{code}: {message}",
+        return (code, message) switch {
+            ( { Length: > 0 }, { Length: > 0 }) => $"{code}: {message}",
             (_, { Length: > 0 }) => message,
-            ({ Length: > 0 }, _) => code,
+            ( { Length: > 0 }, _) => code,
             _ => value.GetRawText(),
         };
     }
@@ -800,8 +786,7 @@ internal sealed class OnlineAccountsService : IDisposable
         return requiredScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries).All(granted.Contains);
     }
 
-    private static string StorageKey(OnlineAccountProvider provider) => provider switch
-    {
+    private static string StorageKey(OnlineAccountProvider provider) => provider switch {
         OnlineAccountProvider.Google => "google",
         OnlineAccountProvider.Spotify => "spotify",
         OnlineAccountProvider.ChatGpt => "chatgpt",

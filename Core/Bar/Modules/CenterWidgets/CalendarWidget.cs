@@ -53,13 +53,11 @@ internal sealed class CalendarWidget
         var offset = ((int)first.DayOfWeek + 6) % 7;
         var occurrences = _calendar.Snapshot.Occurrences;
 
-        return new BoxNode(_width)
-        {
+        return new BoxNode(_width) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             OnScroll = handleScroll ? delta => ChangeMonth(delta > 0 ? 1 : -1) : null,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 Spacing = 10,
             },
@@ -85,14 +83,12 @@ internal sealed class CalendarWidget
     private BoxNode BuildMonthButton(SvgAsset icon, int monthDelta, ModulesCommon.BoxState buttonState)
     {
         var state = buttonState.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode(34, 34)
-        {
+        return new BoxNode(34, 34) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => ChangeMonth(monthDelta),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -104,8 +100,7 @@ internal sealed class CalendarWidget
     private void ChangeMonth(int delta) =>
         _displayedMonth = (_displayedMonth ?? DateTime.Today).AddMonths(Math.Sign(delta));
 
-    private BoxNode BuildWeekHeader() => new(Style.Spacer)
-    {
+    private BoxNode BuildWeekHeader() => new(Style.Spacer) {
         Children = ((string[])["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
             .Select(BuildLabelCell)
             .ToArray(),
@@ -124,8 +119,7 @@ internal sealed class CalendarWidget
         var cells = Enumerable.Repeat(0, offset).Concat(Enumerable.Range(1, days)).ToArray();
         foreach (var week in cells.Chunk(7))
         {
-            yield return new BoxNode
-            {
+            yield return new BoxNode {
                 Style = Style.Spacer,
                 Children =
                 [
@@ -163,8 +157,7 @@ internal sealed class CalendarWidget
         };
         if (events.Count > 0)
         {
-            children.Add(new BoxNode(new Style { Spacing = 2 }, ItemsAlignment.Center, ItemsAlignment.Center)
-            {
+            children.Add(new BoxNode(new Style { Spacing = 2 }, ItemsAlignment.Center, ItemsAlignment.Center) {
                 Children = [.. Enumerable.Range(0, Math.Min(3, events.Count)).Select(_ => BuildDot(selected || active))],
             });
         }
@@ -174,15 +167,13 @@ internal sealed class CalendarWidget
             children.Add(new LayeredNode(() => BuildTooltip(date, events), RenderLayer.OptionsSelector, _cellWidth - 2, -8));
         }
 
-        return new BoxNode(_cellWidth, 34)
-        {
+        return new BoxNode(_cellWidth, 34) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = onDateSelected is null ? null : () => onDateSelected(date),
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = selected
                     ? state.Background
                     : active
@@ -197,23 +188,23 @@ internal sealed class CalendarWidget
         };
     }
 
-    private BoxNode BuildLabelCell(string text) => new(_cellWidth, 30)
-    {
+    private BoxNode BuildLabelCell(string text) => new(_cellWidth, 30) {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
         Children = [new TextNode(text, 16)],
     };
 
-    private BoxNode BuildDot(bool selected) => new(4, 4)
-    {
+    private BoxNode BuildDot(bool selected) => new(4, 4) {
         Style = new Style { BackgroundColor = selected ? ThemeManager.Current.Text : ThemeManager.Current.Active, BorderRadius = 4308 },
     };
 
-    private BoxNode BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new(280)
-    {
+    private BoxNode BuildTooltip(DateOnly date, IReadOnlyList<CalendarOccurrence> events) => new(280) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.PopupStyle() with { Padding = 12, Spacing = 8 },
+        Style = ModulesCommon.PopupStyle() with {
+            Padding = 12,
+            Spacing = 8
+        },
         Children =
         [
             new TextNode(date.ToString("dddd, MMMM d"), color: ThemeManager.Current.Text.MutedColor),

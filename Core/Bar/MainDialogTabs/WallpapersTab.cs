@@ -76,8 +76,7 @@ internal sealed class WallpapersTab(
                 return;
             }
 
-            _selectedIndex = direction switch
-            {
+            _selectedIndex = direction switch {
                 SelectionDirection.Up => MoveVertical(-1),
                 SelectionDirection.Down => MoveVertical(1),
                 SelectionDirection.Left => MoveHorizontal(-1),
@@ -165,8 +164,7 @@ internal sealed class WallpapersTab(
                     query.Length == 0 ? "No wallpapers in ~/Pictures/wp" : "No matching wallpapers");
         }
 
-        var grid = new BoxNode
-        {
+        var grid = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
@@ -175,8 +173,7 @@ internal sealed class WallpapersTab(
                 ..Enumerable.Range(0, ROWS).Select(row => BuildRow(visible, row, firstIndex, selectedIndex)),
             ],
         };
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
@@ -206,8 +203,7 @@ internal sealed class WallpapersTab(
                 : new BoxNode();
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Start,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Spacing = 8 },
@@ -219,8 +215,7 @@ internal sealed class WallpapersTab(
     {
         var selected = index == selectedIndex;
         var state = _buttonsState.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
@@ -234,8 +229,7 @@ internal sealed class WallpapersTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 4 + (selected ? 0 : ThemeManager.Current.Border.Width),
                 Spacing = 4,
                 BorderRadius = 6,

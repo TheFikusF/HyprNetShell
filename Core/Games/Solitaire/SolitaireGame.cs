@@ -20,15 +20,23 @@ internal sealed class SolitaireCard(SolitaireSuit suit, int rank)
 {
     internal SolitaireSuit Suit { get; } = suit;
     internal int Rank { get; } = rank;
-    internal bool FaceUp { get; set; }
+    internal bool FaceUp
+    {
+        get; set;
+    }
     internal float RenderX { get; set; } = -200;
     internal float RenderY { get; set; } = -200;
-    internal float Flip { get; set; }
-    internal float TiltDegrees { get; set; }
+    internal float Flip
+    {
+        get; set;
+    }
+    internal float TiltDegrees
+    {
+        get; set;
+    }
     internal bool IsRed => Suit is SolitaireSuit.Diamonds or SolitaireSuit.Hearts;
 
-    internal string RankSymbol => Rank switch
-    {
+    internal string RankSymbol => Rank switch {
         1 => "A",
         11 => "J",
         12 => "Q",
@@ -36,8 +44,7 @@ internal sealed class SolitaireCard(SolitaireSuit suit, int rank)
         _ => Rank.ToString(),
     };
 
-    internal string SuitSymbol => Suit switch
-    {
+    internal string SuitSymbol => Suit switch {
         SolitaireSuit.Diamonds => "♦",
         SolitaireSuit.Clubs => "♣",
         SolitaireSuit.Hearts => "♥",
@@ -50,9 +57,9 @@ internal readonly record struct SolitaireSelection(SolitairePileKind Kind, int P
 
 internal sealed class SolitaireGame
 {
-    internal const int TableauCount = 7;
+    internal const int TABLEAU_COUNT = 7;
 
-    private readonly List<SolitaireCard>[] _tableau = Enumerable.Range(0, TableauCount)
+    private readonly List<SolitaireCard>[] _tableau = Enumerable.Range(0, TABLEAU_COUNT)
         .Select(_ => new List<SolitaireCard>())
         .ToArray();
     private readonly List<SolitaireCard>[] _foundations = Enumerable.Range(0, 4)
@@ -73,11 +80,17 @@ internal sealed class SolitaireGame
     internal IReadOnlyList<SolitaireCard> Waste => _waste;
     internal IReadOnlyList<SolitaireCard> Held => _held;
     internal SolitaireCard? Shelf => _shelf;
-    internal SolitaireSelection Selection { get; private set; }
-    internal int Moves { get; private set; }
+    internal SolitaireSelection Selection
+    {
+        get; private set;
+    }
+    internal int Moves
+    {
+        get; private set;
+    }
     internal bool IsWon => _foundations.All(pile => pile.Count == 13);
-    internal bool CanRecycleStock => _stock.Count == 0 && _waste.Count > 0 && _stockPasses < Math.Max(0, SolitaireConfig.AmountOfDeals - 1);
-    internal bool IsShelfAvailable => SolitaireConfig.FreeSlotEnabled && _stock.Count == 0 && !CanRecycleStock;
+    internal bool CanRecycleStock => _stock.Count == 0 && _waste.Count > 0 && _stockPasses < Math.Max(0, SolitaireConfig.AMOUNT_OF_DEALS - 1);
+    internal bool IsShelfAvailable => SolitaireConfig.FREE_SLOT_ENABLED && _stock.Count == 0 && !CanRecycleStock;
     internal string Status => IsWon ? $"Won in {Moves} moves" : _held.Count > 0 ? $"Holding {_held.Count} card{(_held.Count == 1 ? "" : "s")}" : $"{Moves} moves";
 
     internal SolitaireGame() => Restart();
@@ -104,12 +117,12 @@ internal sealed class SolitaireGame
         _held.Clear();
 
         var cardIndex = 0;
-        for (var pileIndex = 0; pileIndex < TableauCount; pileIndex++)
+        for (var pileIndex = 0; pileIndex < TABLEAU_COUNT; pileIndex++)
         {
             for (var row = 0; row <= pileIndex; row++)
             {
                 var card = cards[cardIndex++];
-                card.FaceUp = !SolitaireConfig.CardsHidden || row == pileIndex;
+                card.FaceUp = !SolitaireConfig.CARDS_HIDDEN || row == pileIndex;
                 _tableau[pileIndex].Add(card);
             }
         }
@@ -171,7 +184,7 @@ internal sealed class SolitaireGame
         }
 
         _lastActivated = Selection;
-        _doubleTapRemaining = SolitaireConfig.DoubleTapSeconds;
+        _doubleTapRemaining = SolitaireConfig.DOUBLE_TAP_SECONDS;
     }
 
     internal bool CancelHeld()
@@ -282,7 +295,7 @@ internal sealed class SolitaireGame
     {
         if (_stock.Count > 0)
         {
-            for (var draw = 0; draw < Math.Max(1, SolitaireConfig.CardsInDeal) && _stock.Count > 0; draw++)
+            for (var draw = 0; draw < Math.Max(1, SolitaireConfig.CARDS_IN_DEAL) && _stock.Count > 0; draw++)
             {
                 var card = _stock[^1];
                 _stock.RemoveAt(_stock.Count - 1);
@@ -323,15 +336,16 @@ internal sealed class SolitaireGame
             return;
         }
 
-        _heldFrom = Selection with { Card = index };
+        _heldFrom = Selection with {
+            Card = index
+        };
         _held.AddRange(pile.GetRange(index, pile.Count - index));
         pile.RemoveRange(index, pile.Count - index);
     }
 
     private void Drop()
     {
-        var dropped = Selection.Kind switch
-        {
+        var dropped = Selection.Kind switch {
             SolitairePileKind.Stock => DropOnShelf(),
             SolitairePileKind.Foundation => DropOnFoundation(),
             SolitairePileKind.Tableau => DropOnTableau(),
@@ -379,14 +393,16 @@ internal sealed class SolitaireGame
         var pile = _tableau[Selection.Pile];
         var first = _held[0];
         if (pile.Count == 0
-                ? SolitaireConfig.OnlyKingsOnEmptyTableau && first.Rank != 13
+                ? SolitaireConfig.ONLY_KINGS_ON_EMPTY_TABLEAU && first.Rank != 13
                 : !CanStack(pile[^1], first))
         {
             return false;
         }
 
         pile.AddRange(_held);
-        Selection = Selection with { Card = pile.Count - 1 };
+        Selection = Selection with {
+            Card = pile.Count - 1
+        };
         return true;
     }
 
@@ -444,21 +460,19 @@ internal sealed class SolitaireGame
     {
         if (Selection.Kind == SolitairePileKind.Tableau)
         {
-            var pile = (Selection.Pile + direction + TableauCount) % TableauCount;
+            var pile = (Selection.Pile + direction + TABLEAU_COUNT) % TABLEAU_COUNT;
             Selection = new SolitaireSelection(SolitairePileKind.Tableau, pile, Selection.Card);
             return;
         }
 
-        var topIndex = Selection.Kind switch
-        {
+        var topIndex = Selection.Kind switch {
             SolitairePileKind.Stock => 0,
             SolitairePileKind.Waste => 1,
             SolitairePileKind.Foundation => Selection.Pile + 2,
             _ => 0,
         };
         topIndex = (topIndex + direction + 6) % 6;
-        Selection = topIndex switch
-        {
+        Selection = topIndex switch {
             0 => new SolitaireSelection(SolitairePileKind.Stock),
             1 => new SolitaireSelection(SolitairePileKind.Waste),
             _ => new SolitaireSelection(SolitairePileKind.Foundation, topIndex - 2),
@@ -471,8 +485,7 @@ internal sealed class SolitaireGame
         {
             if (direction > 0)
             {
-                var pile = Selection.Kind switch
-                {
+                var pile = Selection.Kind switch {
                     SolitairePileKind.Stock => 0,
                     SolitairePileKind.Waste => 1,
                     SolitairePileKind.Foundation => Selection.Pile + 3,
@@ -486,8 +499,7 @@ internal sealed class SolitaireGame
         var tableau = _tableau[Selection.Pile];
         if (direction < 0 && Selection.Card <= 0)
         {
-            Selection = Selection.Pile switch
-            {
+            Selection = Selection.Pile switch {
                 0 => new SolitaireSelection(SolitairePileKind.Stock),
                 1 or 2 => new SolitaireSelection(SolitairePileKind.Waste),
                 _ => new SolitaireSelection(SolitairePileKind.Foundation, Selection.Pile - 3),
@@ -495,26 +507,33 @@ internal sealed class SolitaireGame
             return;
         }
 
-        Selection = Selection with { Card = Selection.Card + direction };
+        Selection = Selection with {
+            Card = Selection.Card + direction
+        };
     }
 
     private void NormalizeSelection()
     {
         if (Selection.Kind == SolitairePileKind.Foundation)
         {
-            Selection = Selection with { Pile = Math.Clamp(Selection.Pile, 0, 3), Card = 0 };
+            Selection = Selection with {
+                Pile = Math.Clamp(Selection.Pile, 0, 3),
+                Card = 0
+            };
             return;
         }
         if (Selection.Kind != SolitairePileKind.Tableau)
         {
-            Selection = Selection with { Pile = 0, Card = 0 };
+            Selection = Selection with {
+                Pile = 0,
+                Card = 0
+            };
             return;
         }
 
-        var pileIndex = Math.Clamp(Selection.Pile, 0, TableauCount - 1);
+        var pileIndex = Math.Clamp(Selection.Pile, 0, TABLEAU_COUNT - 1);
         var pile = _tableau[pileIndex];
-        Selection = Selection with
-        {
+        Selection = Selection with {
             Pile = pileIndex,
             Card = pile.Count == 0 ? 0 : Math.Clamp(Selection.Card, 0, pile.Count - 1),
         };

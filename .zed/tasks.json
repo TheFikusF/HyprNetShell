@@ -1,5 +1,16 @@
 [
   {
+    "label": "Format: Current C# File",
+    "command": "dotnet format HyprNetShell.slnx --include \"$ZED_FILE\" --no-restore",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "on_success",
+    "shell": "system",
+    "tags": ["format", "csharp"]
+  },
+  {
     "label": "Build: Native",
     "command": "./build.sh native",
     "cwd": "$ZED_WORKTREE_ROOT",

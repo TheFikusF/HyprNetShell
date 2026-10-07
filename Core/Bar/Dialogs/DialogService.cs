@@ -49,8 +49,14 @@ public sealed class DialogService : IDisposable
     private sealed class WindowState(IDialogWindow window)
     {
         internal IDialogWindow Window { get; } = window;
-        internal bool IsOpen { get; set; }
-        internal float Opacity { get; set; }
+        internal bool IsOpen
+        {
+            get; set;
+        }
+        internal float Opacity
+        {
+            get; set;
+        }
     }
 
     private sealed record PendingDialogRequest(
@@ -257,8 +263,7 @@ public sealed class DialogService : IDisposable
         ? state
         : throw new InvalidOperationException($"Dialog window {type.Name} is not registered");
 
-    private static DialogKey ToDialogKey(int key, string textInput) => key switch
-    {
+    internal static DialogKey ToDialogKey(int key, string textInput) => key switch {
         1 => DialogKey.Escape,
         14 => DialogKey.Backspace,
         15 => DialogKey.Tab,

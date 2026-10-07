@@ -58,8 +58,14 @@ public sealed class SessionLock : IDisposable
     {
         public ulong Id { get; } = id;
         public string Name { get; internal set; } = "";
-        public int Width { get; internal set; }
-        public int Height { get; internal set; }
+        public int Width
+        {
+            get; internal set;
+        }
+        public int Height
+        {
+            get; internal set;
+        }
     }
 
     public bool Update()

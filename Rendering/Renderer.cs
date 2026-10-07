@@ -55,6 +55,11 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private readonly int _svgTextureLocation;
     private readonly int _svgTextureVertexColorLocation;
 
+    private readonly uint _imageShadowProgram;
+    private readonly int _imageShadowViewportLocation;
+    private readonly int _imageShadowTextureLocation;
+    private readonly int _imageShadowBlurStepLocation;
+
     private readonly TextureRepository _textureRepository;
 
     private readonly FontRenderer _font;
@@ -73,11 +78,23 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
     private long _roundedBorders;
     private long _shadows;
 
-    public int Width { get; private set; }
-    public int Height { get; private set; }
+    public int Width
+    {
+        get; private set;
+    }
+    public int Height
+    {
+        get; private set;
+    }
 
-    public static int TargetFramerate { get; private set; }
-    public static float DeltaTime { get; private set; }
+    public static int TargetFramerate
+    {
+        get; private set;
+    }
+    public static float DeltaTime
+    {
+        get; private set;
+    }
 
     public static event Action? OnFrameStart;
     public static event Action? OnFrameEnd;
@@ -109,6 +126,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _svgTextureViewportLocation = _gl.GetUniformLocation(_svgTextureProgram, "uViewport");
         _svgTextureLocation = _gl.GetUniformLocation(_svgTextureProgram, "uTexture");
         _svgTextureVertexColorLocation = _gl.GetUniformLocation(_svgTextureProgram, "uUseVertexColor");
+
+        _imageShadowProgram = GlShaders.CreateProgram(
+            _gl, GlShaders.TEXTURED_VERTEX, GlShaders.IMAGE_SHADOW_FRAGMENT, "image shadow");
+        _imageShadowViewportLocation = _gl.GetUniformLocation(_imageShadowProgram, "uViewport");
+        _imageShadowTextureLocation = _gl.GetUniformLocation(_imageShadowProgram, "uTexture");
+        _imageShadowBlurStepLocation = _gl.GetUniformLocation(_imageShadowProgram, "uBlurStep");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -194,6 +217,17 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         OnFrameEnd?.Invoke();
         FlushPendingGeometry();
         _gl.Flush();
+    }
+
+    /// <summary>
+    /// Call once after all output and overlay frames, with the renderer's GL context current.
+    /// Evicts keyed images unused across the entire application frame.
+    /// </summary>
+    public void EndApplicationFrame()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        FlushPendingGeometry();
+        _textureRepository.RemoveUnusedLiveResources();
     }
 
     [Conditional(PerformanceProfiling.Symbol)]
@@ -489,6 +523,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
             return;
         }
 
+        // Submit earlier draws only when an upload could change their texture contents.
+        if (_textureRepository.NeedsUpload(image))
+        {
+            FlushPendingGeometry();
+        }
+
         var texture = _textureRepository.GetTexture(image);
         DrawTexture(texture, rect, multiplicativeColor, _textureProgram, _textureViewportLocation,
             _textureLocation, rotationRadians);
@@ -513,6 +553,69 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         }
     }
 
+    public void DrawImageShadow(
+        string imagePath, Rect rect, Color shadowColor, float blurRadius,
+        float offsetX = 0, float offsetY = 2, bool loadAsync = false)
+    {
+        if (!CanDrawImageShadow(rect, shadowColor, blurRadius, offsetX, offsetY)
+            || string.IsNullOrWhiteSpace(imagePath))
+        {
+            return;
+        }
+
+        FlushPendingGeometry();
+        var texture = _textureRepository.GetTexture(imagePath,
+            Math.Max(1, (int)MathF.Ceiling(rect.Width * 2)),
+            Math.Max(1, (int)MathF.Ceiling(rect.Height * 2)), loadAsync);
+        if (texture is not null)
+        {
+            DrawImageShadowTexture(texture.Value, rect, shadowColor, blurRadius, offsetX, offsetY);
+        }
+    }
+
+    public void DrawImageShadow(
+        SvgAsset asset, Rect rect, Color shadowColor, float blurRadius,
+        float offsetX = 0, float offsetY = 2)
+    {
+        if (!CanDrawImageShadow(rect, shadowColor, blurRadius, offsetX, offsetY))
+        {
+            return;
+        }
+
+        var texture = _textureRepository.GetTexture(asset);
+        if (texture is not null)
+        {
+            DrawImageShadowTexture(texture.Value, rect, shadowColor, blurRadius, offsetX, offsetY);
+        }
+    }
+
+    private static bool CanDrawImageShadow(
+        Rect rect, Color color, float blurRadius, float offsetX, float offsetY) =>
+        float.IsFinite(rect.X) && float.IsFinite(rect.Y)
+        && float.IsFinite(rect.Width) && float.IsFinite(rect.Height)
+        && rect.Width > 0 && rect.Height > 0 && color.A > 0
+        && float.IsFinite(blurRadius) && blurRadius >= 0
+        && float.IsFinite(offsetX) && float.IsFinite(offsetY);
+
+    private void DrawImageShadowTexture(
+        Texture texture, Rect rect, Color color, float blurRadius, float offsetX, float offsetY)
+    {
+        FlushPendingGeometry();
+        // One extra screen pixel includes the source texture's bilinear border.
+        var padding = blurRadius + 1;
+        var paddedRect = new Rect(rect.X + offsetX - padding, rect.Y + offsetY - padding,
+            rect.Width + 2 * padding, rect.Height + 2 * padding);
+        _gl.UseProgram(_imageShadowProgram);
+        _gl.Uniform2(_imageShadowBlurStepLocation,
+            blurRadius / (4 * rect.Width), blurRadius / (4 * rect.Height));
+        RecordShadow();
+        DrawTexture(texture, paddedRect, color, _imageShadowProgram,
+            _imageShadowViewportLocation, _imageShadowTextureLocation,
+            uvPaddingX: padding / rect.Width, uvPaddingY: padding / rect.Height);
+        // Blur uniforms belong to this draw, not a later texture batch.
+        FlushTextureGeometry();
+    }
+
     private void DrawTexture(
         Texture texture,
         Rect rect,
@@ -520,7 +623,9 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         uint program,
         int viewportLocation,
         int textureLocation,
-        float rotationRadians = 0)
+        float rotationRadians = 0,
+        float uvPaddingX = 0,
+        float uvPaddingY = 0)
     {
         RecordTextureDraw();
         FlushColoredGeometry();
@@ -546,12 +651,12 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
 
         ReadOnlySpan<float> vertices =
         [
-            topLeft.X, topLeft.Y, 0, 0, color.R, color.G, color.B, color.A,
-            topRight.X, topRight.Y, 1, 0, color.R, color.G, color.B, color.A,
-            bottomRight.X, bottomRight.Y, 1, 1, color.R, color.G, color.B, color.A,
-            topLeft.X, topLeft.Y, 0, 0, color.R, color.G, color.B, color.A,
-            bottomRight.X, bottomRight.Y, 1, 1, color.R, color.G, color.B, color.A,
-            bottomLeft.X, bottomLeft.Y, 0, 1, color.R, color.G, color.B, color.A,
+            topLeft.X, topLeft.Y, -uvPaddingX, -uvPaddingY, color.R, color.G, color.B, color.A,
+            topRight.X, topRight.Y, 1 + uvPaddingX, -uvPaddingY, color.R, color.G, color.B, color.A,
+            bottomRight.X, bottomRight.Y, 1 + uvPaddingX, 1 + uvPaddingY, color.R, color.G, color.B, color.A,
+            topLeft.X, topLeft.Y, -uvPaddingX, -uvPaddingY, color.R, color.G, color.B, color.A,
+            bottomRight.X, bottomRight.Y, 1 + uvPaddingX, 1 + uvPaddingY, color.R, color.G, color.B, color.A,
+            bottomLeft.X, bottomLeft.Y, -uvPaddingX, 1 + uvPaddingY, color.R, color.G, color.B, color.A,
         ];
         _textureVertices.AddRange(vertices);
     }
@@ -566,7 +671,10 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.UseProgram(_batchTextureProgram);
         _gl.Uniform2(_batchTextureViewportLocation, (float)Width, (float)Height);
         _gl.Uniform1(_batchTextureLocation, 0);
-        _gl.Uniform1(_batchTextureProgram == _textureProgram ? _textureVertexColorLocation : _svgTextureVertexColorLocation, 1);
+        if (_batchTextureProgram != _imageShadowProgram)
+        {
+            _gl.Uniform1(_batchTextureProgram == _textureProgram ? _textureVertexColorLocation : _svgTextureVertexColorLocation, 1);
+        }
         // Uploads and font measurement can change bindings while this batch is pending.
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _batchTexture);
@@ -868,6 +976,7 @@ public sealed unsafe class Renderer : IRenderApi, IDisposable
         _gl.DeleteProgram(_roundedProgram);
         _gl.DeleteProgram(_textureProgram);
         _gl.DeleteProgram(_svgTextureProgram);
+        _gl.DeleteProgram(_imageShadowProgram);
         _textureRepository.Dispose();
         _font.Dispose();
         _disposed = true;

@@ -16,9 +16,18 @@ internal sealed class KdeConnectChannel : IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private int _disposed;
 
-    internal KdeConnectIdentity RemoteIdentity { get; }
-    internal byte[] RemoteCertificateDer { get; }
-    internal bool IsOutbound { get; }
+    internal KdeConnectIdentity RemoteIdentity
+    {
+        get;
+    }
+    internal byte[] RemoteCertificateDer
+    {
+        get;
+    }
+    internal bool IsOutbound
+    {
+        get;
+    }
     internal Task Completion { get; private set; } = Task.CompletedTask;
 
     private KdeConnectChannel(
@@ -66,8 +75,7 @@ internal sealed class KdeConnectChannel : IDisposable
                     state.GetPaired(expectedIdentity.DeviceId),
                     out remoteCertificate));
             await ssl.AuthenticateAsServerAsync(
-                new SslServerAuthenticationOptions
-                {
+                new SslServerAuthenticationOptions {
                     ServerCertificate = state.Certificate,
                     ClientCertificateRequired = true,
                     EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
@@ -122,8 +130,7 @@ internal sealed class KdeConnectChannel : IDisposable
                     state.GetPaired(expectedIdentity.DeviceId),
                     out remoteCertificate));
             await ssl.AuthenticateAsClientAsync(
-                new SslClientAuthenticationOptions
-                {
+                new SslClientAuthenticationOptions {
                     TargetHost = expectedIdentity.DeviceId,
                     ClientCertificates = certificates,
                     EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
@@ -185,7 +192,9 @@ internal sealed class KdeConnectChannel : IDisposable
             return new KdeConnectChannel(
                 client,
                 packetStream,
-                encryptedIdentity with { TcpPort = preTlsIdentity.TcpPort },
+                encryptedIdentity with {
+                    TcpPort = preTlsIdentity.TcpPort
+                },
                 remoteCertificate.RawDataMemory.ToArray(),
                 isOutbound);
         }

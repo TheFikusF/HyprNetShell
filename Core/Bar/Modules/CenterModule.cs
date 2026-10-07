@@ -61,8 +61,7 @@ internal sealed class CenterModule : IDrawableModule
     {
         _notificationService = notificationService;
 
-        _node = new(popupCoordinator, "center_module")
-        {
+        _node = new(popupCoordinator, "center_module") {
             HorizontalAlignment = ItemsAlignment.Center,
         };
         _calendar = new CalendarWidget(calendar);
@@ -117,11 +116,12 @@ internal sealed class CenterModule : IDrawableModule
         // () => new SpacerNode());
     }
 
-    private BoxNode BuildDateBadge(DateTime now) => new(height: 36)
-    {
+    private BoxNode BuildDateBadge(DateTime now) => new(height: 36) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, right: false) with { ShadowColor = null },
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, right: false) with {
+            ShadowColor = null
+        },
         Children = [new TextNode(now.ToString(" ddd dd, MMM"), 14)],
     };
 
@@ -134,8 +134,7 @@ internal sealed class CenterModule : IDrawableModule
         const int OVERLAY_CENTER_Y = -38;
         var targetRotation = ClockTargetRotation(now);
         _clockRotation = PrimitivesMath.LerpSmooth(_clockRotation, targetRotation, 9.0f, Renderer.DeltaTime);
-        return new BoxNode(CLOCK_SIZE + 6)
-        {
+        return new BoxNode(CLOCK_SIZE + 6) {
             Left = (400 - 27 - 27) / 2 - (CLOCK_SIZE + 6) / 2,
             IgnoreLayout = true,
             HorizontalAlignment = ItemsAlignment.Center,
@@ -226,12 +225,13 @@ internal sealed class CenterModule : IDrawableModule
         };
     }
 
-    private BoxNode BuildNotificationsBadge(NotificationsSnapshot snapshot) => new()
-    {
+    private BoxNode BuildNotificationsBadge(NotificationsSnapshot snapshot) => new() {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = _notificationService.ToggleDoNotDisturb,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left: false) with { ShadowColor = null },
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left: false) with {
+            ShadowColor = null
+        },
         Children =
         [
             ModulesCommon.BuildTextWithIcon(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, $"{snapshot.Count}")
@@ -246,8 +246,7 @@ internal sealed class CenterModule : IDrawableModule
             _activeCarouselPage = 2;
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -267,12 +266,10 @@ internal sealed class CenterModule : IDrawableModule
         };
     }
 
-    private BoxNode BuildCarouselPage(DateTime now) => new (new Style { Spacing = 12 })
-    {
+    private BoxNode BuildCarouselPage(DateTime now) => new(new Style { Spacing = 12 }) {
         VerticalAlignment = ItemsAlignment.Stretch,
         OnScroll = (x) => ChangeCarouselPage((int)MathF.Max(MathF.Min(MathF.Floor(x), 1), -1)),
-        Children = _activeCarouselPage switch
-        {
+        Children = _activeCarouselPage switch {
             0 =>
             [
                 _calendar.Draw(now, OpenCalendar, showTooltips: true, handleScroll: false),
@@ -289,8 +286,7 @@ internal sealed class CenterModule : IDrawableModule
         },
     };
 
-    private BoxNode BuildCarouselNavigation() => new(height: 16)
-    {
+    private BoxNode BuildCarouselNavigation() => new(height: 16) {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
         Style = Style.Spacer,
@@ -302,11 +298,9 @@ internal sealed class CenterModule : IDrawableModule
         ],
     };
 
-    private BoxNode BuildPageIndicator(int page) => new(8, 8)
-    {
+    private BoxNode BuildPageIndicator(int page) => new(8, 8) {
         OnClick = () => _activeCarouselPage = page,
-        Style = new Style
-        {
+        Style = new Style {
             BackgroundColor = page == _activeCarouselPage ? ThemeManager.Current.Active : ThemeManager.Current.Text.MutedColor,
             BorderRadius = 999,
         },
@@ -315,14 +309,12 @@ internal sealed class CenterModule : IDrawableModule
     private void ChangeCarouselPage(int direction) =>
         _activeCarouselPage = (_activeCarouselPage + direction + CAROUSEL_PAGE_COUNT) % CAROUSEL_PAGE_COUNT;
 
-    private BoxNode BuildPageButton(int direction, ModulesCommon.BoxState state) => new(28)
-    {
+    private BoxNode BuildPageButton(int direction, ModulesCommon.BoxState state) => new(28) {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = () => ChangeCarouselPage(direction),
         IsHovered = state.Hovered,
-        Style = ModulesCommon.ModuleStyle(state.Background) with
-        {
+        Style = ModulesCommon.ModuleStyle(state.Background) with {
             Padding = 0,
             BorderRadius = 8,
             BorderWidth = 0,
@@ -411,8 +403,7 @@ internal sealed class CenterModule : IDrawableModule
     {
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
+            Process.Start(new ProcessStartInfo {
                 FileName = "gnome-clocks",
                 UseShellExecute = false,
                 CreateNoWindow = true,

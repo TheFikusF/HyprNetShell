@@ -6,8 +6,7 @@ namespace HyprNetShell.Core.Games.Tetris;
 internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 {
     internal static readonly ReadOnlyDictionary<TetraminoType, int> Sizes = new(
-        new Dictionary<TetraminoType, int>
-        {
+        new Dictionary<TetraminoType, int> {
             [TetraminoType.L] = 3,
             [TetraminoType.I] = 4,
             [TetraminoType.O] = 2,
@@ -17,7 +16,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
             [TetraminoType.T] = 3,
         });
 
-    private Block?[,] _blocks = new Block?[TetrisGame.TetraminoSize, TetrisGame.TetraminoSize];
+    private Block?[,] _blocks = new Block?[TetrisGame.TETRAMINO_SIZE, TetrisGame.TETRAMINO_SIZE];
     private int _rotation;
     private int _lastRotationTestIndex;
     private int _x;
@@ -29,7 +28,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
         {
             var localX = x - _x;
             var localY = _y - y;
-            return localX < 0 || localY < 0 || localX >= TetrisGame.TetraminoSize || localY >= TetrisGame.TetraminoSize
+            return localX < 0 || localY < 0 || localX >= TetrisGame.TETRAMINO_SIZE || localY >= TetrisGame.TETRAMINO_SIZE
                 ? null
                 : _blocks[localX, localY];
         }
@@ -37,7 +36,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
         {
             var localX = x - _x;
             var localY = _y - y;
-            if (localX >= 0 && localY >= 0 && localX < TetrisGame.TetraminoSize && localY < TetrisGame.TetraminoSize)
+            if (localX >= 0 && localY >= 0 && localX < TetrisGame.TETRAMINO_SIZE && localY < TetrisGame.TETRAMINO_SIZE)
             {
                 _blocks[localX, localY] = value;
             }
@@ -45,8 +44,14 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
     }
 
     internal Block?[,] Blocks => _blocks;
-    internal TetraminoType Type { get; private set; }
-    internal MoveType LastMove { get; private set; }
+    internal TetraminoType Type
+    {
+        get; private set;
+    }
+    internal MoveType LastMove
+    {
+        get; private set;
+    }
     internal int CurrentRotation => _rotation;
     internal int LastRotationTestIndex => _lastRotationTestIndex;
     internal int X => _x;
@@ -56,9 +61,9 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
     {
         get
         {
-            for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+            for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
             {
-                for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+                for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
                 {
                     if (_blocks[x, y] is { } block)
                     {
@@ -72,9 +77,9 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
     internal static bool CanFit(TetrisGame game, int x, int y, TetraminoType type)
     {
         var matrix = game.RotationSystem[type];
-        for (var localY = 0; localY < TetrisGame.TetraminoSize; localY++)
+        for (var localY = 0; localY < TetrisGame.TETRAMINO_SIZE; localY++)
         {
-            for (var localX = 0; localX < TetrisGame.TetraminoSize; localX++)
+            for (var localX = 0; localX < TetrisGame.TETRAMINO_SIZE; localX++)
             {
                 if (matrix[localX, localY] == 0)
                 {
@@ -83,7 +88,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 
                 var boardX = x + localX;
                 var boardY = y - localY;
-                if (boardX >= TetrisGame.BoardWidth || boardX < 0 || boardY >= TetrisGame.BoardHeight || boardY < 0 ||
+                if (boardX >= TetrisGame.BOARD_WIDTH || boardX < 0 || boardY >= TetrisGame.BOARD_HEIGHT || boardY < 0 ||
                     game.Board.HasBlock(boardX, boardY))
                 {
                     return false;
@@ -95,10 +100,10 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 
     internal void Process(float deltaTime)
     {
-        var decay = TetrisGame.AnimationSpeed / game.CurrentTimer;
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        var decay = TetrisGame.ANIMATION_SPEED / game.CurrentTimer;
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (_blocks[x, y] is not { } block)
                 {
@@ -123,9 +128,9 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
         Type = type;
         _rotation = 0;
         var matrix = game.RotationSystem[type];
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (matrix[x, y] == 0)
                 {
@@ -135,8 +140,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
                 var targetX = _x + x;
                 var targetY = _y - y;
                 var start = spawnPosition ?? new Vector2(targetX, targetY);
-                var block = new Block(type, layer, start.X, start.Y)
-                {
+                var block = new Block(type, layer, start.X, start.Y) {
                     TargetPosition = new(targetX, targetY),
                 };
                 block.Appear(game.CurrentTimer / 3f);
@@ -157,9 +161,9 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
         _rotation = current.CurrentRotation;
         _x = current.X;
         _y = current.Y;
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (current._blocks[x, y] is not { } source)
                 {
@@ -231,15 +235,15 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 
     internal void ResetPosition()
     {
-        _x = TetrisGame.SpawnX;
-        _y = TetrisGame.SpawnY;
+        _x = TetrisGame.SPAWN_X;
+        _y = TetrisGame.SPAWN_Y;
     }
 
     internal void Clear()
     {
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (_blocks[x, y] is { } block)
                 {
@@ -252,9 +256,9 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 
     private bool PretendMove(int dx, int dy)
     {
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (_blocks[x, y] is null)
                 {
@@ -263,7 +267,7 @@ internal sealed class Tetramino(TetrisGame game, BlockLayer layer)
 
                 var boardX = _x + x + dx;
                 var boardY = _y - y + dy;
-                if (boardX >= TetrisGame.BoardWidth || boardX < 0 || boardY >= TetrisGame.BoardHeight || boardY < 0 ||
+                if (boardX >= TetrisGame.BOARD_WIDTH || boardX < 0 || boardY >= TetrisGame.BOARD_HEIGHT || boardY < 0 ||
                     game.Board.HasBlock(boardX, boardY))
                 {
                     return false;

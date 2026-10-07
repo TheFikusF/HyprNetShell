@@ -80,8 +80,7 @@ internal sealed class CompositeWindowConfiguration
         Changed?.Invoke();
     }
 
-    private CompositeWindowDefinition Normalize(CompositeWindowDefinition definition) => definition with
-    {
+    private CompositeWindowDefinition Normalize(CompositeWindowDefinition definition) => definition with {
         Id = string.IsNullOrWhiteSpace(definition.Id) ? Guid.NewGuid().ToString("N") : definition.Id.Trim(),
         Name = definition.Name.Trim(),
         Hotkey = definition.Hotkey.Trim(),
@@ -120,8 +119,7 @@ internal sealed class CompositeWindowConfiguration
 
     private void Persist()
     {
-        _configuration.Update(config => config.CompositeWindows = _windows.Select(window => new CompositeWindowConfigurationValue
-        {
+        _configuration.Update(config => config.CompositeWindows = _windows.Select(window => new CompositeWindowConfigurationValue {
             Id = window.Id,
             Name = window.Name,
             Hotkey = window.Hotkey,

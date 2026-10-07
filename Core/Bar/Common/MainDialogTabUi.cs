@@ -27,14 +27,12 @@ internal static class MainDialogTabUi
         }
 
         state.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             IsHovered = state.Hovered,
             OnClick = action,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Padding = new Insets(10, 6),
@@ -47,11 +45,13 @@ internal static class MainDialogTabUi
         ? new SpacerNode()
         : new TextNode(status, color: ThemeManager.Current.Text.MutedColor, maxWidth: 820);
 
-    public static BoxNode BuildMessage(string message) => new(height: 52)
-    {
+    public static BoxNode BuildMessage(string message) => new(height: 52) {
         VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8, BorderWidth = 0 },
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
+            BorderRadius = 8,
+            BorderWidth = 0
+        },
         Children = [new TextNode(message, color: ThemeManager.Current.Text.MutedColor)],
     };
 

@@ -15,7 +15,10 @@ public sealed class SvgAsset
     private const float MAX_RASTER_DIMENSION = 512.0f;
     private readonly byte[] _source;
 
-    public string Path { get; }
+    public string Path
+    {
+        get;
+    }
 
     public SvgAsset(string path, string base64Source)
     {

@@ -109,3 +109,43 @@ A binary-package ebuild and local-overlay instructions are available under
 [`packaging/gentoo/`](packaging/gentoo/README.md). The ebuild installs the
 NativeAOT bundle, runtime feature dependencies, and the PAM policy required by
 the in-house lock screen.
+
+## Window Overview
+
+Press **SUPER + O** to toggle a separate fullscreen Overview on the currently
+focused output. This dynamic Hyprland binding uses the existing `socat` callback
+mechanism and is registered only if SUPER + O is unused; conflicts or registration
+failures are logged rather than replacing your binding. Hovering the workspace
+module still opens its original text-only popup and never starts thumbnail capture.
+
+Overview shows an automatically fitted window grid with monitor/workspace labels.
+Use the **arrow keys** to select a window and **Enter** to focus it, or click a
+preview to focus its exact Hyprland window address and close. **Escape** closes
+Overview. Opening and closing animate with a short fade/scale transition; hovered
+previews lift and enlarge. Windows without an unambiguous exact-address thumbnail mapping
+show a placeholder; titles and application IDs are never used to guess mappings.
+Only mapped windows in the Overview request capture. Live capture is capped
+at 15 FPS per window, with round-robin scheduling to avoid starting every capture
+in the same event-loop tick. The protocol still requires full-resolution SHM,
+but native conversion produces aspect-preserved, bilinear-filtered RGBA previews
+bounded by 640×360; only those smaller buffers are copied into managed memory
+and uploaded. This trades some detail in large previews for lower CPU, allocation,
+and upload costs. Layout/captions are cached, and texture cleanup runs once after
+all outputs rather than evicting another output's live textures. Preview availability
+depends on the compositor protocols supported by the existing thumbnail backend.
+
+The background is a dark-tinted, centered cover crop of the current wallpaper
+image managed by the shell—not a desktop screenshot. It is decoded, downsampled
+to at most 768 pixels on either axis, and blurred once asynchronously when the
+wallpaper path changes. Immutable RGBA pixels use a stable texture key with a new
+revision per wallpaper; no image decoding or blur runs on the render thread.
+Missing, loading, or unsupported wallpapers fall back to the theme panel color;
+load failures are logged. Wallpapers changed externally (or files overwritten at
+the same path) are not detected by this cache.
+
+The Overview owns one output and keyboard focus. Screenshot selection, a shell
+dialog, locking, removal of its output, or shutdown closes it and releases capture
+demand. Other outputs retain their bars without receiving Overview input.
+`StatusBarServices.Overview` exposes `RequestToggle`, `ProcessPendingRequests`,
+`HandleInput`, `Draw`, `Close`, `IsVisible`, and `OwnerOutputId`; Application owns
+output selection and fullscreen layout orchestration.

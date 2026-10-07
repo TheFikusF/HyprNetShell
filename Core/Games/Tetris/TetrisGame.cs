@@ -4,14 +4,14 @@ namespace HyprNetShell.Core.Games.Tetris;
 
 public class TetrisGame
 {
-    public const int BoardWidth = 10;
-    public const int BoardHeight = 20;
-    public const int SpawnX = 3;
-    public const int SpawnY = 19;
-    public const int TetraminoSize = 4;
-    public const float AnimationSpeed = 10f;
-    public const float LockDelay = 0.5f;
-    public const float AfterClearDelay = 0.3f;
+    public const int BOARD_WIDTH = 10;
+    public const int BOARD_HEIGHT = 20;
+    public const int SPAWN_X = 3;
+    public const int SPAWN_Y = 19;
+    public const int TETRAMINO_SIZE = 4;
+    public const float ANIMATION_SPEED = 10f;
+    public const float LOCK_DELAY = 0.5f;
+    public const float AFTER_CLEAR_DELAY = 0.3f;
 
     private readonly float _maxTime;
     private readonly Stats _stats;
@@ -30,11 +30,11 @@ public class TetrisGame
         _stats = new Stats(Math.Clamp(startingLevel, 1, 29));
         RandomGenerator = new SevenBag(randomSeed is { } seed ? new Random(seed) : new Random());
         PieceQueue = new TetrisQueue(RandomGenerator);
-        Board = new Board(this, BoardWidth, BoardHeight);
+        Board = new Board(this, BOARD_WIDTH, BOARD_HEIGHT);
         RotationSystem = new Srs(this);
         GravityTimer = new Timer(GetTimer(startingLevel), repeat: true);
-        LockTimer = new Timer(LockDelay);
-        AfterClearTimer = new Timer(AfterClearDelay);
+        LockTimer = new Timer(LOCK_DELAY);
+        AfterClearTimer = new Timer(AFTER_CLEAR_DELAY);
         _current = new Tetramino(this, BlockLayer.Current);
         _ghost = new Tetramino(this, BlockLayer.Ghost);
         GravityTimer.Completed += MakeStep;
@@ -52,19 +52,40 @@ public class TetrisGame
         Hard,
     }
 
-    internal Board Board { get; private set; }
-    internal IRotationSystem RotationSystem { get; }
-    internal IRandomGenerator RandomGenerator { get; }
-    internal TetrisQueue PieceQueue { get; }
-    internal Timer GravityTimer { get; }
-    internal Timer LockTimer { get; }
-    internal Timer AfterClearTimer { get; }
+    internal Board Board
+    {
+        get; private set;
+    }
+    internal IRotationSystem RotationSystem
+    {
+        get;
+    }
+    internal IRandomGenerator RandomGenerator
+    {
+        get;
+    }
+    internal TetrisQueue PieceQueue
+    {
+        get;
+    }
+    internal Timer GravityTimer
+    {
+        get;
+    }
+    internal Timer LockTimer
+    {
+        get;
+    }
+    internal Timer AfterClearTimer
+    {
+        get;
+    }
 
     /// <summary>The visual origin used when a queued piece enters the board, in board-space cells.</summary>
-    public Vector2 NextSpawnPosition { get; set; } = new(BoardWidth + 3f, BoardHeight - 3f);
+    public Vector2 NextSpawnPosition { get; set; } = new(BOARD_WIDTH + 3f, BOARD_HEIGHT - 3f);
 
     /// <summary>The visual origin used when a held piece re-enters the board, in board-space cells.</summary>
-    public Vector2 HoldSpawnPosition { get; set; } = new(-3f, BoardHeight - 3f);
+    public Vector2 HoldSpawnPosition { get; set; } = new(-3f, BOARD_HEIGHT - 3f);
 
     public int Score => _stats.Score;
     public int Level => _stats.Level;
@@ -76,8 +97,14 @@ public class TetrisGame
     public float CurrentTimer => GetTimer(Level);
     public float CurrentDanger => _currentDanger;
     public bool IsStarted => _started;
-    public bool IsPaused { get; private set; }
-    public bool IsGameOver { get; private set; }
+    public bool IsPaused
+    {
+        get; private set;
+    }
+    public bool IsGameOver
+    {
+        get; private set;
+    }
     public bool IsClearing => AfterClearTimer.Started;
     public TetraminoType CurrentPiece => _current.Type;
     public TetraminoType NextPiece => PieceQueue.Next;
@@ -98,7 +125,7 @@ public class TetrisGame
     public event Action? GameOver;
 
     public Block? GetBoardBlock(int x, int y) =>
-        x >= 0 && x < BoardWidth && y >= 0 && y < BoardHeight ? Board.Get(x, y) : null;
+        x >= 0 && x < BOARD_WIDTH && y >= 0 && y < BOARD_HEIGHT ? Board.Get(x, y) : null;
 
     public TetraminoType? GetNextPiece(int index) => PieceQueue.GetNext(index);
 
@@ -106,7 +133,7 @@ public class TetrisGame
     {
         get
         {
-            var result = new List<Block>(BoardWidth * BoardHeight + 8 + _retiredBlocks.Count);
+            var result = new List<Block>(BOARD_WIDTH * BOARD_HEIGHT + 8 + _retiredBlocks.Count);
             result.AddRange(Board.Blocks);
             result.AddRange(_ghost.VisibleBlocks);
             result.AddRange(_current.VisibleBlocks);
@@ -121,10 +148,10 @@ public class TetrisGame
     public static IReadOnlyList<CellPoint> Cells(TetraminoType type, int rotation = 0)
     {
         var source = Srs.GetTetramino(type);
-        var matrix = new bool?[TetraminoSize, TetraminoSize];
-        for (var y = 0; y < TetraminoSize; y++)
+        var matrix = new bool?[TETRAMINO_SIZE, TETRAMINO_SIZE];
+        for (var y = 0; y < TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetraminoSize; x++)
+            for (var x = 0; x < TETRAMINO_SIZE; x++)
             {
                 matrix[x, y] = source[x, y] == 0 ? null : true;
             }
@@ -136,9 +163,9 @@ public class TetrisGame
         }
 
         var result = new List<CellPoint>(4);
-        for (var y = 0; y < TetraminoSize; y++)
+        for (var y = 0; y < TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetraminoSize; x++)
+            for (var x = 0; x < TETRAMINO_SIZE; x++)
             {
                 if (matrix[x, y] is not null)
                 {
@@ -159,7 +186,7 @@ public class TetrisGame
         }
 
         StopTimers();
-        Board = new Board(this, BoardWidth, BoardHeight);
+        Board = new Board(this, BOARD_WIDTH, BOARD_HEIGHT);
         PieceQueue.Init();
         _stats.Reset();
         _currentDanger = 0;
@@ -336,8 +363,7 @@ public class TetrisGame
         return false;
     }
 
-    public static float GetTimer(int level) => level switch
-    {
+    public static float GetTimer(int level) => level switch {
         1 => 0.800f,
         2 => 0.717f,
         3 => 0.550f,
@@ -413,7 +439,7 @@ public class TetrisGame
 
     private bool Validate(TetraminoType type)
     {
-        if (Tetramino.CanFit(this, SpawnX, SpawnY, type))
+        if (Tetramino.CanFit(this, SPAWN_X, SPAWN_Y, type))
         {
             return true;
         }
@@ -424,7 +450,7 @@ public class TetrisGame
 
     private void CalculateDanger()
     {
-        for (var y = 0; y < BoardHeight; y++)
+        for (var y = 0; y < BOARD_HEIGHT; y++)
         {
             if (Board.AnyInRow(y))
             {
@@ -452,7 +478,7 @@ public class TetrisGame
 
     private void ProcessRetiredBlocks(float deltaTime)
     {
-        var decay = AnimationSpeed * 2f / CurrentTimer;
+        var decay = ANIMATION_SPEED * 2f / CurrentTimer;
         for (var index = _retiredBlocks.Count - 1; index >= 0; index--)
         {
             var block = _retiredBlocks[index];

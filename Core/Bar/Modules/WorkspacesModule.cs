@@ -22,7 +22,7 @@ internal sealed class WorkspacesModule : IDrawableModule
     public WorkspacesModule(
         HyprlandService hyprland,
         IHyprctl hyprctl,
-        KeyStateService keyState,
+
         Func<string> getOutputName,
         Func<bool> blockPopup,
         PopupCoordinator popupCoordinator)
@@ -31,10 +31,9 @@ internal sealed class WorkspacesModule : IDrawableModule
         _hyprctl = hyprctl;
         _getOutputName = getOutputName;
         var blockPopup1 = blockPopup;
-        _node = new(popupCoordinator, "workspaces_module", ignorePopupQueue: true)
-        {
+        _node = new(popupCoordinator, "workspaces_module", ignorePopupQueue: true) {
             TopOffset = 36,
-            GetShouldShowPopup = hovered => (keyState.IsHeldFor(TimeSpan.FromMilliseconds(500)) || hovered) &&
+            GetShouldShowPopup = hovered => hovered &&
                                             blockPopup1() == false,
         };
     }
@@ -131,8 +130,7 @@ internal sealed class WorkspacesModule : IDrawableModule
             .ThenBy(monitor => monitor.Name, StringComparer.Ordinal)
             .ToArray();
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -145,8 +143,7 @@ internal sealed class WorkspacesModule : IDrawableModule
 
     private BoxNode BuildMonitorColumn(
         string monitorName,
-        IReadOnlyList<WorkspaceSnapshot> workspaces) => new(400)
-        {
+        IReadOnlyList<WorkspaceSnapshot> workspaces) => new(400) {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -162,14 +159,12 @@ internal sealed class WorkspacesModule : IDrawableModule
     {
         var state = _popupWorkspaceStates.GetState(workspace.Id, ThemeManager.Current.Panel)
             .UpdateColor(workspace.Active ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => _ = _hyprctl.FocusWorkspaceAsync(workspace.Id),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Spacing = 8,
                 BorderRadius = 8,
                 BorderWidth = workspace.Active ? ThemeManager.Current.Border.Width : 0,

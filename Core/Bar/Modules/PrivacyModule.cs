@@ -15,8 +15,7 @@ internal sealed class PrivacyModule(PrivacyModuleService service, PopupCoordinat
     private const long ICON_INTERVAL_MS = 3000;
     private const float ICON_FADE_DECAY = 8.0f;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "privacy_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "privacy_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -72,12 +71,10 @@ internal sealed class PrivacyModule(PrivacyModuleService service, PopupCoordinat
 
         int size = (int)(_widgetScale * 36.0f);
 
-        return new BoxNode(size, size)
-        {
+        return new BoxNode(size, size) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = Color.Orange,
                 BorderRadius = 999,
                 ShadowColor = Color.Black with { A = 0.45f },
@@ -93,35 +90,33 @@ internal sealed class PrivacyModule(PrivacyModuleService service, PopupCoordinat
         var children = new List<Node>(2);
         if (_previousIcon is not null)
         {
-            children.Add(new BoxNode
-            {
+            children.Add(new BoxNode {
                 IgnoreLayout = true,
                 Opacity = 1.0f - _iconOpacity,
                 Children = [new ImageNode(_previousIcon, size, size, ThemeManager.Current.Panel)],
             });
         }
 
-        children.Add(new BoxNode
-        {
+        children.Add(new BoxNode {
             IgnoreLayout = true,
             Opacity = _iconOpacity,
             Children = [new ImageNode(_currentIcon!, size, size, ThemeManager.Current.Panel)],
         });
 
-        return new BoxNode(size, size)
-        {
+        return new BoxNode(size, size) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             Children = children,
         };
     }
 
-    private BoxNode BuildPopup(PrivacySnapshot privacy) => new(340)
-    {
+    private BoxNode BuildPopup(PrivacySnapshot privacy) => new(340) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
+        Style = ModulesCommon.PopupStyle() with {
+            Spacing = 8
+        },
         Children =
         [
             new TextNode("Privacy", 18),
@@ -135,11 +130,9 @@ internal sealed class PrivacyModule(PrivacyModuleService service, PopupCoordinat
     {
         foreach (var application in applications)
         {
-            yield return new BoxNode
-            {
+            yield return new BoxNode {
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.Orange)) with
-                {
+                Style = ModulesCommon.ModuleStyle(ModulesCommon.ToBackground(Color.Orange)) with {
                     BorderRadius = 8,
                     ShadowColor = null,
                     Spacing = 10,

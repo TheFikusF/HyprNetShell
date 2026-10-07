@@ -32,7 +32,7 @@ internal sealed class Board(TetrisGame game, int width, int height)
 
     internal void Process(float deltaTime)
     {
-        var decay = TetrisGame.AnimationSpeed * 2f / game.CurrentTimer;
+        var decay = TetrisGame.ANIMATION_SPEED * 2f / game.CurrentTimer;
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)

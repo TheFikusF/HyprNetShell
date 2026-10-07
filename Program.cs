@@ -1,9 +1,8 @@
-﻿using HyprNetShell.Application;
+using HyprNetShell.Application;
 using HyprNetShell.Application.DesktopEntry;
 using HyprNetShell.Application.LockScreen;
 
-return args switch
-{
+return args switch {
     ["--launch-desktop-entry", var desktopFile] => DesktopEntryLauncher.Launch(desktopFile),
     ["--launch-desktop-action", var desktopFile, var actionId] => DesktopEntryLauncher.LaunchAction(desktopFile, actionId),
     ["--lock"] => LockScreenApplication.Run(),

@@ -84,7 +84,9 @@ internal sealed class TimeCurveNode<T>(
         }
 
         var now = DateTime.Now;
-        DrawTimeLine(now.Hour + now.Minute / 60.0f, Color.Orange with { A = 0.55f });
+        DrawTimeLine(now.Hour + now.Minute / 60.0f, Color.Orange with {
+            A = 0.55f
+        });
     }
 
     private void DrawCurve(IRenderApi renderer, Rect plot)

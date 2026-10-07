@@ -18,8 +18,7 @@ internal sealed record SpotifyPlaybackSnapshot(
 
 internal sealed class SpotifyPlaybackService : IDisposable
 {
-    private static readonly HttpClient Http = new()
-    {
+    private static readonly HttpClient Http = new() {
         Timeout = TimeSpan.FromSeconds(3),
     };
 
@@ -154,15 +153,13 @@ internal sealed class SpotifyPlaybackService : IDisposable
         MusicRepeatMode repeatMode,
         CancellationToken cancellationToken = default)
     {
-        var next = repeatMode switch
-        {
+        var next = repeatMode switch {
             MusicRepeatMode.Off => MusicRepeatMode.Context,
             MusicRepeatMode.Context => MusicRepeatMode.Track,
             MusicRepeatMode.Track => MusicRepeatMode.Off,
             _ => MusicRepeatMode.Off,
         };
-        var state = next switch
-        {
+        var state = next switch {
             MusicRepeatMode.Context => "context",
             MusicRepeatMode.Track => "track",
             _ => "off",
@@ -309,8 +306,7 @@ internal sealed class SpotifyPlaybackService : IDisposable
         return request;
     }
 
-    private static MusicRepeatMode? ParseRepeatMode(string? state) => state switch
-    {
+    private static MusicRepeatMode? ParseRepeatMode(string? state) => state switch {
         "off" => MusicRepeatMode.Off,
         "context" => MusicRepeatMode.Context,
         "track" => MusicRepeatMode.Track,

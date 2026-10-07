@@ -188,8 +188,7 @@ internal sealed class Hyprctl : IHyprctl
         Process? process = null;
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = "hyprctl",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -255,11 +254,21 @@ internal sealed class Hyprctl : IHyprctl
         {
             switch (character)
             {
-                case '\\': result.Append("\\\\"); break;
-                case '"': result.Append("\\\""); break;
-                case '\n': result.Append("\\n"); break;
-                case '\r': result.Append("\\r"); break;
-                case '\t': result.Append("\\t"); break;
+                case '\\':
+                    result.Append("\\\\");
+                    break;
+                case '"':
+                    result.Append("\\\"");
+                    break;
+                case '\n':
+                    result.Append("\\n");
+                    break;
+                case '\r':
+                    result.Append("\\r");
+                    break;
+                case '\t':
+                    result.Append("\\t");
+                    break;
                 default:
                     if (character is < ' ' or '\u007f')
                     {

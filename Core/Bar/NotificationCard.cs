@@ -17,8 +17,14 @@ internal static class NotificationCard
         public ModulesCommon.BoxState Content { get; } = new();
         public ModulesCommon.BoxState CloseButton { get; } = new();
         public Dictionary<string, ModulesCommon.BoxState> ActionButtons { get; } = new();
-        public bool ContentInitialized { get; set; }
-        public bool CloseButtonInitialized { get; set; }
+        public bool ContentInitialized
+        {
+            get; set;
+        }
+        public bool CloseButtonInitialized
+        {
+            get; set;
+        }
     }
 
     private static readonly AppIconResolver IconResolver = new();
@@ -33,12 +39,10 @@ internal static class NotificationCard
             ? IconResolver.TryResolveIcon(notification.IconName) ?? IconResolver.TryResolve(notification.IconName)
             : null;
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.PopupStyle() with
-            {
+            Style = ModulesCommon.PopupStyle() with {
                 BorderRadius = 12,
                 Padding = 8,
                 Spacing = 12,
@@ -70,10 +74,14 @@ internal static class NotificationCard
     {
         if (!state.ContentInitialized)
         {
-            state.Content.Background = ThemeManager.Current.Panel with { A = 0.2f };
+            state.Content.Background = ThemeManager.Current.Panel with {
+                A = 0.2f
+            };
             state.ContentInitialized = true;
         }
-        state.Content.UpdateColor(ThemeManager.Current.Panel with { A = 0.2f });
+        state.Content.UpdateColor(ThemeManager.Current.Panel with {
+            A = 0.2f
+        });
 
         TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
             ? [new TextNode(notification.Title, wrapping: TextWrapping.Wrap, maxLines: 3)]
@@ -82,15 +90,13 @@ internal static class NotificationCard
                 new TextNode(notification.Title, 16, wrapping: TextWrapping.Ellipsis),
                 new TextNode(notification.Body, wrapping: TextWrapping.Wrap, maxLines: 3),
             ];
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
             OnClick = () => service.Activate(notification.Id),
             IsHovered = state.Content.Hovered,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = state.Content.Background,
                 BorderRadius = 8,
                 Padding = 4,
@@ -133,14 +139,12 @@ internal static class NotificationCard
             state.CloseButtonInitialized = true;
         }
         state.CloseButton.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode(22, 22)
-        {
+        return new BoxNode(22, 22) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => service.Dismiss(id),
             IsHovered = state.CloseButton.Hovered,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = state.CloseButton.Background,
                 BorderRadius = 6,
                 Padding = 4,
@@ -161,8 +165,7 @@ internal static class NotificationCard
             yield break;
         }
 
-        yield return new BoxNode
-        {
+        yield return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 6 },
@@ -181,13 +184,11 @@ internal static class NotificationCard
         var buttonState = state.ActionButtons
             .GetState(action.Key, ThemeManager.Current.Active)
             .UpdateColor(ThemeManager.Current.Active);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Center,
             OnClick = () => service.InvokeAction(notificationId, action.Key),
             IsHovered = buttonState.Hovered,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = buttonState.Background,
                 BorderRadius = 6,
                 Padding = 8,

@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
+using HyprNetShell.Core.Logging;
 using System.Text;
 using System.Xml.Linq;
 
@@ -75,11 +77,13 @@ public sealed class AppIconResolver
                 }
 
                 var fileName = Path.GetFileNameWithoutExtension(desktopFile);
-                if (Matches(className, fileName) ||
-                    Matches(className, GetValue(entry, "StartupWMClass")) ||
-                    Matches(className, GetValue(entry, "Name")))
+                var iconName = GetValue(entry, "Icon");
+                if (iconName is not null &&
+                    (Matches(className, fileName) ||
+                     Matches(className, GetValue(entry, "StartupWMClass")) ||
+                     Matches(className, GetValue(entry, "Name"))))
                 {
-                    return GetValue(entry, "Icon");
+                    return iconName;
                 }
             }
         }
@@ -117,10 +121,6 @@ public sealed class AppIconResolver
         // Svg.Skia can terminate the process on unsupported constructs in old
         // third-party Inkscape files (notably flowRoot/text). Reduce external
         // icons to the geometry subset used by our known-safe bundled assets.
-        if (Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
 
         var cacheDirectory = SafeSvgCacheDirectory.Value;
         if (cacheDirectory is null)
@@ -138,7 +138,11 @@ public sealed class AppIconResolver
                 return safePath;
             }
 
-            var document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+            using var source = File.OpenRead(path);
+            using var decompressed = Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
+                ? new GZipStream(source, CompressionMode.Decompress)
+                : null;
+            var document = XDocument.Load(decompressed is null ? source : decompressed, LoadOptions.PreserveWhitespace);
             var root = document.Root;
             if (root is null || root.Name.LocalName != "svg")
             {
@@ -160,7 +164,11 @@ public sealed class AppIconResolver
                     var unsafeStyle = name == "style" &&
                                       attribute.Value.Contains("url(", StringComparison.OrdinalIgnoreCase) &&
                                       !attribute.Value.Contains("url(#", StringComparison.OrdinalIgnoreCase);
-                    if ((!attribute.IsNamespaceDeclaration && !string.IsNullOrEmpty(attribute.Name.NamespaceName)) ||
+                    var localSvgReference = name == "href" &&
+                                            attribute.Name.NamespaceName == "http://www.w3.org/1999/xlink" &&
+                                            attribute.Value.StartsWith('#');
+                    if ((!attribute.IsNamespaceDeclaration && !string.IsNullOrEmpty(attribute.Name.NamespaceName) &&
+                         !localSvgReference) ||
                         name.StartsWith("on", StringComparison.OrdinalIgnoreCase) ||
                         externalReference || unsafeStyle)
                     {
@@ -172,8 +180,9 @@ public sealed class AppIconResolver
             document.Save(safePath, SaveOptions.DisableFormatting);
             return File.Exists(safePath) ? safePath : null;
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("AppIconResolver", $"Could not sanitize SVG icon '{path}'", exception);
             return null;
         }
     }
@@ -184,8 +193,9 @@ public sealed class AppIconResolver
         {
             return Directory.CreateTempSubdirectory("hyprnetshell-safe-svg-").FullName;
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("AppIconResolver", "Could not create the safe SVG cache directory", exception);
             return null;
         }
     }
@@ -199,32 +209,29 @@ public sealed class AppIconResolver
 
         if (Path.IsPathRooted(iconName))
         {
-            return File.Exists(iconName) ? iconName : null;
+            return IsExistingIconFile(iconName) ? iconName : null;
         }
 
         var suppliedExtension = Path.GetExtension(iconName);
-        if (!string.IsNullOrEmpty(suppliedExtension) &&
-            !extensions.Contains(suppliedExtension, StringComparer.OrdinalIgnoreCase))
+        // Dots are part of themed icon names (reverse-DNS IDs and version numbers),
+        // not file extensions unless the suffix is a supported image format.
+        var hasImageExtension = IconExtensions.Contains(suppliedExtension, StringComparer.OrdinalIgnoreCase);
+        if (hasImageExtension && !extensions.Contains(suppliedExtension, StringComparer.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var names = !string.IsNullOrEmpty(suppliedExtension)
+        var names = hasImageExtension
             ? new[] { iconName }
             : extensions.Select(extension => iconName + extension).ToArray();
 
-        foreach (var iconDir in GetIconDirectories())
+        foreach (var iconDir in GetIconDirectories().Where(x => Directory.Exists(x)))
         {
-            if (!Directory.Exists(iconDir))
-            {
-                continue;
-            }
-
             var candidates = new List<string>();
             foreach (var name in names)
             {
                 var direct = Path.Combine(iconDir, name);
-                if (File.Exists(direct))
+                if (IsExistingIconFile(direct))
                 {
                     candidates.Add(direct);
                 }
@@ -233,19 +240,35 @@ public sealed class AppIconResolver
             var expectedNames = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
             candidates.AddRange(
                 SafeEnumerateFiles(iconDir, "*", SearchOption.AllDirectories)
-                    .Where(file => expectedNames.Contains(Path.GetFileName(file))));
+                    .Where(file => expectedNames.Contains(Path.GetFileName(file)) && IsExistingIconFile(file)));
 
-            if (candidates.Count > 0)
+            if (candidates.Count <= 0)
             {
-                return candidates
-                    .Distinct(StringComparer.Ordinal)
-                    .OrderBy(IconCandidateScore)
-                    .ThenBy(path => path, StringComparer.Ordinal)
-                    .First();
+                continue;
             }
+
+            return candidates
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(IconCandidateScore)
+                .ThenBy(path => path, StringComparer.Ordinal)
+                .First();
         }
 
         return null;
+    }
+
+    private static bool IsExistingIconFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists && (file.LinkTarget is null || file.ResolveLinkTarget(returnFinalTarget: true) is FileInfo { Exists: true });
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("AppIconResolver", $"Could not inspect icon file '{path}'", exception);
+            return false;
+        }
     }
 
     private static int IconCandidateScore(string path)
@@ -258,8 +281,7 @@ public sealed class AppIconResolver
         }
 
         var size = IconSizeFromPath(normalized);
-        score += size switch
-        {
+        score += size switch {
             48 => 0,
             64 => 2,
             32 => 4,
@@ -324,8 +346,9 @@ public sealed class AppIconResolver
                 values[trimmed[..separator]] = trimmed[(separator + 1)..];
             }
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("AppIconResolver", $"Could not read desktop entry '{desktopFile}'", exception);
             values.Clear();
         }
 
@@ -406,16 +429,16 @@ public sealed class AppIconResolver
     {
         try
         {
-            var options = new EnumerationOptions
-            {
+            var options = new EnumerationOptions {
                 IgnoreInaccessible = true,
                 RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
             };
 
             return Directory.EnumerateFiles(path, pattern, options).ToArray();
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("AppIconResolver", $"Could not enumerate '{pattern}' in '{path}'", exception);
             return Array.Empty<string>();
         }
     }

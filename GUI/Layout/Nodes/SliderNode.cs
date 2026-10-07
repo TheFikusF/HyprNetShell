@@ -17,7 +17,7 @@ public sealed class SliderNode(
 {
     private const float TRACK_HEIGHT = 6.0f;
     private const float THUMB_SIZE = 14.0f;
-    
+
     public override int Width { get; } = width;
     public override int Height { get; } = height;
 
@@ -45,13 +45,15 @@ public sealed class SliderNode(
             var direction = Layout.Input.ScrollDelta < 0.0f ? 1.0f : -1.0f;
             onValueChanged(Math.Clamp(value + direction * scrollStep, 0.0f, 1.0f));
         }
-        
+
         var normalizedValue = Math.Clamp(value, 0.0f, 1.0f);
         var track = new Rect(x, y + (Height - TRACK_HEIGHT) / 2.0f, Width, TRACK_HEIGHT);
         renderer.FillRoundedRect(track, TRACK_HEIGHT / 2.0f, trackColor.PushOpacity(Opacity));
         if (normalizedValue > 0.0f)
         {
-            renderer.FillRoundedRect(track with { Width = track.Width * normalizedValue }, TRACK_HEIGHT / 2.0f, fillColor.PushOpacity(Opacity));
+            renderer.FillRoundedRect(track with {
+                Width = track.Width * normalizedValue
+            }, TRACK_HEIGHT / 2.0f, fillColor.PushOpacity(Opacity));
         }
 
         var thumbX = x + normalizedValue * Width;

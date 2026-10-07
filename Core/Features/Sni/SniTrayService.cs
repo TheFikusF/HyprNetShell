@@ -32,17 +32,29 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     public async ValueTask RefreshAsync(CancellationToken cancellationToken)
     {
         await EnsureInitializedAsync(cancellationToken);
-        if (_connection is null) return;
+        if (_connection is null)
+        {
+            return;
+        }
+
         Snapshot = await ReadItemsAsync(cancellationToken);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        if (_initialized) return;
+        if (_initialized)
+        {
+            return;
+        }
+
         await _initializeGate.WaitAsync(cancellationToken);
         try
         {
-            if (_initialized) return;
+            if (_initialized)
+            {
+                return;
+            }
+
             var hostName = $"org.kde.StatusNotifierHost-{Environment.ProcessId}";
             _embeddedWatcher = await StatusNotifierWatcher.TryStartAsync(hostName);
 
@@ -83,7 +95,11 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
 
     private async Task<IReadOnlyList<TrayItemSnapshot>> ReadItemsAsync(CancellationToken cancellationToken)
     {
-        if (_connection is null) return [];
+        if (_connection is null)
+        {
+            return [];
+        }
+
         string[] registered;
         try
         {
@@ -107,9 +123,16 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             var parsed = ParseItemId(id);
-            if (parsed is null) continue;
+            if (parsed is null)
+            {
+                continue;
+            }
+
             var item = await ReadItemAsync(id, parsed.Value.Bus, parsed.Value.Path, cancellationToken);
-            if (item is not null) items.Add(item);
+            if (item is not null)
+            {
+                items.Add(item);
+            }
         }
         return items;
     }
@@ -122,18 +145,32 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     {
         var properties = await ReadPropertiesAsync(bus, path, cancellationToken);
         if (properties is null || properties.StringValue("Status").Equals("Passive", StringComparison.OrdinalIgnoreCase))
+        {
             return null;
+        }
 
         var iconName = properties.StringValue("IconName");
         if (properties.StringValue("Status").Equals("NeedsAttention", StringComparison.OrdinalIgnoreCase))
+        {
             iconName = properties.StringValue("AttentionIconName") is { Length: > 0 } attention ? attention : iconName;
+        }
 
         var appId = properties.StringValue("Id");
         var title = properties.StringValue("Title");
-        if (string.IsNullOrWhiteSpace(title)) title = TooltipTitle(properties);
-        if (string.IsNullOrWhiteSpace(title)) title = bus.Split('.').LastOrDefault() ?? bus;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = TooltipTitle(properties);
+        }
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = bus.Split('.').LastOrDefault() ?? bus;
+        }
+
         if (appId == "chrome_status_icon_1" && TooltipTitle(properties) is { Length: > 0 } tooltip)
+        {
             appId = tooltip.ToLowerInvariant();
+        }
 
         var iconPath = ResolveIconPath(properties.StringValue("IconThemePath"), iconName, appId, bus, title)
                        ?? WriteIconPixmap(id, properties);
@@ -147,7 +184,11 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         string path,
         CancellationToken cancellationToken)
     {
-        if (_connection is null) return null;
+        if (_connection is null)
+        {
+            return null;
+        }
+
         foreach (var itemInterface in ItemInterfaces)
         {
             try
@@ -171,7 +212,11 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         string menuPath,
         CancellationToken cancellationToken)
     {
-        if (_connection is null || string.IsNullOrWhiteSpace(menuPath) || menuPath == "/") return null;
+        if (_connection is null || string.IsNullOrWhiteSpace(menuPath) || menuPath == "/")
+        {
+            return null;
+        }
+
         try
         {
             try
@@ -215,7 +260,11 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     private static MenuNode? ParseMenuNode(VariantValue raw)
     {
         var value = raw.Unwrap();
-        if (value.Type != VariantValueType.Struct || value.Count < 3) return null;
+        if (value.Type != VariantValueType.Struct || value.Count < 3)
+        {
+            return null;
+        }
+
         var id = value.GetItem(0).Unwrap().GetInt32();
         var dictionary = value.GetItem(1).Unwrap().GetDictionary<string, VariantValue>();
         var childrenValue = value.GetItem(2).Unwrap();
@@ -231,26 +280,45 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     {
         foreach (var node in nodes)
         {
-            if (!BoolValue(node.Properties, "visible", true)) continue;
+            if (!BoolValue(node.Properties, "visible", true))
+            {
+                continue;
+            }
+
             if (node.Properties.StringValue("type").Equals("separator", StringComparison.OrdinalIgnoreCase))
             {
                 rows.Add(new PopupRowSnapshot("", PopupRowKind.Separator, false));
                 continue;
             }
             var label = CleanMenuLabel(node.Properties.StringValue("label"));
-            if (label.Length == 0) label = "(item)";
-            if (depth > 0) label = new string(' ', depth * 2) + label;
+            if (label.Length == 0)
+            {
+                label = "(item)";
+            }
+
+            if (depth > 0)
+            {
+                label = new string(' ', depth * 2) + label;
+            }
+
             var submenu = node.Children.Count > 0 ||
                           node.Properties.StringValue("children-display").Equals("submenu", StringComparison.OrdinalIgnoreCase);
             rows.Add(new PopupRowSnapshot(label, submenu ? PopupRowKind.Header : PopupRowKind.Action,
                 BoolValue(node.Properties, "enabled", true) && !submenu, submenu ? null : node.Id));
-            if (submenu) AppendMenuRows(rows, node.Children, depth + 1);
+            if (submenu)
+            {
+                AppendMenuRows(rows, node.Children, depth + 1);
+            }
         }
     }
 
     internal async Task TriggerMenuActionAsync(TrayItemSnapshot item, int actionId)
     {
-        if (_connection is null || string.IsNullOrWhiteSpace(item.MenuPath)) return;
+        if (_connection is null || string.IsNullOrWhiteSpace(item.MenuPath))
+        {
+            return;
+        }
+
         try
         {
             await Dbus.CallAsync(
@@ -276,13 +344,21 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
             foreach (var extension in new[] { ".png", ".svg", ".xpm" })
             {
                 var direct = global::System.IO.Path.Combine(themePath, iconName + extension);
-                if (File.Exists(direct)) return direct;
+                if (File.Exists(direct))
+                {
+                    return direct;
+                }
             }
             foreach (var size in new[] { "22x22", "24x24", "32x32", "48x48", "16x16" })
-            foreach (var extension in new[] { ".png", ".svg" })
             {
-                var nested = global::System.IO.Path.Combine(themePath, "hicolor", size, "apps", iconName + extension);
-                if (File.Exists(nested)) return nested;
+                foreach (var extension in new[] { ".png", ".svg" })
+                {
+                    var nested = global::System.IO.Path.Combine(themePath, "hicolor", size, "apps", iconName + extension);
+                    if (File.Exists(nested))
+                    {
+                        return nested;
+                    }
+                }
             }
         }
         return _iconResolver.TryResolve(iconName) ?? _iconResolver.TryResolve(appId) ??
@@ -294,9 +370,16 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     // the existing image renderer can load it without retaining extra buffers.
     private string? WriteIconPixmap(string itemId, IReadOnlyDictionary<string, VariantValue> properties)
     {
-        if (!properties.TryGetValue("IconPixmap", out var raw)) return null;
+        if (!properties.TryGetValue("IconPixmap", out var raw))
+        {
+            return null;
+        }
+
         var frames = raw.Unwrap();
-        if (frames.Type != VariantValueType.Array) return null;
+        if (frames.Type != VariantValueType.Array)
+        {
+            return null;
+        }
 
         byte[]? best = null;
         var bestWidth = 0;
@@ -304,17 +387,28 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
         for (var index = 0; index < frames.Count; index++)
         {
             var frame = frames.GetItem(index).Unwrap();
-            if (frame.Type != VariantValueType.Struct || frame.Count < 3) continue;
+            if (frame.Type != VariantValueType.Struct || frame.Count < 3)
+            {
+                continue;
+            }
+
             var width = frame.GetItem(0).Unwrap().GetInt32();
             var height = frame.GetItem(1).Unwrap().GetInt32();
             var data = frame.GetItem(2).Unwrap().GetArray<byte>();
             if (width <= 0 || height <= 0 || (long)width * height * 4 != data.Length ||
-                (long)width * height <= (long)bestWidth * bestHeight) continue;
+                (long)width * height <= (long)bestWidth * bestHeight)
+            {
+                continue;
+            }
+
             best = data;
             bestWidth = width;
             bestHeight = height;
         }
-        if (best is null) return null;
+        if (best is null)
+        {
+            return null;
+        }
 
         var rgba = new byte[best.Length];
         for (var index = 0; index < best.Length; index += 4)
@@ -355,7 +449,11 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
     {
         id = id.Trim();
         var slash = id.IndexOf('/');
-        if (id.Length == 0 || id.StartsWith('/')) return null;
+        if (id.Length == 0 || id.StartsWith('/'))
+        {
+            return null;
+        }
+
         return slash < 0 ? (id, "/StatusNotifierItem") : (id[..slash], id[slash..]);
     }
 
@@ -366,9 +464,17 @@ internal sealed class SniTrayService : IBarDataService, IDisposable
 
     private static string TooltipTitle(IReadOnlyDictionary<string, VariantValue> values)
     {
-        if (!values.TryGetValue("ToolTip", out var raw)) return "";
+        if (!values.TryGetValue("ToolTip", out var raw))
+        {
+            return "";
+        }
+
         var value = raw.Unwrap();
-        if (value.Type != VariantValueType.Struct || value.Count < 4) return "";
+        if (value.Type != VariantValueType.Struct || value.Count < 4)
+        {
+            return "";
+        }
+
         var title = value.GetItem(2).Unwrap().GetString().Trim();
         return title.Length > 0 ? title : value.GetItem(3).Unwrap().GetString().Trim();
     }

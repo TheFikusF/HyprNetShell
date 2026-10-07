@@ -107,24 +107,21 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
             await connection.ConnectAsync();
             cancellationToken.ThrowIfCancellationRequested();
             propertiesSubscription = await AddPropertiesSubscriptionAsync(connection);
-            interfacesAddedSubscription = await AddInvalidationMatchAsync(connection, new MatchRule
-            {
+            interfacesAddedSubscription = await AddInvalidationMatchAsync(connection, new MatchRule {
                 Type = MessageType.Signal,
                 Sender = BLUEZ_BUS_NAME,
                 Path = "/",
                 Interface = OBJECT_MANAGER_INTERFACE,
                 Member = "InterfacesAdded",
             });
-            interfacesRemovedSubscription = await AddInvalidationMatchAsync(connection, new MatchRule
-            {
+            interfacesRemovedSubscription = await AddInvalidationMatchAsync(connection, new MatchRule {
                 Type = MessageType.Signal,
                 Sender = BLUEZ_BUS_NAME,
                 Path = "/",
                 Interface = OBJECT_MANAGER_INTERFACE,
                 Member = "InterfacesRemoved",
             });
-            nameOwnerSubscription = await AddInvalidationMatchAsync(connection, new MatchRule
-            {
+            nameOwnerSubscription = await AddInvalidationMatchAsync(connection, new MatchRule {
                 Type = MessageType.Signal,
                 Sender = DBUS_BUS_NAME,
                 Path = "/org/freedesktop/DBus",
@@ -175,8 +172,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
     private ValueTask<IDisposable> AddPropertiesSubscriptionAsync(DBusConnection connection) =>
         connection.AddMatchAsync(
-            new MatchRule
-            {
+            new MatchRule {
                 Type = MessageType.Signal,
                 Sender = BLUEZ_BUS_NAME,
                 Interface = PROPERTIES_INTERFACE,
@@ -268,9 +264,10 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
                 return;
             }
 
-            devices[index] = devices[index] with { Connected = connected };
-            var updated = snapshot with
-            {
+            devices[index] = devices[index] with {
+                Connected = connected
+            };
+            var updated = snapshot with {
                 Devices = devices
                     .OrderByDescending(device => device.Connected)
                     .ThenBy(device => device.Name)
@@ -285,15 +282,15 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
 
     private static bool TryParseDeviceAddress(string path, out string address)
     {
-        const string marker = "/dev_";
-        var markerIndex = path.LastIndexOf(marker, StringComparison.Ordinal);
+        const string MARKER = "/dev_";
+        var markerIndex = path.LastIndexOf(MARKER, StringComparison.Ordinal);
         if (markerIndex < 0)
         {
             address = "";
             return false;
         }
 
-        address = path[(markerIndex + marker.Length)..].Replace('_', ':');
+        address = path[(markerIndex + MARKER.Length)..].Replace('_', ':');
         return Address().IsMatch(address);
     }
 
@@ -707,7 +704,9 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
                 TimeSpan.FromSeconds(2),
                 cancellationToken);
             return info is null && previousDevices.TryGetValue(device.Address, out var previous)
-                ? previous with { Name = device.Name }
+                ? previous with {
+                    Name = device.Name
+                }
                 : ParseDeviceInfo(device.Address, device.Name, info);
         }));
     }
@@ -724,8 +723,7 @@ internal sealed partial class BluetoothModuleService : IBarDataService, IDisposa
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
             timeoutCts.CancelAfter(timeout);
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = "bluetoothctl",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

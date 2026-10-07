@@ -28,7 +28,7 @@ public class TextNode : Node, IWidthBoundNode
             {
                 return _measuredWidth.Value;
             }
-            
+
             var lines = GetLines(Layout.Renderer);
             var contentWidth = lines.Count != 0
                 ? lines.Max(line => Layout.Renderer.MeasureText(line, FontSize))
@@ -54,22 +54,45 @@ public class TextNode : Node, IWidthBoundNode
         }
     }
 
-    private string Text { get; }
-    private float FontSize { get; }
-    private Color Color { get; }
+    private string Text
+    {
+        get;
+    }
+    private float FontSize
+    {
+        get;
+    }
+    private Color Color
+    {
+        get;
+    }
     private int LineHeight => (int)MathF.Ceiling(FontSize);
 
-    public int? MaxWidth { get; init; }
-    public TextWrapping Wrapping { get; init; }
-    public int? MaxLines { get; init; }
-    public Color? ShadowColor { get; init; }
-    public float ShadowDistance { get; init; }
+    public int? MaxWidth
+    {
+        get; init;
+    }
+    public TextWrapping Wrapping
+    {
+        get; init;
+    }
+    public int? MaxLines
+    {
+        get; init;
+    }
+    public Color? ShadowColor
+    {
+        get; init;
+    }
+    public float ShadowDistance
+    {
+        get; init;
+    }
     public bool AcceptsWidthBound => true;
 
-    private int? EffectiveMaxWidth => (MaxWidth, _parentMaxWidth) switch
-    {
-        ({ } ownBound, { } parentBound) => Math.Min(ownBound, parentBound),
-        ({ } ownBound, null) => ownBound,
+    private int? EffectiveMaxWidth => (MaxWidth, _parentMaxWidth) switch {
+        ( { } ownBound, { } parentBound) => Math.Min(ownBound, parentBound),
+        ( { } ownBound, null) => ownBound,
         (null, { } parentBound) => parentBound,
         _ => null,
     };
@@ -153,8 +176,7 @@ public class TextNode : Node, IWidthBoundNode
             return _cachedLines;
         }
 
-        var lines = Wrapping switch
-        {
+        var lines = Wrapping switch {
             TextWrapping.Wrap when availableWidth.HasValue => WrapText(renderer, availableWidth.Value),
             TextWrapping.Ellipsis when availableWidth.HasValue =>
                 [Ellipsize(renderer, CollapseToSingleLine(Text), availableWidth.Value)],

@@ -11,7 +11,10 @@ internal sealed class SolitaireCardTextures
 
     private readonly RawImageData[,] _faces = new RawImageData[4, 13];
 
-    internal RawImageData Back { get; }
+    internal RawImageData Back
+    {
+        get;
+    }
 
     internal SolitaireCardTextures()
     {
@@ -36,9 +39,14 @@ internal sealed class SolitaireCardTextures
 
     private static string FaceSvg(SolitaireSuit suit, int rank)
     {
-        var rankText = rank switch { 1 => "A", 11 => "J", 12 => "Q", 13 => "K", _ => rank.ToString() };
-        var symbol = suit switch
-        {
+        var rankText = rank switch {
+            1 => "A",
+            11 => "J",
+            12 => "Q",
+            13 => "K",
+            _ => rank.ToString()
+        };
+        var symbol = suit switch {
             SolitaireSuit.Diamonds => "♦",
             SolitaireSuit.Clubs => "♣",
             SolitaireSuit.Hearts => "♥",

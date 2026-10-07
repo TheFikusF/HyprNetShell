@@ -11,7 +11,7 @@ namespace HyprNetShell.Application;
 
 internal static class ShellApplication
 {
-    private const int BarHeight = 52;
+    private const int BAR_HEIGHT = 52;
 
     internal static int Run()
     {
@@ -33,7 +33,7 @@ internal static class ShellApplication
 
     private static int RunShell()
     {
-        using var layer = new HyprLayer(BarHeight);
+        using var layer = new HyprLayer(BAR_HEIGHT);
         if (!layer.MakeCurrent(0))
         {
             throw new InvalidOperationException("Failed to make the fallback EGL surface current.");
@@ -51,7 +51,7 @@ internal static class ShellApplication
         PerformanceProfiler? performanceProfiler = null;
 #endif
 
-        var loop = new ShellLoop(layer, renderer, performanceProfiler, BarHeight);
+        var loop = new ShellLoop(layer, renderer, performanceProfiler, BAR_HEIGHT);
         try
         {
             return loop.Run();
@@ -70,7 +70,7 @@ internal sealed class ShellLoop : IDisposable
     private readonly Renderer _renderer;
     private readonly PerformanceProfiler? _performanceProfiler;
     private readonly int _barHeight;
-    private readonly StatusBarServices _services = new();
+    private readonly StatusBarServices _services;
     private readonly ScreenshotController _screenshots = new();
     private readonly Dictionary<ulong, StatusBar> _views = [];
     private readonly Dictionary<ulong, SubmittedInputRegions> _submittedInputRegions = [];
@@ -91,6 +91,7 @@ internal sealed class ShellLoop : IDisposable
         int barHeight)
     {
         _layer = layer;
+        _services = new StatusBarServices(new WindowThumbnailBackend(layer));
         _renderer = renderer;
         _performanceProfiler = performanceProfiler;
         _barHeight = barHeight;
@@ -107,6 +108,7 @@ internal sealed class ShellLoop : IDisposable
 
     public void Dispose()
     {
+        _services.Overview.Close();
         foreach (var view in _views.Values)
         {
             DisposeIfNeeded(view);
@@ -135,7 +137,13 @@ internal sealed class ShellLoop : IDisposable
         ReconcileViews();
         var inputOwnerId = ResolveInputOwner();
         ProcessInput(inputOwnerId);
+        if (_services.Overview.IsVisible)
+        {
+            _services.WindowThumbnails.Update();
+        }
+
         RenderOutputs();
+        _renderer.EndApplicationFrame();
         CompleteFrame();
         return true;
     }
@@ -150,24 +158,27 @@ internal sealed class ShellLoop : IDisposable
         var currentOutputIds = _layer.Outputs.Select(output => output.Id).ToHashSet();
         foreach (var removedId in _views.Keys.Where(id => !currentOutputIds.Contains(id)).ToArray())
         {
+            if (_services.Overview.OwnerOutputId == removedId)
+            {
+                _services.Overview.Close();
+            }
+
             DisposeIfNeeded(_views[removedId]);
             _views.Remove(removedId);
             _submittedInputRegions.Remove(removedId);
             Layout.RemoveOutput(removedId);
         }
 
-        foreach (var output in _layer.Outputs)
+        foreach (var output in _layer.Outputs.Where(x => _views.ContainsKey(x.Id) == false))
         {
-            if (!_views.ContainsKey(output.Id))
-            {
-                _views.Add(output.Id, new StatusBar(_services, _renderer, _barHeight, () => output.Name));
-            }
+            _views.Add(output.Id, new StatusBar(_services, _renderer, _barHeight, () => output.Name));
         }
 
         if (_focusedOutputId is ulong focusedId && !currentOutputIds.Contains(focusedId))
         {
             _focusedOutputId = null;
         }
+
         if (_dialogOwnerId is ulong ownerId && !currentOutputIds.Contains(ownerId))
         {
             _dialogOwnerId = null;
@@ -177,13 +188,10 @@ internal sealed class ShellLoop : IDisposable
     private ulong? ResolveInputOwner()
     {
         ulong? pointerOutputId = null;
-        foreach (var output in _layer.Outputs)
+        foreach (var output in _layer.Outputs.Where(x => x.Input.HasPointer))
         {
-            if (output.Input.HasPointer)
-            {
-                pointerOutputId = output.Id;
-                _focusedOutputId = output.Id;
-            }
+            pointerOutputId = output.Id;
+            _focusedOutputId = output.Id;
         }
 
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.RefreshState);
@@ -204,16 +212,33 @@ internal sealed class ShellLoop : IDisposable
         {
             _screenshots.HandleInput(output);
         }
+
         _layer.SetScreenshotOverlay(_screenshots.SelectingOutputId ?? 0);
 
+        var overview = _services.Overview;
+        var ownerOutputName = _layer.Outputs.FirstOrDefault(output => output.Id == inputOwnerId)?.Name;
+        overview.ProcessPendingRequests(inputOwnerId, ownerOutputName);
         var dialogs = _services.Dialogs;
         dialogs.ProcessPendingRequests();
+        if (_screenshots.SelectingOutputId is not null || dialogs.IsVisible)
+        {
+            overview.Close();
+        }
+
+        if (overview.OwnerOutputId is ulong overviewOwner)
+        {
+            var output = _layer.Outputs.FirstOrDefault(output => output.Id == overviewOwner);
+            if (output is not null)
+            {
+                overview.HandleInput(output.PressedKey, output.TextInput, output.ControlPressed);
+            }
+        }
         if (dialogs.IsVisible && _dialogOwnerId is null)
         {
             _dialogOwnerId = inputOwnerId;
         }
 
-        if (_screenshots.SelectingOutputId is null && dialogs.IsOpen && _dialogOwnerId is ulong ownerId)
+        if (!overview.IsVisible && _screenshots.SelectingOutputId is null && dialogs.IsOpen && _dialogOwnerId is ulong ownerId)
         {
             var ownerOutput = _layer.Outputs.FirstOrDefault(output => output.Id == ownerId);
             if (ownerOutput is not null)
@@ -226,7 +251,7 @@ internal sealed class ShellLoop : IDisposable
             }
         }
 
-        _layer.SetKeyboardInteractiveBar(dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0);
+        _layer.SetKeyboardInteractiveBar((_services.Overview.IsVisible ? _services.Overview.OwnerOutputId : null) ?? (dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0));
     }
 
     private void RenderOutputs()
@@ -235,6 +260,11 @@ internal sealed class ShellLoop : IDisposable
         {
             if (!_layer.MakeCurrent(output.Id))
             {
+                if (_services.Overview.OwnerOutputId == output.Id)
+                {
+                    _services.Overview.Close();
+                }
+
                 continue;
             }
 
@@ -250,7 +280,8 @@ internal sealed class ShellLoop : IDisposable
         _renderer.BeginFrame(output.Width, output.Height);
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.BeginRender);
 
-        Layout.Input = output.Input;
+        Layout.Input = _services.Overview.IsVisible || _screenshots.SelectingOutputId is not null
+            ? LayoutInput.None : output.Input;
         Layout.BeginInputRegionFrame(output.Id);
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.DrawBar);
         _views[output.Id].Draw();
@@ -268,7 +299,18 @@ internal sealed class ShellLoop : IDisposable
         }
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.DrawDialog);
 
+        if (_services.Overview.RenderOutputId == output.Id)
+        {
+            Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = _services.Overview.IsVisible ? output.Input : LayoutInput.None);
+            using (var overviewLayout = new Layout(_renderer, output.Width, output.Height, layer: RenderLayer.Dialog))
+            {
+                overviewLayout.AddNode(_services.Overview.Draw(output.Width, output.Height));
+            }
+            Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = LayoutInput.None);
+        }
+
         Layout.DrawLayers();
+        Layout.Input = LayoutInput.None;
 
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.SetInputRegions);
         SubmitInputRegionsIfChanged(output);
@@ -327,6 +369,8 @@ internal sealed class ShellLoop : IDisposable
         _screenshots.ProcessPendingCapture(_layer, _services);
         if (_services.TryTakeLockScreenRequest())
         {
+            _services.Overview.Close();
+            _layer.SetKeyboardInteractiveBar(0);
             LockScreenApplication.Start(_layer, _services);
         }
 
@@ -336,7 +380,7 @@ internal sealed class ShellLoop : IDisposable
             _dialogOwnerId = null;
         }
 
-        _layer.SetKeyboardInteractiveBar(dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0);
+        _layer.SetKeyboardInteractiveBar((_services.Overview.IsVisible ? _services.Overview.OwnerOutputId : null) ?? (dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0));
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.PaceFrame);
         _layer.PaceFrame();
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.PaceFrame);

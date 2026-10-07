@@ -82,7 +82,9 @@ internal sealed class ClipboardHistoryService : IDisposable
                 return;
             }
 
-            var updated = _entries[index] with { IsPinned = !_entries[index].IsPinned };
+            var updated = _entries[index] with {
+                IsPinned = !_entries[index].IsPinned
+            };
             _history.SetClipboardPinned(updated.MimeType, updated.Hash, updated.IsPinned);
             _entries[index] = updated;
             _entries.Sort(static (left, right) =>
@@ -262,8 +264,7 @@ internal sealed class ClipboardHistoryService : IDisposable
                     return;
                 }
 
-                entry = entry with
-                {
+                entry = entry with {
                     Id = _entries[existingIndex].Id,
                     IsPinned = _entries[existingIndex].IsPinned,
                 };
@@ -435,8 +436,7 @@ internal sealed class ClipboardHistoryService : IDisposable
 
     private static ProcessStartInfo CreateProcess(string fileName, params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
+        var startInfo = new ProcessStartInfo {
             FileName = fileName,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

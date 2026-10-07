@@ -37,7 +37,10 @@ internal sealed class WeatherService : IDisposable
             : $"https://www.google.com/search?q={Uri.EscapeDataString("weather " + Location)}";
     }
 
-    internal string Location { get; }
+    internal string Location
+    {
+        get;
+    }
 
     internal WeatherSnapshot Snapshot
     {
@@ -62,8 +65,7 @@ internal sealed class WeatherService : IDisposable
         }
     }
 
-    internal WeatherCondition GetCondition(int code) => code switch
-    {
+    internal WeatherCondition GetCondition(int code) => code switch {
         0 => new("☀️", "Clear"),
         1 => new("🌤️", "Mostly clear"),
         2 => new("⛅", "Partly cloudy"),
@@ -122,7 +124,9 @@ internal sealed class WeatherService : IDisposable
             {
                 if (_snapshot.Forecast.Count == 0)
                 {
-                    _snapshot = _snapshot with { Error = "Forecast unavailable" };
+                    _snapshot = _snapshot with {
+                        Error = "Forecast unavailable"
+                    };
                 }
 
                 _nextRefresh = DateTime.UtcNow + FailureRetryInterval;
@@ -215,8 +219,7 @@ internal sealed class WeatherService : IDisposable
             .Select(bucket =>
             {
                 var first = bucket.MinBy(sample => sample.Time)!;
-                return first with
-                {
+                return first with {
                     Temperature = bucket.Average(sample => sample.Temperature),
                     PrecipitationProbability = bucket.Max(sample => sample.PrecipitationProbability),
                 };

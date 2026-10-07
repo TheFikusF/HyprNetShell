@@ -19,12 +19,15 @@ internal sealed class UnifiedSearchTab(
     UrlLauncher urlLauncher,
     Action closeDialog,
     ClipboardHistoryService clipboard,
-    TextInputCoordinator inputs) : IMainDialogTab, IDisposable
+    TextInputCoordinator inputs,
+    Func<IReadOnlyList<UnifiedSearchTab.WindowResult>>? windows = null,
+    Action<string>? focusWindow = null) : IMainDialogTab, IDisposable
 {
-    private const int FuzzyScoreCutoff = 35;
-    private const int MaximumApplicationResults = 8;
+    private const int FUZZY_SCORE_CUTOFF = 35;
+    private const int MAXIMUM_APPLICATION_RESULTS = 8;
 
     private readonly DesktopApplicationCatalog _catalog = new();
+    private readonly AppIconResolver _windowIcons = new();
     private readonly Dictionary<int, ModulesCommon.BoxState> _buttonStates = [];
     private readonly ApplicationResultInteraction _applicationResults = new();
     private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
@@ -39,6 +42,50 @@ internal sealed class UnifiedSearchTab(
     private int _firstIndex;
     private int _selectedIndex;
     private bool _activating;
+    private bool _disposed;
+    private int _visibleItemCount = BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT;
+    private IReadOnlyList<WindowResult> _windows = [];
+
+    internal sealed record WindowResult(
+            string Address,
+            string Title,
+            string Description,
+            string ClassName = "",
+            string InitialClassName = "");
+    internal bool HasQuery => _queryInput.Value.Length > 0;
+    internal void ClearQuery() => inputs.SetValue(_queryInput, "", notify: true);
+    internal void Deactivate()
+    {
+        if (inputs.IsActive(_queryInput))
+        {
+            inputs.Deactivate();
+        }
+    }
+
+    internal Node DrawOverview(int availableHeight)
+    {
+        UpdateApplications();
+        var visibleItemCount = Math.Clamp((availableHeight - 90) / 74, 1, BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT);
+        if (_visibleItemCount != visibleItemCount)
+        {
+            _visibleItemCount = visibleItemCount;
+            BoundedListUi.Normalize(ref _selectedIndex, ref _firstIndex, _results.Count, _visibleItemCount);
+        }
+        return new BoxNode {
+            Direction = Direction.Vertical,
+            HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
+                Padding = 12,
+                Spacing = 8,
+                BorderRadius = 12,
+                BorderWidth = ThemeManager.Current.Border.Width,
+            },
+            Children = HasQuery
+                ? [inputs.Build(_queryInput), BoundedListUi.BuildList(_results, BuildRow, _firstIndex, _visibleItemCount,
+                    delta => BoundedListUi.MoveViewport(ref _firstIndex, delta > 0 ? -1 : 1, _results.Count, _visibleItemCount))]
+                : [inputs.Build(_queryInput)],
+        };
+    }
 
     public string Id => "unified-search";
     public string Title => "Search";
@@ -61,7 +108,8 @@ internal sealed class UnifiedSearchTab(
                 ref _selectedIndex,
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
-                _results.Count);
+                _results.Count,
+                _visibleItemCount);
             NormalizeActionSelection();
             return;
         }
@@ -93,6 +141,9 @@ internal sealed class UnifiedSearchTab(
                 _activating = true;
                 _ = LaunchApplicationAsync(application, action);
                 break;
+            case ResultKind.Window:
+                focusWindow?.Invoke(result.Value);
+                break;
             case ResultKind.Calculation:
                 _ = clipboard.CopyTextAsync(result.Value);
                 break;
@@ -105,8 +156,7 @@ internal sealed class UnifiedSearchTab(
     public Node Draw()
     {
         UpdateApplications();
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
@@ -131,7 +181,7 @@ internal sealed class UnifiedSearchTab(
                     },
                     _firstIndex,
                     _results.Count,
-                    BoundedListUi.DefaultVisibleItemCount),
+                    BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
             ],
         };
     }
@@ -158,15 +208,13 @@ internal sealed class UnifiedSearchTab(
         }
 
         var state = _buttonStates.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        var fallbackIcon = result.Kind switch
-        {
+        var fallbackIcon = result.Kind switch {
             ResultKind.Calculation => Icons.Calculator,
             ResultKind.BrowserSearch => Icons.Globe,
             _ => Icons.Application,
         };
 
-        return new BoxNode(height: 66)
-        {
+        return new BoxNode(height: 66) {
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
@@ -175,8 +223,7 @@ internal sealed class UnifiedSearchTab(
                 ActivateSelection();
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(16, 10),
@@ -184,7 +231,9 @@ internal sealed class UnifiedSearchTab(
             },
             Children =
             [
-                new ImageNode(fallbackIcon, 38, 38, ThemeManager.Current.Text),
+                result.Window is { } window
+                                    ? BuildWindowIcon(window, state.Background)
+                                    : new ImageNode(fallbackIcon, 38, 38, ThemeManager.Current.Text),
                 new BoxNode
                 {
                     Direction = Direction.Vertical,
@@ -200,8 +249,53 @@ internal sealed class UnifiedSearchTab(
         };
     }
 
+    private Node BuildWindowIcon(WindowResult window, Color background)
+    {
+        var application = _applications.FirstOrDefault(application =>
+            MatchesApplication(application, window.ClassName) ||
+            MatchesApplication(application, window.InitialClassName));
+        var iconPath = string.IsNullOrWhiteSpace(application?.Icon)
+            ? null
+            : _windowIcons.TryResolveIcon(application.Icon);
+        iconPath ??= _windowIcons.TryResolve(window.ClassName);
+        iconPath ??= _windowIcons.TryResolve(window.InitialClassName);
+
+        return new BoxNode(38, 38) {
+            Children =
+            [
+                iconPath is not null
+                    ? new ImageNode(iconPath, 38, 38)
+                    : new ImageNode(Icons.Application, 38, 38, ThemeManager.Current.Text),
+                new BoxNode(18, 18)
+                {
+                    IgnoreLayout = true,
+                    Right = 0,
+                    Bottom = 0,
+                    HorizontalAlignment = ItemsAlignment.Center,
+                    VerticalAlignment = ItemsAlignment.Center,
+                    Style = new Style { BackgroundColor = background, BorderRadius = 4 },
+                    Children = [new ImageNode(Icons.Application, 14, 14, ThemeManager.Current.Text)],
+                },
+            ],
+        };
+    }
+
+    private static bool MatchesApplication(DesktopApplication application, string className) =>
+        !string.IsNullOrWhiteSpace(className) &&
+        (string.Equals(application.DesktopId, className, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(application.Name, className, StringComparison.OrdinalIgnoreCase));
+
     private void UpdateApplications()
     {
+        if (windows is not null)
+        {
+            var currentWindows = windows();
+            if (!_windows.SequenceEqual(currentWindows))
+            {
+                _windows = currentWindows;
+                RebuildResults();
+            }
+        }
         var applications = _catalog.Snapshot;
         if (ReferenceEquals(applications, _applications))
         {
@@ -238,6 +332,18 @@ internal sealed class UnifiedSearchTab(
 
         if (!calculatorOnly && !browserOnly)
         {
+            results.AddRange(_windows
+                .Select(window => (Window: window, Score: Math.Max(
+                                    FuzzySearch.Score(interpretedQuery, window.Title),
+                                    Math.Max(FuzzySearch.Score(interpretedQuery, window.ClassName),
+                                        FuzzySearch.Score(interpretedQuery, window.InitialClassName)))))
+                .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
+                .OrderByDescending(result => result.Score)
+                .ThenBy(result => result.Window.Title, StringComparer.CurrentCultureIgnoreCase)
+                .Take(MAXIMUM_APPLICATION_RESULTS)
+                .Select(result => new SearchResult(ResultKind.Window, result.Window.Title,
+                    result.Window.Description, result.Window.Address, Window: result.Window)));
+
             results.AddRange(_applications
                 .Select(application => new
                 {
@@ -246,10 +352,10 @@ internal sealed class UnifiedSearchTab(
                         FuzzySearch.Score(interpretedQuery, application.Name),
                         FuzzySearch.Score(interpretedQuery, application.Comment ?? "") - 12),
                 })
-                .Where(result => result.Score >= FuzzyScoreCutoff)
+                .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Application.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Take(MaximumApplicationResults)
+                .Take(MAXIMUM_APPLICATION_RESULTS)
                 .Select(result => new SearchResult(
                     ResultKind.Application,
                     result.Application.Name,
@@ -287,9 +393,9 @@ internal sealed class UnifiedSearchTab(
                     hyprctl,
                     application,
                     action,
-                    "UnifiedSearch"))
+                    "UnifiedSearch") && !_disposed && inputs.IsActive(_queryInput))
             {
-                inputs.SetValue(_queryInput, "", notify: true);
+                ClearQuery();
                 closeDialog();
             }
         }
@@ -309,11 +415,18 @@ internal sealed class UnifiedSearchTab(
         urlLauncher.TryOpen($"https://www.google.com/search?q={Uri.EscapeDataString(query)}");
 
 
-    public void Dispose() => _catalog.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        Deactivate();
+        inputs.Configure(_queryInput);
+        _catalog.Dispose();
+    }
 
     private enum ResultKind
     {
         Application,
+        Window,
         Calculation,
         BrowserSearch,
     }
@@ -323,6 +436,7 @@ internal sealed class UnifiedSearchTab(
         string Title,
         string Description,
         string Value,
-        DesktopApplication? Application = null);
+        DesktopApplication? Application = null,
+        WindowResult? Window = null);
 
 }

@@ -37,7 +37,10 @@ internal sealed record CalendarSnapshot(
     DateTime RangeEnd,
     DateTime? UpdatedAt)
 {
-    internal static CalendarSnapshot Empty { get; } = new(
+    internal static CalendarSnapshot Empty
+    {
+        get;
+    } = new(
         ImmutableArray<CalendarOccurrence>.Empty,
         ImmutableArray<CalendarSourceStatus>.Empty,
         DateTime.MinValue,

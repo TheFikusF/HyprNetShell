@@ -72,7 +72,12 @@ public class GradientBoxNode : BoxNode
             _offset());
 
         Layout.AddInputRegion(rect);
-        Style = style with { BackgroundColor = null, BorderColor = null, BorderWidth = default, ShadowColor = null };
+        Style = style with {
+            BackgroundColor = null,
+            BorderColor = null,
+            BorderWidth = default,
+            ShadowColor = null
+        };
         base.Draw(renderer, x, y);
         Style = style;
     }

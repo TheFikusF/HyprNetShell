@@ -43,8 +43,7 @@ internal sealed class AudioModule(
     private long _nextNoteSpawnMs;
     private long _noteSequence;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "audio_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "audio_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -93,13 +92,11 @@ internal sealed class AudioModule(
             output is null ? null : () => SetMuted(output, !EffectiveMuted(output)),
             output is null ? null : delta => AdjustVolume(output, delta));
 
-        var widget = new BoxNode
-        {
+        var widget = new BoxNode {
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             IsHovered = _widgetHovered,
-            Style = ModulesCommon.ModuleStyle(bg, right: false) with
-            {
+            Style = ModulesCommon.ModuleStyle(bg, right: false) with {
                 Spacing = 0,
                 Padding = new Insets(4, 0),
                 ShadowColor = null
@@ -132,7 +129,9 @@ internal sealed class AudioModule(
         var label = new TextNode(text);
         var targetWidth = hovered.Value ? label.Width : 0.0f;
         var targetSpacing = hovered.Value ? LABEL_SPACING : 0.0f;
-        var hiddenColor = ThemeManager.Current.Text.Color with { A = 0.0f };
+        var hiddenColor = ThemeManager.Current.Text.Color with {
+            A = 0.0f
+        };
         var targetColor = hovered.Value ? ThemeManager.Current.Text : hiddenColor;
 
         animatedWidth = PrimitivesMath.LerpSmooth(
@@ -164,8 +163,7 @@ internal sealed class AudioModule(
         var children = new List<Node> { icon };
         if (visibleWidth > 0)
         {
-            children.Add(new BoxNode(visibleWidth)
-            {
+            children.Add(new BoxNode(visibleWidth) {
                 VerticalAlignment = ItemsAlignment.Center,
                 Children =
                 [
@@ -174,8 +172,7 @@ internal sealed class AudioModule(
             });
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = hovered,
             OnClick = onClick,
@@ -185,8 +182,7 @@ internal sealed class AudioModule(
         };
     }
 
-    private Node BuildMicrophoneIcon(SvgAsset icon, Color color, bool isRecording) => new BoxNode(18, 18)
-    {
+    private Node BuildMicrophoneIcon(SvgAsset icon, Color color, bool isRecording) => new BoxNode(18, 18) {
         Children =
         [
             new ImageNode(icon, 18, 18, color),
@@ -276,8 +272,7 @@ internal sealed class AudioModule(
             var left = 4 + (int)(note.Sequence * 29 % availableWidth);
             var top = 18 - (int)MathF.Round(progress * 20.0f);
 
-            return (Node)new BoxNode(size, size)
-            {
+            return (Node)new BoxNode(size, size) {
                 IgnoreLayout = true,
                 Left = left,
                 Top = top,
@@ -290,8 +285,7 @@ internal sealed class AudioModule(
         }).ToArray();
     }
 
-    private BoxNode BuildPopup(AudioSnapshot audio) => new(380)
-    {
+    private BoxNode BuildPopup(AudioSnapshot audio) => new(380) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -332,13 +326,11 @@ internal sealed class AudioModule(
         var muted = EffectiveMuted(device);
         var bluetoothDevice = FindBluetoothDevice(device.Name);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 0,
@@ -420,8 +412,7 @@ internal sealed class AudioModule(
             yield break;
         }
 
-        yield return new BoxNode
-        {
+        yield return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Padding = new Insets(8, 0, 0, 0) },
@@ -435,16 +426,16 @@ internal sealed class AudioModule(
         };
     }
 
-    private static SvgAsset VolumeIcon(int volume) => Icons.VolumeLevels[volume switch
-    {
+    private static SvgAsset VolumeIcon(int volume) => Icons.VolumeLevels[volume switch {
         <= 0 => 0,
         <= 50 => 1,
         _ => 2,
     }];
 
-    private BoxNode BuildPlainRow(string text) => new ()
-    {
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
+    private BoxNode BuildPlainRow(string text) => new() {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
+            BorderRadius = 8
+        },
         Children = [new TextNode(text, color: ThemeManager.Current.Text.MutedColor)],
     };
 
@@ -576,8 +567,7 @@ internal sealed class AudioModule(
 
         if (bluetoothDevice?.Icon is { } bluetoothIcon)
         {
-            return bluetoothIcon.ToLowerInvariant() switch
-            {
+            return bluetoothIcon.ToLowerInvariant() switch {
                 "audio-headset" => Icons.Headset,
                 "audio-speakers" => Icons.Speaker,
                 "audio-headphones" or "audio-card" => Icons.Headphones,

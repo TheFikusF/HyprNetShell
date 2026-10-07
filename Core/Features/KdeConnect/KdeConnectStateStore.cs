@@ -7,16 +7,26 @@ namespace HyprNetShell.Core.Features.KdeConnect;
 
 internal sealed class KdeConnectStateStore : IDisposable
 {
-    private const string LogCategory = "KdeConnect";
+    private const string LOG_CATEGORY = "KdeConnect";
+
     private readonly Lock _gate = new();
     private readonly string _directory;
     private readonly string _pairedPath;
     private readonly Dictionary<string, PairedDevice> _paired = new(StringComparer.Ordinal);
 
-    internal string DeviceId { get; }
-    internal string DeviceName { get; }
+    internal string DeviceId
+    {
+        get;
+    }
+    internal string DeviceName
+    {
+        get;
+    }
     internal string DeviceType => "desktop";
-    internal X509Certificate2 Certificate { get; }
+    internal X509Certificate2 Certificate
+    {
+        get;
+    }
 
     internal KdeConnectStateStore()
     {
@@ -96,7 +106,7 @@ internal sealed class KdeConnectStateStore : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "Could not read the persistent KDE Connect device id", exception);
+            AppLogger.Warning(LOG_CATEGORY, "Could not read the persistent KDE Connect device id", exception);
         }
         return null;
     }
@@ -120,11 +130,11 @@ internal sealed class KdeConnectStateStore : IDisposable
                     return loaded;
                 }
                 loaded.Dispose();
-                AppLogger.Warning(LogCategory, "The saved KDE Connect certificate is unusable; generating a replacement");
+                AppLogger.Warning(LOG_CATEGORY, "The saved KDE Connect certificate is unusable; generating a replacement");
             }
             catch (Exception exception)
             {
-                AppLogger.Warning(LogCategory, "Could not load the KDE Connect certificate; generating a replacement", exception);
+                AppLogger.Warning(LOG_CATEGORY, "Could not load the KDE Connect certificate; generating a replacement", exception);
             }
         }
 
@@ -171,7 +181,7 @@ internal sealed class KdeConnectStateStore : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "Could not load paired KDE Connect devices; starting with none", exception);
+            AppLogger.Warning(LOG_CATEGORY, "Could not load paired KDE Connect devices; starting with none", exception);
         }
     }
 
@@ -269,8 +279,8 @@ internal sealed class KdeConnectStateStore : IDisposable
 
     private static string SanitizeDeviceName(string value)
     {
-        const string invalid = "\"',;:.!?()[]<>";
-        var filtered = new string(value.Where(character => !invalid.Contains(character)).Take(32).ToArray()).Trim();
+        const string INVALID = "\"',;:.!?()[]<>";
+        var filtered = new string(value.Where(character => !INVALID.Contains(character)).Take(32).ToArray()).Trim();
         return string.IsNullOrWhiteSpace(filtered) ? "HyprNetShell" : filtered;
     }
 

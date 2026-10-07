@@ -43,6 +43,17 @@ internal sealed class WallpaperModuleService : IDisposable
         _slideshowTask = Task.Run(() => RunSlideshowAsync(_lifetime.Token));
     }
 
+    internal string? CurrentWallpaper
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _currentWallpaper;
+            }
+        }
+    }
+
     internal string WallpaperDirectory
     {
         get
@@ -86,11 +97,10 @@ internal sealed class WallpaperModuleService : IDisposable
         try
         {
             var paths = new List<string>();
-            foreach (var path in Directory.EnumerateFiles(WallpaperDirectory, "*", new EnumerationOptions
-                     {
-                         IgnoreInaccessible = true,
-                         RecurseSubdirectories = true,
-                     }))
+            foreach (var path in Directory.EnumerateFiles(WallpaperDirectory, "*", new EnumerationOptions {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = true,
+            }))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (SupportedExtensions.Contains(Path.GetExtension(path)))
@@ -288,8 +298,7 @@ internal sealed class WallpaperModuleService : IDisposable
     {
         try
         {
-            _hyprpaperProcess = Process.Start(new ProcessStartInfo
-            {
+            _hyprpaperProcess = Process.Start(new ProcessStartInfo {
                 FileName = "hyprpaper",
                 UseShellExecute = false,
                 CreateNoWindow = true,

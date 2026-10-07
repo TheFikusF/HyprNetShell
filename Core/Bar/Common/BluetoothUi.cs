@@ -5,8 +5,7 @@ namespace HyprNetShell.Core.Bar.Common;
 
 internal static class BluetoothUi
 {
-    internal static SvgAsset DeviceIcon(string? icon) => icon?.ToLowerInvariant() switch
-    {
+    internal static SvgAsset DeviceIcon(string? icon) => icon?.ToLowerInvariant() switch {
         "audio-headphones" => Icons.Headphones,
         "audio-headset" => Icons.Headset,
         "audio-speakers" or "audio-card" => Icons.Speaker,

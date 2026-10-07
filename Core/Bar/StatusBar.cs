@@ -16,8 +16,7 @@ public interface IDrawableModule
 
 file class CompositeModule(Style style, params ICollection<IDrawableModule> drawableModules) : IDrawableModule
 {
-    public Node Draw() => new BoxNode
-    {
+    public Node Draw() => new BoxNode {
         Style = style,
         Children = [.. drawableModules.Select(x => x.Draw())]
     };
@@ -26,6 +25,7 @@ file class CompositeModule(Style style, params ICollection<IDrawableModule> draw
 public sealed class StatusBar
 {
     private readonly int _barHeight;
+
     private readonly IRenderApi _renderer;
     private readonly NotificationService _notificationService;
     private readonly CenterModule _centerModule;
@@ -73,7 +73,7 @@ public sealed class StatusBar
         var workspacesModule = new WorkspacesModule(
             services.Hyprland,
             services.Hyprctl,
-            services.SuperKey, getOutputName,
+            getOutputName,
             () => languageModule.IsShown,
             _popupCoordinator);
 
@@ -119,8 +119,7 @@ public sealed class StatusBar
         }
     }
 
-    private static BoxNode DrawSide(IEnumerable<IDrawableModule> modules) => new()
-    {
+    private static BoxNode DrawSide(IEnumerable<IDrawableModule> modules) => new() {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         Style = Style.Spacer,

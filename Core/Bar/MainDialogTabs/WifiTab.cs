@@ -14,7 +14,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class WifiTab : IMainDialogTab, IDisposable
 {
-    private const int VisibleNetworkCount = 7;
+    private const int VISIBLE_NETWORK_COUNT = 7;
     private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(5);
 
     private readonly NetworkModuleService service;
@@ -182,8 +182,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
             busy = _operationTask is { IsCompleted: false } || _shareTask is { IsCompleted: false };
         }
 
-        return new BoxNode()
-        {
+        return new BoxNode() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
@@ -196,8 +195,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         };
     }
 
-    private BoxNode BuildHeader(NetworkSnapshot network, bool enabled) => new BoxNode
-    {
+    private BoxNode BuildHeader(NetworkSnapshot network, bool enabled) => new BoxNode {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         Children =
@@ -249,13 +247,12 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
             yield break;
         }
 
-        var content = new BoxNode
-        {
+        var content = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
             Children = networks
-                .VisibleItems(firstIndex, VisibleNetworkCount)
+                .VisibleItems(firstIndex, VISIBLE_NETWORK_COUNT)
                 .Select(item => BuildNetworkRow(item.Item, item.Index, busy))
                 .ToArray(),
         };
@@ -263,7 +260,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
             content,
             firstIndex,
             networks.Count,
-            VisibleNetworkCount);
+            VISIBLE_NETWORK_COUNT);
     }
 
     private BoxNode BuildNetworkRow(WifiNetworkSnapshot network, int index, bool busy)
@@ -274,14 +271,12 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         rowState.UpdateColor(baseColor);
         var security = IsSecured(network) ? network.Security : "Open";
 
-        return new BoxNode()
-        {
+        return new BoxNode() {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => _selectedIndex = index,
-            Style = ModulesCommon.ModuleStyle(rowState.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
@@ -321,8 +316,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         };
     }
 
-    private BoxNode BuildSharePrompt(WifiNetworkSnapshot network, RawImageData? qrImage) => new BoxNode
-    {
+    private BoxNode BuildSharePrompt(WifiNetworkSnapshot network, RawImageData? qrImage) => new BoxNode {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Center,
         Style = new Style { Spacing = 14 },
@@ -341,8 +335,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
         ],
     };
 
-    private BoxNode BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new()
-    {
+    private BoxNode BuildPasswordPrompt(WifiNetworkSnapshot network, string password, bool busy) => new() {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 14 },
@@ -371,14 +364,12 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
     private BoxNode BuildIconButton(SvgAsset icon, string key, Action? action)
     {
         var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
-        return new(34, 34)
-        {
+        return new(34, 34) {
             IsHovered = state.Hovered,
             OnClick = action,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 7,
                 BorderWidth = 0,
                 Padding = 6,
@@ -391,8 +382,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
 
     private BoxNode BuildMessage(string message) => MainDialogTabUi.BuildMessage(message);
 
-    private ImageNode WifiIcon(int? signal) => new(Icons.WifiStrength[signal switch
-    {
+    private ImageNode WifiIcon(int? signal) => new(Icons.WifiStrength[signal switch {
         null or <= 25 => 0,
         <= 50 => 1,
         <= 75 => 2,
@@ -410,7 +400,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                 ref _firstIndex,
                 direction,
                 _networks.Count,
-                VisibleNetworkCount);
+                VISIBLE_NETWORK_COUNT);
         }
     }
 
@@ -535,13 +525,13 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
 
     private static RawImageData CreateQrImage(string payload)
     {
-        const int quietZoneModules = 4;
-        const int pixelsPerModule = 8;
+        const int QUIET_ZONE_MODULES = 4;
+        const int PIXELS_PER_MODULE = 8;
 
         using var generator = new QRCodeGenerator();
         using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.Q);
         var moduleCount = data.ModuleMatrix.Count;
-        var imageSize = (moduleCount + quietZoneModules * 2) * pixelsPerModule;
+        var imageSize = (moduleCount + QUIET_ZONE_MODULES * 2) * PIXELS_PER_MODULE;
         var pixels = new byte[imageSize * imageSize * 4];
         Array.Fill(pixels, byte.MaxValue);
 
@@ -554,11 +544,11 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                     continue;
                 }
 
-                var startX = (moduleX + quietZoneModules) * pixelsPerModule;
-                var startY = (moduleY + quietZoneModules) * pixelsPerModule;
-                for (var pixelY = 0; pixelY < pixelsPerModule; pixelY++)
+                var startX = (moduleX + QUIET_ZONE_MODULES) * PIXELS_PER_MODULE;
+                var startY = (moduleY + QUIET_ZONE_MODULES) * PIXELS_PER_MODULE;
+                for (var pixelY = 0; pixelY < PIXELS_PER_MODULE; pixelY++)
                 {
-                    for (var pixelX = 0; pixelX < pixelsPerModule; pixelX++)
+                    for (var pixelX = 0; pixelX < PIXELS_PER_MODULE; pixelX++)
                     {
                         var offset = ((startY + pixelY) * imageSize + startX + pixelX) * 4;
                         pixels[offset] = 0;
@@ -690,7 +680,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                 ref _selectedIndex,
                 ref _firstIndex,
                 networks.Count,
-                VisibleNetworkCount);
+                VISIBLE_NETWORK_COUNT);
         }
     }
 

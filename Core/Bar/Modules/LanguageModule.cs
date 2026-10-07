@@ -14,8 +14,7 @@ internal sealed class LanguageModule : IDrawableModule
     private static readonly TimeSpan ChangePopupDuration = TimeSpan.FromSeconds(2);
 
     private readonly IReadOnlyDictionary<string, string> _aliases =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             ["English (US)"] = "🇺🇸🦅🗽",
             ["Ukrainian"] = "🇺🇦 УКР",
             ["Russian"] = "🛡 РДК"
@@ -41,8 +40,7 @@ internal sealed class LanguageModule : IDrawableModule
         _hyprland = hyprland;
         _hyprctl = hyprctl;
 
-        _node = new(popupCoordinator, "language_module", ignorePopupQueue: true)
-        {
+        _node = new(popupCoordinator, "language_module", ignorePopupQueue: true) {
             HorizontalAlignment = ItemsAlignment.Center,
             GetShouldShowPopup = hovered => hovered || DateTime.UtcNow < _showUntil,
         };
@@ -96,8 +94,7 @@ internal sealed class LanguageModule : IDrawableModule
         _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, targetIndex);
     }
 
-    private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 50)
-    {
+    private BoxNode BuildPopup(string keyboardName) => new(WIDTH + 50) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -111,15 +108,13 @@ internal sealed class LanguageModule : IDrawableModule
         var normal = text == _lastLayoutName ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         var fontSize = text == _lastLayoutName ? 20.0f : ThemeManager.Current.Text;
         var state = _languagesRowStates.GetState(text, normal).UpdateColor(normal);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             IsHovered = state.Hovered,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             OnClick = () => _ = _hyprctl.SwitchKeyboardLayoutAsync(keyboardName, index),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = text == _lastLayoutName ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(0, text == _lastLayoutName ? 12 : 8)

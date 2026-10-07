@@ -114,8 +114,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         return DialogInputResult.None;
     }
 
-    public Node Draw() => new BoxNode(1000)
-    {
+    public Node Draw() => new BoxNode(1000) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
@@ -128,8 +127,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         ],
     };
 
-    private BoxNode BuildTabs() => new(height: 46)
-    {
+    private BoxNode BuildTabs() => new(height: 46) {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -144,14 +142,12 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         var target = tab.State.Hovered ? Color.Lighten(normal, 0.12f) : normal;
         tab.State.Background = Color.LerpSmooth(tab.State.Background, target, 18, Renderer.DeltaTime);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => SelectTab(index),
             IsHovered = tab.State.Hovered,
-            Style = ModulesCommon.ModuleStyle(tab.State.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(tab.State.Background) with {
                 Spacing = 8,
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,

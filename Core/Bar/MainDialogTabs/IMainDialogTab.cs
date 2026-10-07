@@ -14,15 +14,28 @@ internal enum SelectionDirection
 
 internal interface IMainDialogTab
 {
-    string Id { get; }
-    string Title { get; }
-    SvgAsset Icon { get; }
+    string Id
+    {
+        get;
+    }
+    string Title
+    {
+        get;
+    }
+    SvgAsset Icon
+    {
+        get;
+    }
     bool HandleScroll => true;
 
     void Activate();
     bool HandleKey(DialogKey key) => false;
-    void HandleTextInput(string text) { }
-    void HandleBackspace() { }
+    void HandleTextInput(string text)
+    {
+    }
+    void HandleBackspace()
+    {
+    }
     bool HandleEscape() => false;
     void MoveSelection(SelectionDirection direction);
     void ActivateSelection();

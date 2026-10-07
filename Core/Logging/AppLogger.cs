@@ -46,8 +46,7 @@ public static class AppLogger
 
                 _writer = new StreamWriter(
                     new FileStream(LogFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite),
-                    new UTF8Encoding(false))
-                {
+                    new UTF8Encoding(false)) {
                     AutoFlush = true,
                 };
             }
@@ -91,8 +90,7 @@ public static class AppLogger
 
     private static void Write(LogLevel level, string category, string message, Exception? exception)
     {
-        var label = level switch
-        {
+        var label = level switch {
             LogLevel.Info => "INF",
             LogLevel.Warning => "WRN",
             LogLevel.Error => "ERR",
@@ -115,8 +113,7 @@ public static class AppLogger
                     var redirected = level == LogLevel.Info
                         ? Console.IsOutputRedirected
                         : Console.IsErrorRedirected;
-                    var color = level switch
-                    {
+                    var color = level switch {
                         LogLevel.Info => "\u001b[36m",
                         LogLevel.Warning => "\u001b[33m",
                         LogLevel.Error => "\u001b[31m",

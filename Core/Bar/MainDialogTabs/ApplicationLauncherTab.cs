@@ -107,8 +107,7 @@ internal sealed class ApplicationLauncherTab(
     public Node Draw()
     {
         UpdateApplications();
-        return new BoxNode(new Style { Spacing = 8 })
-        {
+        return new BoxNode(new Style { Spacing = 8 }) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children =
@@ -133,7 +132,7 @@ internal sealed class ApplicationLauncherTab(
                     },
                     _firstIndex,
                     _filteredApplications.Count,
-                    BoundedListUi.DefaultVisibleItemCount),
+                    BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
             ],
         };
     }
@@ -171,8 +170,7 @@ internal sealed class ApplicationLauncherTab(
             : icons.TryResolveIcon(application.Icon);
         entryState.UpdateColor(entrySelected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 8 },
             Children =
@@ -229,12 +227,10 @@ internal sealed class ApplicationLauncherTab(
         var state = entryState.Actions
             .GetState(actionIndex, ThemeManager.Current.Panel)
             .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode(selected ? null : 32, 66)
-        {
+        return new BoxNode(selected ? null : 32, 66) {
             OnClick = activate,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = entrySelected ? ThemeManager.Current.Border.Width : 0,
                 Padding = selected ? new Insets(16, 10) : new Insets(4, 10),

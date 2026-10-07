@@ -14,8 +14,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class DisplayControlsModule(DisplayControlsModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private readonly NodeWithPopup _node = new(popupCoordinator, "display_controls_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "display_controls_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -44,13 +43,11 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
 
         var color = ModulesCommon.ToBackground(Color.Lerp(Color.Orange, Color.White, 0.25f));
         _iconRotation = PrimitivesMath.LerpSmooth(_iconRotation, _node.IsHovered ? MathF.PI * 4 : 0, 18.0f, Renderer.DeltaTime);
-        return new BoxNode(40)
-        {
+        return new BoxNode(40) {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(color, false, false) with
-            {
+            Style = ModulesCommon.ModuleStyle(color, false, false) with {
                 Spacing = 8,
                 BorderWidth = new Insets(ThemeManager.Current.Border.Width, 0, ThemeManager.Current.Border.Width, 1),
                 ShadowColor = null
@@ -67,8 +64,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         };
     }
 
-    private BoxNode BuildPopup(DisplayControlsSnapshot controls) => new(380)
-    {
+    private BoxNode BuildPopup(DisplayControlsSnapshot controls) => new(380) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -104,12 +100,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
 
         var enabled = service.IsAutomaticBrightnessEnabled();
         var value = EffectiveValue("display", display.Percentage);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 8,
@@ -172,12 +166,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
         }
 
         var automaticTemperatureEnabled = service.IsAutomaticTemperatureEnabled();
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 8,
@@ -231,8 +223,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             _automaticTemperatureSwitchAnimation,
             () => service.SetAutomaticTemperatureEnabled(!enabled));
 
-    private BoxNode BuildAutomaticToggle(bool enabled, Ref<float> animation, Action toggle) => new(44, 28)
-    {
+    private BoxNode BuildAutomaticToggle(bool enabled, Ref<float> animation, Action toggle) => new(44, 28) {
         HorizontalAlignment = ItemsAlignment.Center,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = toggle,
@@ -261,12 +252,10 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
     }
 
     private BoxNode BuildSliderRow(string label, SvgAsset icon, float normalizedValue,
-        string valueText, string key, Action<float> onValueChanged) => new()
-        {
+        string valueText, string key, Action<float> onValueChanged) => new() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Spacing = 8,
@@ -289,8 +278,7 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
             ],
         };
 
-    private BoxNode BuildUnavailableRow(string text) => new(ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-    {
+    private BoxNode BuildUnavailableRow(string text) => new(ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
         BorderRadius = 8,
         BorderWidth = 0,
     })

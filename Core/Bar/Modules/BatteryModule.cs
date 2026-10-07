@@ -34,8 +34,7 @@ internal sealed class BatteryModule(
         // new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
         new Gradient.Stop(1.0f, Color.FromRgb(0, 0, 0, 0.45f)));
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "battery_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "battery_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -156,8 +155,7 @@ internal sealed class BatteryModule(
         //     };
         // }
 
-        return new BoxNode(width, 14 + 5 + 5)
-        {
+        return new BoxNode(width, 14 + 5 + 5) {
             IgnoreLayout = true,
             Left = (int)ThemeManager.Current.Border.Width,
             Style = new Style { BackgroundColor = Color.Darken(color, 0.5f) }
@@ -173,8 +171,7 @@ internal sealed class BatteryModule(
         var width = (int)(BLOCK_WIDTH * percentage);
         if (isCharging)
         {
-            return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5 - 6)
-            {
+            return new GradientBoxNode(color, Color.Darken(color, 0.3f), ChargingGradientOffset, width, 14 + 5 + 5 - 6) {
                 IgnoreLayout = true,
                 Left = (BLOCK_WIDTH + 2) * index,
                 Direction = Direction.Horizontal,
@@ -183,8 +180,7 @@ internal sealed class BatteryModule(
             };
         }
 
-        return new BoxNode(width, 14 + 5 + 5 - 6)
-        {
+        return new BoxNode(width, 14 + 5 + 5 - 6) {
             IgnoreLayout = true,
             Left = (BLOCK_WIDTH + 2) * index,
             Style = new Style { BackgroundColor = color, BorderRadius = 4 }
@@ -194,8 +190,7 @@ internal sealed class BatteryModule(
     private static float ChargingGradientOffset() =>
         -(float)(Environment.TickCount64 % 6000 / 6000.0);
 
-    private BoxNode BuildPopup(BatterySnapshot battery, DeviceBatteriesSnapshot devices) => new()
-    {
+    private BoxNode BuildPopup(BatterySnapshot battery, DeviceBatteriesSnapshot devices) => new() {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -224,8 +219,7 @@ internal sealed class BatteryModule(
         }
 
         yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 16);
-        yield return new BoxNode
-        {
+        yield return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             Style = new Style { Spacing = 24 },
@@ -261,16 +255,14 @@ internal sealed class BatteryModule(
         bool enabled)
     {
         var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
-        return new BoxNode()
-        {
+        return new BoxNode() {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = buttonState.Hovered,
             OnClick = enabled
                 ? () => service.SetChargeLimit(service.Snapshot.ChargeLimit.GetValueOrDefault() + delta)
                 : null,
-            Style = ModulesCommon.ModuleStyle(enabled ? state.Background : ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(enabled ? state.Background : ThemeManager.Current.Panel) with {
                 Padding = 6,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -308,7 +300,7 @@ internal sealed class BatteryModule(
         yield return new TextNode("Device batteries");
         foreach (var device in devices)
         {
-            var color = device.Percentage <= DeviceBatteryService.LowBatteryPercentage && device.IsCharging is not true
+            var color = device.Percentage <= DeviceBatteryService.LOW_BATTERY_PERCENTAGE && device.IsCharging is not true
                 ? ThemeManager.Current.Critical
                 : ThemeManager.Current.Text;
             yield return new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
@@ -330,16 +322,14 @@ internal sealed class BatteryModule(
         }
     }
 
-    private static string SourceLabel(DeviceBatterySource source) => source switch
-    {
+    private static string SourceLabel(DeviceBatterySource source) => source switch {
         DeviceBatterySource.Laptop => "Laptop battery",
         DeviceBatterySource.Bluetooth => "Bluetooth",
         DeviceBatterySource.KdeConnect => "KDE Connect",
         _ => "Device",
     };
 
-    private static SvgAsset ProfileLabel(string profile) => profile switch
-    {
+    private static SvgAsset ProfileLabel(string profile) => profile switch {
         "power-saver" => Icons.Leaf,
         "balanced" => Icons.Scale,
         "performance" => Icons.Flame,
@@ -353,8 +343,7 @@ internal sealed class BatteryModule(
             new TextNode(value),
         };
 
-    public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[percentage switch
-    {
+    public static SvgAsset BatteryLevelIcon(int percentage) => Icons.BatteryLevels[percentage switch {
         <= 10 => 0,
         <= 35 => 1,
         <= 70 => 2,

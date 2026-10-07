@@ -6,11 +6,11 @@ namespace HyprNetShell.Application.LockScreen;
 
 internal static class LockScreenBackground
 {
-    private const int TargetWidth = 480;
-    private const int BlurRadius = 8;
-    private const int ProtocolMagic = 0x484e5342;
-    private const int MaximumOutputs = 16;
-    private const int MaximumImageBytes = 64 * 1024 * 1024;
+    private const int TARGET_WIDTH = 480;
+    private const int BLUR_RADIUS = 8;
+    private const int PROTOCOL_MAGIC = 0x484e5342;
+    private const int MAXIMUM_OUTPUTS = 16;
+    private const int MAXIMUM_IMAGE_BYTES = 64 * 1024 * 1024;
 
     internal static Transfer CaptureAndServe(HyprLayer layer)
     {
@@ -47,13 +47,13 @@ internal static class LockScreenBackground
         socket.ConnectAsync(new UnixDomainSocketEndPoint("\0" + token), timeout.Token).AsTask().GetAwaiter().GetResult();
         using var stream = new NetworkStream(socket, ownsSocket: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
-        if (reader.ReadInt32() != ProtocolMagic)
+        if (reader.ReadInt32() != PROTOCOL_MAGIC)
         {
             throw new InvalidDataException("Invalid lock background transfer.");
         }
 
         var count = reader.ReadInt32();
-        if (count < 0 || count > MaximumOutputs)
+        if (count < 0 || count > MAXIMUM_OUTPUTS)
         {
             throw new InvalidDataException("Invalid lock background output count.");
         }
@@ -69,7 +69,7 @@ internal static class LockScreenBackground
             var width = reader.ReadInt32();
             var height = reader.ReadInt32();
             var length = reader.ReadInt32();
-            if (width <= 0 || height <= 0 || length != checked(width * height * 4) || length > MaximumImageBytes)
+            if (width <= 0 || height <= 0 || length != checked(width * height * 4) || length > MAXIMUM_IMAGE_BYTES)
             {
                 throw new InvalidDataException("Invalid lock background dimensions.");
             }
@@ -96,7 +96,10 @@ internal static class LockScreenBackground
             _sendTask = Task.Run(SendAsync);
         }
 
-        internal string Token { get; }
+        internal string Token
+        {
+            get;
+        }
 
         private async Task SendAsync()
         {
@@ -105,7 +108,7 @@ internal static class LockScreenBackground
                 using var client = await _listener.AcceptAsync(_lifetime.Token);
                 using var stream = new NetworkStream(client, ownsSocket: false);
                 using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
-                writer.Write(ProtocolMagic);
+                writer.Write(PROTOCOL_MAGIC);
                 writer.Write(_backgrounds.Count);
                 foreach (var (name, image) in _backgrounds)
                 {
@@ -152,7 +155,7 @@ internal static class LockScreenBackground
 
     private static RawImageData DownsampleAndBlur(HyprLayer.CapturedImage source)
     {
-        var width = Math.Min(TargetWidth, source.Width);
+        var width = Math.Min(TARGET_WIDTH, source.Width);
         var height = Math.Max(1, (int)Math.Round(source.Height * (width / (double)source.Width)));
         var pixels = new byte[checked(width * height * 4)];
         for (var y = 0; y < height; y++)
@@ -185,7 +188,7 @@ internal static class LockScreenBackground
         {
             for (var x = 0; x < width; x++)
             {
-                Average(source, target, width, height, x - BlurRadius, y, x + BlurRadius, y, x, y);
+                Average(source, target, width, height, x - BLUR_RADIUS, y, x + BLUR_RADIUS, y, x, y);
             }
         }
     }
@@ -196,7 +199,7 @@ internal static class LockScreenBackground
         {
             for (var x = 0; x < width; x++)
             {
-                Average(source, target, width, height, x, y - BlurRadius, x, y + BlurRadius, x, y);
+                Average(source, target, width, height, x, y - BLUR_RADIUS, x, y + BLUR_RADIUS, x, y);
             }
         }
     }

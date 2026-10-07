@@ -10,6 +10,7 @@ using HyprNetShell.Core.Features.Spotify;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
+using HyprNetShell.Core.Overview;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using HyprNetShell.Rendering;
@@ -64,52 +65,154 @@ public sealed class StatusBarServices : IDisposable
     private int _lockScreenRequested;
     private bool _disposed;
 
-    internal HistoryStore History { get; }
-    internal TabsService Tabs { get; }
-    internal CompositeWindowConfiguration CompositeWindowConfiguration { get; }
-    internal CompositeWindowService CompositeWindows { get; }
-    internal IHyprctl Hyprctl { get; }
-    internal HyprlandService Hyprland { get; }
-    internal UrlLauncher UrlLauncher { get; }
-    internal KeyStateService SuperKey { get; }
-    internal NotificationService Notifications { get; }
-    internal ScreenshotService Screenshots { get; }
-    internal MusicModuleService Music { get; }
-    internal SpotifyPlaybackService Spotify { get; }
-    internal ClipboardHistoryService ClipboardHistory { get; }
-    internal KdeConnectService KdeConnect { get; }
-    internal WallpaperModuleService Wallpapers { get; }
-    internal SniTrayService Tray { get; }
-    internal DisplayControlsModuleService DisplayControls { get; }
-    internal NetworkModuleService Network { get; }
-    private PipeWireGraphService PipeWireGraph { get; }
-    internal AudioModuleService Audio { get; }
-    internal PrivacyModuleService Privacy { get; }
-    internal BluetoothModuleService Bluetooth { get; }
-    internal BatteryModuleService Battery { get; }
-    internal DeviceBatteryService DeviceBatteries { get; }
-    internal SystemStatsModuleService SystemStats { get; }
-    internal WeatherService Weather { get; }
-    internal CalendarService Calendar { get; }
-    internal DictionaryService Dictionary { get; }
-    internal OnlineAccountsService OnlineAccounts { get; }
-    internal ChatGptUsageService ChatGptUsage { get; }
+    internal HistoryStore History
+    {
+        get;
+    }
+    internal TabsService Tabs
+    {
+        get;
+    }
+    internal CompositeWindowConfiguration CompositeWindowConfiguration
+    {
+        get;
+    }
+    internal CompositeWindowService CompositeWindows
+    {
+        get;
+    }
+    internal IHyprctl Hyprctl
+    {
+        get;
+    }
+    internal HyprlandService Hyprland
+    {
+        get;
+    }
+    internal UrlLauncher UrlLauncher
+    {
+        get;
+    }
 
-    public DialogService Dialogs { get; }
+    internal NotificationService Notifications
+    {
+        get;
+    }
+    internal ScreenshotService Screenshots
+    {
+        get;
+    }
+    internal MusicModuleService Music
+    {
+        get;
+    }
+    internal SpotifyPlaybackService Spotify
+    {
+        get;
+    }
+    internal ClipboardHistoryService ClipboardHistory
+    {
+        get;
+    }
+    internal KdeConnectService KdeConnect
+    {
+        get;
+    }
+    internal WallpaperModuleService Wallpapers
+    {
+        get;
+    }
+    internal SniTrayService Tray
+    {
+        get;
+    }
+    internal DisplayControlsModuleService DisplayControls
+    {
+        get;
+    }
+    internal NetworkModuleService Network
+    {
+        get;
+    }
+    private PipeWireGraphService PipeWireGraph
+    {
+        get;
+    }
+    internal AudioModuleService Audio
+    {
+        get;
+    }
+    internal PrivacyModuleService Privacy
+    {
+        get;
+    }
+    internal BluetoothModuleService Bluetooth
+    {
+        get;
+    }
+    internal BatteryModuleService Battery
+    {
+        get;
+    }
+    internal DeviceBatteryService DeviceBatteries
+    {
+        get;
+    }
+    internal SystemStatsModuleService SystemStats
+    {
+        get;
+    }
+    internal WeatherService Weather
+    {
+        get;
+    }
+    internal CalendarService Calendar
+    {
+        get;
+    }
+    internal DictionaryService Dictionary
+    {
+        get;
+    }
+    internal OnlineAccountsService OnlineAccounts
+    {
+        get;
+    }
+    internal ChatGptUsageService ChatGptUsage
+    {
+        get;
+    }
+
+    public DialogService Dialogs
+    {
+        get;
+    }
 
     public string? FocusedMonitorName => Hyprland.Snapshot.MonitorWorkspaces
         .FirstOrDefault(monitor => monitor.Current)?.Name;
 
-    public StatusBarServices()
+    public IWindowThumbnailService WindowThumbnails
     {
+        get;
+    }
+
+    public OverviewController Overview
+    {
+        get;
+    }
+
+    public StatusBarServices(IWindowThumbnailBackend? windowThumbnailBackend = null)
+    {
+        WindowThumbnails = new WindowThumbnailService(windowThumbnailBackend);
         History = new HistoryStore();
         Hyprctl = new Hyprctl();
         Hyprland = new HyprlandService();
+
         Dialogs = new DialogService();
         UrlLauncher = new UrlLauncher(Hyprland, Hyprctl, Dialogs.RequestClose);
         Notifications = new NotificationService(Hyprland, Hyprctl, History);
         Screenshots = new ScreenshotService(Hyprctl);
-        SuperKey = new KeyStateService(Hyprctl);
+
         DisplayControls = new DisplayControlsModuleService(Hyprctl);
         Wallpapers = new WallpaperModuleService(Hyprctl);
         Network = new NetworkModuleService();
@@ -127,6 +230,7 @@ public sealed class StatusBarServices : IDisposable
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
         Music = new MusicModuleService(Spotify);
         ClipboardHistory = new ClipboardHistoryService(History);
+        Overview = new OverviewController(Hyprland, Hyprctl, WindowThumbnails, () => Wallpapers.CurrentWallpaper, ClipboardHistory);
         KdeConnect = new KdeConnectService(ClipboardHistory);
         DeviceBatteries = new DeviceBatteryService(Battery, Bluetooth, KdeConnect, Notifications);
         Tray = new SniTrayService();
@@ -341,6 +445,8 @@ public sealed class StatusBarServices : IDisposable
         }
 
         OnlineAccounts.AuthorizationCallbackReceived -= HandleAuthorizationCallbackReceived;
+        Overview.Dispose();
+        WindowThumbnails.Dispose();
         CompositeWindows.Dispose();
         Dialogs.Dispose();
         Tabs.Dispose();
@@ -360,7 +466,7 @@ public sealed class StatusBarServices : IDisposable
         PipeWireGraph.Dispose();
         Network.Dispose();
         Wallpapers.Dispose();
-        SuperKey.Dispose();
+
         Screenshots.Dispose();
         Notifications.Dispose();
         UrlLauncher.Dispose();

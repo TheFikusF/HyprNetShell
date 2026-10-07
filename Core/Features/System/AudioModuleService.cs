@@ -44,8 +44,7 @@ internal sealed partial class AudioModuleService : IBarDataService, IDisposable
             "status",
             TimeSpan.FromMilliseconds(900),
             cancellationToken);
-        var fallbackSnapshot = ParseStatus(await statusTask) with
-        {
+        var fallbackSnapshot = ParseStatus(await statusTask) with {
             IsRecording = _graph.IsRecording,
         };
         if (!NativeAvailable())

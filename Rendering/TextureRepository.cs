@@ -27,6 +27,8 @@ public sealed unsafe class TextureRepository : IDisposable
     private readonly Dictionary<PathTextureKey, PendingPathTexture> _pendingPathTextures = [];
     private readonly Dictionary<RawTextureKey, Texture> _rawTextures = [];
     private readonly Dictionary<RawImageData, Texture> _imageTextures = [];
+    private readonly Dictionary<string, LiveTexture> _liveTextures = new(StringComparer.Ordinal);
+    private readonly Queue<string> _liveTextureKeysBuffer = new();
     private readonly Dictionary<EncodedImageData, Texture> _encodedImageTextures = [];
     private readonly Dictionary<SvgAsset, Texture> _assetTextures = [];
 
@@ -66,10 +68,15 @@ public sealed unsafe class TextureRepository : IDisposable
 
             path = Path.GetFullPath(path);
             var modified = File.GetLastWriteTimeUtc(path);
+            // Animated draw bounds should not queue a decode for every pixel of growth.
+            decodeWidth = BucketDecodeSize(decodeWidth);
+            decodeHeight = BucketDecodeSize(decodeHeight);
             var key = new PathTextureKey(path, decodeWidth, decodeHeight);
             if (_pathTextures.TryGetValue(key, out var cached) && cached.Modified == modified)
             {
-                _pathTextures[key] = cached with { LastAccessTimestamp = Stopwatch.GetTimestamp() };
+                _pathTextures[key] = cached with {
+                    LastAccessTimestamp = Stopwatch.GetTimestamp()
+                };
                 return cached.Texture;
             }
 
@@ -84,7 +91,7 @@ public sealed unsafe class TextureRepository : IDisposable
                 : LoadImage(path, decodeWidth, decodeHeight);
             if (image is null)
             {
-                return null;
+                return loadAsync ? GetCachedPathTexture(path, modified, decodeWidth, decodeHeight) : null;
             }
 
             if (_pendingPathTextures.Remove(key, out var completedDecode))
@@ -100,6 +107,40 @@ public sealed unsafe class TextureRepository : IDisposable
         {
             return null;
         }
+    }
+
+    private static int BucketDecodeSize(int size) =>
+        size >= int.MaxValue - 31 ? int.MaxValue : ((Math.Max(1, size) + 31) / 32) * 32;
+
+    private Texture? GetCachedPathTexture(string path, DateTime modified, int width, int height)
+    {
+        PathTextureKey? closestKey = null;
+        var closestDistance = long.MaxValue;
+        foreach (var (key, cached) in _pathTextures)
+        {
+            if (key.Path != path || cached.Modified != modified)
+            {
+                continue;
+            }
+
+            var distance = Math.Abs((long)key.Width - width) + Math.Abs((long)key.Height - height);
+            if (distance < closestDistance)
+            {
+                closestKey = key;
+                closestDistance = distance;
+            }
+        }
+
+        if (closestKey is not { } selected)
+        {
+            return null;
+        }
+
+        var texture = _pathTextures[selected];
+        _pathTextures[selected] = texture with {
+            LastAccessTimestamp = Stopwatch.GetTimestamp()
+        };
+        return texture.Texture;
     }
 
     public void RemoveUnusedPathResources()
@@ -165,19 +206,93 @@ public sealed unsafe class TextureRepository : IDisposable
         return texture;
     }
 
+    public bool NeedsUpload(RawImageData image)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (image.CacheKey is not { } key)
+        {
+            return !_imageTextures.ContainsKey(image);
+        }
+
+        return !_liveTextures.TryGetValue(key, out var live)
+            || live.Revision != image.Revision
+            || live.Width != image.Width
+            || live.Height != image.Height;
+    }
+
     public Texture GetTexture(RawImageData image)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ValidateRawTexture(image.RgbaPixels.Span, image.Width, image.Height);
 
-        if (_imageTextures.TryGetValue(image, out var cached))
+        if (!(image.CacheKey is { } key))
         {
-            return cached;
+            if (_imageTextures.TryGetValue(image, out var cached))
+            {
+                return cached;
+            }
+
+            var texture = UploadTexture(image.RgbaPixels.Span, image.Width, image.Height);
+            _imageTextures[image] = texture;
+            return texture;
         }
 
-        var texture = UploadTexture(image.RgbaPixels.Span, image.Width, image.Height);
-        _imageTextures[image] = texture;
-        return texture;
+        if (!_liveTextures.TryGetValue(key, out var live))
+        {
+            var liveTexture = UploadTexture(image.RgbaPixels.Span, image.Width, image.Height);
+            _liveTextures[key] = new LiveTexture(liveTexture, image.Width, image.Height, image.Revision, true);
+            return liveTexture;
+        }
+
+        if (live.Revision != image.Revision || live.Width != image.Width || live.Height != image.Height)
+        {
+            _gl.BindTexture(TextureTarget.Texture2D, live.Texture.Id);
+            fixed (byte* data = image.RgbaPixels.Span)
+            {
+                if (live.Width != image.Width || live.Height != image.Height)
+                {
+                    _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba,
+                        (uint)image.Width, (uint)image.Height, 0,
+                        PixelFormat.Rgba, PixelType.UnsignedByte, data);
+                }
+                else
+                {
+                    _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
+                        (uint)image.Width, (uint)image.Height,
+                        PixelFormat.Rgba, PixelType.UnsignedByte, data);
+                }
+            }
+        }
+
+        _liveTextures[key] = new LiveTexture(live.Texture, image.Width, image.Height, image.Revision, true);
+        return live.Texture;
+    }
+
+    /// <summary>Call once after all outputs and overlays; drops keyed images unused this application frame.</summary>
+    public void RemoveUnusedLiveResources()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        foreach (var key in _liveTextures.Keys)
+        {
+            _liveTextureKeysBuffer.Enqueue(key);
+        }
+
+        while (_liveTextureKeysBuffer.TryDequeue(out var key))
+        {
+            var texture = _liveTextures[key];
+            if (texture.UsedThisFrame)
+            {
+                _liveTextures[key] = texture with {
+                    UsedThisFrame = false
+                };
+            }
+            else
+            {
+                _gl.DeleteTexture(texture.Texture.Id);
+                _liveTextures.Remove(key);
+            }
+        }
     }
 
     public Texture? GetTexture(EncodedImageData image)
@@ -240,7 +355,9 @@ public sealed unsafe class TextureRepository : IDisposable
         {
             if (pending.Modified == modified)
             {
-                _pendingPathTextures[key] = pending with { LastAccessTimestamp = Stopwatch.GetTimestamp() };
+                _pendingPathTextures[key] = pending with {
+                    LastAccessTimestamp = Stopwatch.GetTimestamp()
+                };
                 if (!pending.Decode.IsCompleted)
                 {
                     return null;
@@ -432,6 +549,11 @@ public sealed unsafe class TextureRepository : IDisposable
             _gl.DeleteTexture(texture.Id);
         }
 
+        foreach (var texture in _liveTextures.Values)
+        {
+            _gl.DeleteTexture(texture.Texture.Id);
+        }
+
         foreach (var texture in _encodedImageTextures.Values)
         {
             _gl.DeleteTexture(texture.Id);
@@ -447,10 +569,14 @@ public sealed unsafe class TextureRepository : IDisposable
         _pendingPathTextures.Clear();
         _rawTextures.Clear();
         _imageTextures.Clear();
+        _liveTextures.Clear();
+        _liveTextureKeysBuffer.Clear();
         _encodedImageTextures.Clear();
         _assetTextures.Clear();
         _disposed = true;
     }
+
+    private readonly record struct LiveTexture(Texture Texture, int Width, int Height, long Revision, bool UsedThisFrame);
 
     private readonly record struct PathTextureKey(string Path, int Width, int Height);
 

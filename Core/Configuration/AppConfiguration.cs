@@ -29,8 +29,10 @@ internal sealed class WallpaperConfiguration
 
 internal sealed class DisplayConfiguration
 {
-    public AutomaticCurveConfiguration Temperature { get; set; } = new()
+    public AutomaticCurveConfiguration Temperature
     {
+        get; set;
+    } = new() {
         Enabled = true,
         Points =
         [
@@ -41,8 +43,10 @@ internal sealed class DisplayConfiguration
         ],
     };
 
-    public AutomaticCurveConfiguration Brightness { get; set; } = new()
+    public AutomaticCurveConfiguration Brightness
     {
+        get; set;
+    } = new() {
         Enabled = false,
         Points =
         [
@@ -56,24 +60,39 @@ internal sealed class DisplayConfiguration
 
 internal sealed class AutomaticCurveConfiguration
 {
-    public bool Enabled { get; set; }
+    public bool Enabled
+    {
+        get; set;
+    }
     public List<CurvePointConfiguration> Points { get; set; } = [];
 }
 
 internal sealed class CurvePointConfiguration
 {
-    public float Hour { get; set; }
-    public int Value { get; set; }
+    public float Hour
+    {
+        get; set;
+    }
+    public int Value
+    {
+        get; set;
+    }
 }
 
 internal sealed class BatteryConfiguration
 {
-    public int? ChargeLimit { get; set; }
+    public int? ChargeLimit
+    {
+        get; set;
+    }
 }
 
 internal sealed class WorldClocksConfiguration
 {
-    public List<string> TimeZoneIds { get; set; } =
+    public List<string> TimeZoneIds
+    {
+        get; set;
+    } =
     [
         "UTC",
         "Europe/Kyiv",

@@ -5,8 +5,14 @@ namespace HyprNetShell.GUI.Layout.Nodes;
 
 public class ImageNode : Node
 {
-    public override int Width { get; }
-    public override int Height { get; }
+    public override int Width
+    {
+        get;
+    }
+    public override int Height
+    {
+        get;
+    }
     private readonly string? _imagePath;
     private readonly RawImageData? _rawImage;
     private readonly EncodedImageData? _encodedImage;
@@ -14,7 +20,10 @@ public class ImageNode : Node
     private readonly Color? _color;
     private readonly bool _loadAsync;
 
-    public float RotationRadians { get; init; }
+    public float RotationRadians
+    {
+        get; init;
+    }
 
     public ImageNode(
         string imagePath,

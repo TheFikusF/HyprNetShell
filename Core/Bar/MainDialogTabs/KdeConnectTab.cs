@@ -14,7 +14,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab, IDisposable
 {
-    private const int VisibleDeviceCount = 7;
+    private const int VISIBLE_DEVICE_COUNT = 7;
 
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -42,7 +42,7 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
                 ref _selectedIndex,
                 ref _firstIndex,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
         }
     }
 
@@ -60,7 +60,7 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
                 ref _firstIndex,
                 direction == SelectionDirection.Up ? -1 : 1,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
         }
     }
 
@@ -106,15 +106,14 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
                 ref _selectedIndex,
                 ref _firstIndex,
                 _devices.Count,
-                VisibleDeviceCount);
+                VISIBLE_DEVICE_COUNT);
             devices = _devices;
             status = _status;
             firstIndex = _firstIndex;
             busy = _operationTask is { IsCompleted: false };
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
@@ -144,7 +143,7 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
             devices,
             (device, index) => BuildDeviceRow(device, index, busy),
             firstIndex,
-            VisibleDeviceCount);
+            VISIBLE_DEVICE_COUNT);
     }
 
     private BoxNode BuildDeviceRow(KdeConnectDeviceSnapshot device, int index, bool busy)
@@ -153,14 +152,12 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
         var rowState = _rowStates.GetState(device.Id, ThemeManager.Current.Panel)
             .UpdateColor(selected ? Color.Lighten(ThemeManager.Current.Panel, 0.1f) : ThemeManager.Current.Panel);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = rowState.Hovered,
             OnClick = () => Select(index),
-            Style = ModulesCommon.ModuleStyle(rowState.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(rowState.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Spacing = 8,
@@ -222,8 +219,7 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
                 !busy && !requestPending && device.IsReachable ? () => RequestPairing(device) : null));
         }
 
-        return new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-        {
+        return new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center) {
             Children = [.. actions],
         };
     }

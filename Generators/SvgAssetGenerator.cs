@@ -69,7 +69,10 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
             {
                 foreach (var item in argument.Values)
                 {
-                    if (item.Value is string path) paths.Add(path);
+                    if (item.Value is string path)
+                    {
+                        paths.Add(path);
+                    }
                 }
             }
             else if (argument.Value is string path)
@@ -149,7 +152,11 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
         }
 
         source.Append(declaration.TypeAccessibility).Append(' ');
-        if (declaration.TypeIsStatic) source.Append("static ");
+        if (declaration.TypeIsStatic)
+        {
+            source.Append("static ");
+        }
+
         source.Append("partial class ").Append(declaration.TypeName).AppendLine();
         source.AppendLine("{");
         source.Append("    private static readonly ").Append(declaration.PropertyType).Append(' ')
@@ -213,7 +220,11 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
             }
 
             source.Append(group.Key.TypeAccessibility).Append(' ');
-            if (group.Key.TypeIsStatic) source.Append("static ");
+            if (group.Key.TypeIsStatic)
+            {
+                source.Append("static ");
+            }
+
             source.Append("partial class ").Append(group.Key.TypeName).AppendLine();
             source.AppendLine("{");
             source.AppendLine("    private static readonly global::System.Collections.Generic.IReadOnlyDictionary<string, global::HyprNetShell.Rendering.SvgAsset> __svgAssetsByName =");
@@ -244,8 +255,7 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
     private static string NormalizePath(string path) =>
         path.Replace('\\', '/').TrimStart('/');
 
-    private static string AccessibilityText(Accessibility accessibility) => accessibility switch
-    {
+    private static string AccessibilityText(Accessibility accessibility) => accessibility switch {
         Accessibility.Public => "public",
         Accessibility.Internal => "internal",
         Accessibility.Private => "private",
@@ -281,15 +291,45 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
             Location = location;
         }
 
-        public string? Namespace { get; }
-        public string TypeName { get; }
-        public string TypeAccessibility { get; }
-        public bool TypeIsStatic { get; }
-        public string PropertyName { get; }
-        public string PropertyAccessibility { get; }
-        public string PropertyType { get; }
-        public ImmutableArray<string> Paths { get; }
-        public bool Valid { get; }
-        public Location? Location { get; }
+        public string? Namespace
+        {
+            get;
+        }
+        public string TypeName
+        {
+            get;
+        }
+        public string TypeAccessibility
+        {
+            get;
+        }
+        public bool TypeIsStatic
+        {
+            get;
+        }
+        public string PropertyName
+        {
+            get;
+        }
+        public string PropertyAccessibility
+        {
+            get;
+        }
+        public string PropertyType
+        {
+            get;
+        }
+        public ImmutableArray<string> Paths
+        {
+            get;
+        }
+        public bool Valid
+        {
+            get;
+        }
+        public Location? Location
+        {
+            get;
+        }
     }
 }

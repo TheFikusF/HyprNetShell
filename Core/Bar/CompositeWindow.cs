@@ -57,8 +57,7 @@ internal sealed class CompositeWindow : IDialogWindow
     {
         _textInputs = textInputs;
 
-        _actions = new Dictionary<DialogKey, Action>
-        {
+        _actions = new Dictionary<DialogKey, Action> {
             [DialogKey.Tab] = () => SelectTab((_activeTabIndex + 1) % _tabs.Length),
             [DialogKey.Up] = () => ActiveTab.MoveSelection(SelectionDirection.Up),
             [DialogKey.Left] = () => ActiveTab.MoveSelection(SelectionDirection.Left),
@@ -135,8 +134,7 @@ internal sealed class CompositeWindow : IDialogWindow
         return DialogInputResult.None;
     }
 
-    public Node Draw() => new BoxNode(900)
-    {
+    public Node Draw() => new BoxNode(900) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
@@ -144,8 +142,7 @@ internal sealed class CompositeWindow : IDialogWindow
         Children = [BuildTabs(), ActiveTab.Draw()],
     };
 
-    private BoxNode BuildTabs() => new(height: 46)
-    {
+    private BoxNode BuildTabs() => new(height: 46) {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -159,14 +156,12 @@ internal sealed class CompositeWindow : IDialogWindow
         var target = tab.BoxState.Hovered ? Color.Lighten(normal, index == _activeTabIndex ? 0.18f : 0.12f) : normal;
         tab.BoxState.Background = Color.LerpSmooth(tab.BoxState.Background, target, 18.0f, Renderer.DeltaTime);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => SelectTab(index),
             IsHovered = tab.BoxState.Hovered,
-            Style = ModulesCommon.ModuleStyle(tab.BoxState.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(tab.BoxState.Background) with {
                 Spacing = 8,
                 BorderRadius = 8,
                 BorderWidth = index == _activeTabIndex ? ThemeManager.Current.Border.Width : 0,

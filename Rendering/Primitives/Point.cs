@@ -11,5 +11,7 @@ public struct Point
         Y = y;
     }
 
-    public Point() { }
+    public Point()
+    {
+    }
 }

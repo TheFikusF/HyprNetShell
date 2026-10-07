@@ -13,7 +13,7 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class NetworkModuleService : IBarDataService, IDisposable
 {
-    private const string NetworkManagerBusName = "org.freedesktop.NetworkManager";
+    private const string NETWORK_MANAGER_BUS_NAME = "org.freedesktop.NetworkManager";
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan SignalCoalesceDelay = TimeSpan.FromMilliseconds(150);
 
@@ -91,10 +91,9 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                     DBusAddress.System ?? throw new InvalidOperationException("The system D-Bus address is unavailable"));
                 await connection.ConnectAsync();
                 networkManagerSubscription = await connection.AddMatchAsync(
-                    new MatchRule
-                    {
+                    new MatchRule {
                         Type = MessageType.Signal,
-                        Sender = NetworkManagerBusName,
+                        Sender = NETWORK_MANAGER_BUS_NAME,
                     },
                     static (_, _) => true,
                     static notification =>
@@ -113,8 +112,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                     Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
                     this);
                 nameOwnerSubscription = await connection.AddMatchAsync(
-                    new MatchRule
-                    {
+                    new MatchRule {
                         Type = MessageType.Signal,
                         Interface = "org.freedesktop.DBus",
                         Member = "NameOwnerChanged",
@@ -122,7 +120,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                     static (message, _) =>
                     {
                         var reader = message.GetBodyReader();
-                        return reader.ReadString().Equals(NetworkManagerBusName, StringComparison.Ordinal);
+                        return reader.ReadString().Equals(NETWORK_MANAGER_BUS_NAME, StringComparison.Ordinal);
                     },
                     static notification =>
                     {
@@ -343,16 +341,16 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         RunNmcliAsync(["radio", "wifi", enabled ? "on" : "off"], null, TimeSpan.FromSeconds(4), cancellationToken);
 
     internal async Task<WifiOperationResult> TurnOffTailscaleAsync()
+    {
+        var result = await RunNmcliAsync(["down"], null, TimeSpan.FromSeconds(5), _lifetime.Token, "tailscale");
+        if (!result.Success && !_lifetime.IsCancellationRequested)
         {
-            var result = await RunNmcliAsync(["down"], null, TimeSpan.FromSeconds(5), _lifetime.Token, "tailscale");
-            if (!result.Success && !_lifetime.IsCancellationRequested)
-            {
-                AppLogger.Warning("Network", $"Could not turn off Tailscale: {result.Error}");
-            }
-            return result;
+            AppLogger.Warning("Network", $"Could not turn off Tailscale: {result.Error}");
         }
+        return result;
+    }
 
-        internal async Task<IReadOnlyList<WifiNetworkSnapshot>> ScanWifiNetworksAsync(CancellationToken cancellationToken)
+    internal async Task<IReadOnlyList<WifiNetworkSnapshot>> ScanWifiNetworksAsync(CancellationToken cancellationToken)
     {
         var scanTask = CommandRunner.TryReadAsync(
             "nmcli",
@@ -435,8 +433,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(4));
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = "nmcli",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -544,8 +541,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
             timeoutCts.CancelAfter(timeout);
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = fileName,
                 RedirectStandardInput = standardInput is not null,
                 RedirectStandardOutput = true,

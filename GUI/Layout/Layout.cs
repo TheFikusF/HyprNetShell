@@ -54,8 +54,7 @@ public class Layout : IDisposable
             Input = input.Value;
         }
 
-        _root = new BoxNode(width, height)
-        {
+        _root = new BoxNode(width, height) {
             Direction = Direction.Horizontal,
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,

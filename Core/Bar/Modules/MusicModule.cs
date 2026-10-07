@@ -30,8 +30,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
     private const int POPUP_IMAGE_SIZE = 128 + 64;
     private const int QUEUE_IMAGE_SIZE = 42;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "music_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "music_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -62,7 +61,9 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
         _coverButton.Background = Color.LerpSmooth(_coverButton.Background,
             _coverButton.Hovered || string.IsNullOrWhiteSpace(music.ImagePath)
                 ? Color.White
-                : Color.White with { A = 0 }, 18.0f, Renderer.DeltaTime);
+                : Color.White with {
+                    A = 0
+                }, 18.0f, Renderer.DeltaTime);
 
         return BuildSurface(music,
             [
@@ -136,28 +137,35 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
         ItemsAlignment verticalAlignment = ItemsAlignment.Center,
         float darken = 0)
     {
-        var style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left, right) with { Spacing = 8 };
+        var style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel, left, right) with {
+            Spacing = 8
+        };
 
         if (radius.HasValue)
         {
-            style = style with { BorderRadius = radius.Value };
+            style = style with {
+                BorderRadius = radius.Value
+            };
         }
 
         if (padding.HasValue)
         {
-            style = style with { Padding = padding.Value };
+            style = style with {
+                Padding = padding.Value
+            };
         }
 
         if (shadow == false)
         {
-            style = style with { ShadowColor = null };
+            style = style with {
+                ShadowColor = null
+            };
         }
 
         return music.Playing
             ? new GradientBoxNode(Color.Darken(Color.FromRgb(255, 214, 66), darken),
                 Color.Darken(Color.FromRgb(255, 121, 24), darken),
-                GradientOffset, width, height)
-            {
+                GradientOffset, width, height) {
                 IgnoreLayout = ignoreLayout,
                 Direction = Direction.Horizontal,
                 HorizontalAlignment = horizontalAlignment,
@@ -166,8 +174,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
                 Style = style,
                 Children = children
             }
-            : new BoxNode(width, height)
-            {
+            : new BoxNode(width, height) {
                 IgnoreLayout = ignoreLayout,
                 Direction = Direction.Horizontal,
                 HorizontalAlignment = horizontalAlignment,
@@ -178,8 +185,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
             };
     }
 
-    private BoxNode BuildPopup(MusicSnapshot music) => new(POPUP_WIDTH)
-    {
+    private BoxNode BuildPopup(MusicSnapshot music) => new(POPUP_WIDTH) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = ModulesCommon.PopupStyle(),
@@ -188,8 +194,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
             : [BuildNowPlaying(music)]
     };
 
-    private BoxNode BuildNowPlaying(MusicSnapshot music) => new(height: POPUP_IMAGE_SIZE)
-    {
+    private BoxNode BuildNowPlaying(MusicSnapshot music) => new(height: POPUP_IMAGE_SIZE) {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Start,
         Style = Style.Spacer,
@@ -250,8 +255,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
         ]
     };
 
-    private BoxNode BuildSpotifyQueue(MusicSnapshot music) => new()
-    {
+    private BoxNode BuildSpotifyQueue(MusicSnapshot music) => new() {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -277,8 +281,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
         }
     }
 
-    private BoxNode BuildQueueRow(MusicSnapshot music, QueuedSong song, int position) => new(height: QUEUE_IMAGE_SIZE)
-    {
+    private BoxNode BuildQueueRow(MusicSnapshot music, QueuedSong song, int position) => new(height: QUEUE_IMAGE_SIZE) {
         Direction = Direction.Horizontal,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Center,
@@ -302,17 +305,20 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
 
     private Node BuildQueueCover(MusicSnapshot music, QueuedSong song, int position)
     {
-        var state = _queueCoverStates.GetState((song.Uri, position), Color.White with { A = 0 });
+        var state = _queueCoverStates.GetState((song.Uri, position), Color.White with {
+            A = 0
+        });
         state.Background = Color.LerpSmooth(
             state.Background,
             state.Hovered || string.IsNullOrWhiteSpace(song.ImagePath)
                 ? Color.White
-                : Color.White with { A = 0 },
+                : Color.White with {
+                    A = 0
+                },
             18.0f,
             Renderer.DeltaTime);
 
-        return new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE)
-        {
+        return new BoxNode(QUEUE_IMAGE_SIZE, QUEUE_IMAGE_SIZE) {
             OnClick = () => _ = service.SkipToSpotifyQueuePositionAsync(music, position),
             Style = new Style { BorderRadius = 4 },
             Children =
@@ -348,16 +354,19 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
 
     private Node BuildQueueRemoveButton(MusicSnapshot music, QueuedSong song, int position)
     {
-        var transparent = Color.White with { A = 0 };
+        var transparent = Color.White with {
+            A = 0
+        };
         var state = _queueRemoveStates.GetState((song.Uri, position), transparent);
         state.Background = Color.LerpSmooth(
             state.Background,
-            state.Hovered ? Color.White with { A = 0.3f } : transparent,
+            state.Hovered ? Color.White with {
+                A = 0.3f
+            } : transparent,
             18.0f,
             Renderer.DeltaTime);
 
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
@@ -369,8 +378,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
 
     private Node BuildPopupImage(MusicSnapshot music) =>
         string.IsNullOrWhiteSpace(music.ImagePath)
-            ? new BoxNode(POPUP_IMAGE_SIZE, POPUP_IMAGE_SIZE)
-            {
+            ? new BoxNode(POPUP_IMAGE_SIZE, POPUP_IMAGE_SIZE) {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
@@ -386,8 +394,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
             ? Math.Clamp((float)position / music.LengthMicros, 0.0f, 1.0f)
             : 0.0f;
 
-        return new BoxNode(width)
-        {
+        return new BoxNode(width) {
             Direction = Direction.Vertical,
             Style = new Style { Spacing = 5 },
             Children =
@@ -442,8 +449,7 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
         var size = action == PlayerAction.PlayPause ? 44 : 36;
         var iconSize = action == PlayerAction.PlayPause ? 20 : 14;
 
-        var active = action switch
-        {
+        var active = action switch {
             PlayerAction.Shuffle => music.ShuffleEnabled == true,
             PlayerAction.Repeat => music.RepeatMode is not null and not MusicRepeatMode.Off,
             _ => false,
@@ -455,14 +461,12 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
             : defaultColor;
         state.Background = Color.LerpSmooth(state.Background, target, 18.0f, Renderer.DeltaTime);
 
-        return new BoxNode(size, size)
-        {
+        return new BoxNode(size, size) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => Control(music, action),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 999,
                 Padding = new Insets(8, 8)
             },
@@ -484,10 +488,9 @@ internal sealed class MusicModule(MusicModuleService service, PopupCoordinator p
     private static float GradientOffset() => -(float)(Environment.TickCount64 % 2600 / 2600.0);
 
     private static string FormatSubtitle(MusicSnapshot music) =>
-        (music.Artist, music.Album) switch
-        {
-            ({ Length: > 0 }, { Length: > 0 }) => $"{music.Artist} - {music.Album}",
-            ({ Length: > 0 }, _) => music.Artist,
+        (music.Artist, music.Album) switch {
+            ( { Length: > 0 }, { Length: > 0 }) => $"{music.Artist} - {music.Album}",
+            ( { Length: > 0 }, _) => music.Artist,
             (_, { Length: > 0 }) => music.Album,
             _ => "",
         };

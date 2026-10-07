@@ -23,7 +23,9 @@ internal sealed record HyprClient(
     [property: JsonPropertyName("class")] string ClassName,
     [property: JsonPropertyName("initialClass")] string InitialClassName,
     string Title,
-    HyprClientWorkspace? Workspace);
+    HyprClientWorkspace? Workspace,
+    string? Identifier = null,
+    int[]? Size = null);
 
 internal sealed record HyprClientWorkspace(int Id);
 

@@ -4,8 +4,14 @@ namespace HyprNetShell.Rendering;
 
 public interface IRenderApi
 {
-    int Width { get; }
-    int Height { get; }
+    int Width
+    {
+        get;
+    }
+    int Height
+    {
+        get;
+    }
 
     float MeasureText(string text, float fontSize);
 
@@ -27,6 +33,11 @@ public interface IRenderApi
         Color multiplicativeColor,
         bool loadAsync = false,
         float rotationRadians = 0);
+    /// <summary>Draws an alpha-mask Gaussian shadow; blurRadius is the three-sigma support in screen pixels.</summary>
+    void DrawImageShadow(string imagePath, Rect rect, Color shadowColor, float blurRadius,
+        float offsetX = 0, float offsetY = 2, bool loadAsync = false);
+    void DrawImageShadow(SvgAsset asset, Rect rect, Color shadowColor, float blurRadius,
+        float offsetX = 0, float offsetY = 2);
     void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawImage(

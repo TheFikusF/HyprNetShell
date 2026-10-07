@@ -4,8 +4,11 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed record TailscaleStatus
 {
-    public string? BackendState { get; init; }
-        public Dictionary<string, TailscalePeerStatus?>? Peer { get; init; } = [];
+    public string? BackendState
+    {
+        get; init;
+    }
+    public Dictionary<string, TailscalePeerStatus?>? Peer { get; init; } = [];
 }
 
 internal sealed record TailscalePeerStatus
@@ -14,7 +17,10 @@ internal sealed record TailscalePeerStatus
     public string? DNSName { get; init; } = "";
     public string? OS { get; init; } = "";
     public string[]? TailscaleIPs { get; init; } = [];
-    public bool Online { get; init; }
+    public bool Online
+    {
+        get; init;
+    }
 }
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]

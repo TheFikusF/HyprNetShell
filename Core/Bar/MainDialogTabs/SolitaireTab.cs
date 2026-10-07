@@ -61,8 +61,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
 
     public void MoveSelection(SelectionDirection direction)
     {
-        var (dx, dy) = direction switch
-        {
+        var (dx, dy) = direction switch {
             SelectionDirection.Left => (-1, 0),
             SelectionDirection.Right => (1, 0),
             SelectionDirection.Up => (0, -1),
@@ -77,8 +76,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
     public Node Draw()
     {
         _game.Update(Renderer.DeltaTime);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 12 },
@@ -109,8 +107,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
         };
     }
 
-    private BoxNode BuildSidebar() => new(220)
-    {
+    private BoxNode BuildSidebar() => new(220) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -123,8 +120,8 @@ internal sealed class SolitaireTab() : IMainDialogTab
                 () => { _game.TryMoveSelectionToFoundation(); }),
             new TextNode("Controls", ThemeManager.Current.Text.HeaderSize),
             new TextNode(
-                $"Arrows or W/A/S/D select\nSpace/Enter draw, pick up, or place\nDouble-tap sends an eligible card home\nP moves the selected card to its foundation\nQ/Escape returns held cards\nR starts a new game\n\nDeals: {SolitaireConfig.AmountOfDeals}   Draw: {SolitaireConfig.CardsInDeal}" +
-                (SolitaireConfig.FreeSlotEnabled ? "\nAfter the final deal, the empty stock becomes a one-card shelf." : ""),
+                $"Arrows or W/A/S/D select\nSpace/Enter draw, pick up, or place\nDouble-tap sends an eligible card home\nP moves the selected card to its foundation\nQ/Escape returns held cards\nR starts a new game\n\nDeals: {SolitaireConfig.AMOUNT_OF_DEALS}   Draw: {SolitaireConfig.CARDS_IN_DEAL}" +
+                (SolitaireConfig.FREE_SLOT_ENABLED ? "\nAfter the final deal, the empty stock becomes a one-card shelf." : ""),
                 14,
                 ThemeManager.Current.Text.MutedColor,
                 220,
@@ -134,14 +131,14 @@ internal sealed class SolitaireTab() : IMainDialogTab
 
     private sealed class SolitaireBoardNode(SolitaireGame game, SolitaireCardTextures textures) : Node
     {
-        private const int CardWidth = 60;
-        private const int CardHeight = 86;
-        private const int ColumnStep = 70;
-        private const int TableauTop = 112;
-        private const int FaceDownStep = 18;
-        private const int FaceUpStep = 24;
+        private const int CARD_WIDTH = 60;
+        private const int CARD_HEIGHT = 86;
+        private const int COLUMN_STEP = 70;
+        private const int TABLEAU_TOP = 112;
+        private const int FACE_DOWN_STEP = 18;
+        private const int FACE_UP_STEP = 24;
 
-        public override int Width => ColumnStep * SolitaireGame.TableauCount - (ColumnStep - CardWidth);
+        public override int Width => COLUMN_STEP * SolitaireGame.TABLEAU_COUNT - (COLUMN_STEP - CARD_WIDTH);
         public override int Height => 468;
 
         public override void Draw(IRenderApi renderer, int x, int y)
@@ -167,24 +164,24 @@ internal sealed class SolitaireTab() : IMainDialogTab
             {
                 renderer.DrawText("↻", x + 20, y + 51, 25, Color.FromRgb(210, 225, 210, 0.75f));
             }
-            else if (SolitaireConfig.FreeSlotEnabled)
+            else if (SolitaireConfig.FREE_SLOT_ENABLED)
             {
                 renderer.DrawText("FREE", x + 8, y + 47, 12, Color.FromRgb(210, 230, 210, 0.55f));
             }
 
-            DrawEmptySlot(renderer, x + ColumnStep, y);
+            DrawEmptySlot(renderer, x + COLUMN_STEP, y);
             if (game.Waste.Count > 0)
             {
                 for (var index = 0; index < game.Waste.Count; index++)
                 {
-                    DrawCard(renderer, game.Waste[index], x + ColumnStep + Math.Min(index, 5), y,
+                    DrawCard(renderer, game.Waste[index], x + COLUMN_STEP + Math.Min(index, 5), y,
                         selected: IsSelected(SolitairePileKind.Waste) && index == game.Waste.Count - 1);
                 }
             }
 
             for (var foundation = 0; foundation < 4; foundation++)
             {
-                var foundationX = x + (foundation + 3) * ColumnStep;
+                var foundationX = x + (foundation + 3) * COLUMN_STEP;
                 DrawEmptySlot(renderer, foundationX, y, SuitSymbol((SolitaireSuit)foundation));
                 var pile = game.Foundations[foundation];
                 for (var index = 0; index < pile.Count; index++)
@@ -194,19 +191,19 @@ internal sealed class SolitaireTab() : IMainDialogTab
                 }
             }
 
-            for (var pileIndex = 0; pileIndex < SolitaireGame.TableauCount; pileIndex++)
+            for (var pileIndex = 0; pileIndex < SolitaireGame.TABLEAU_COUNT; pileIndex++)
             {
                 var pile = game.Tableau[pileIndex];
-                var cardY = y + TableauTop;
+                var cardY = y + TABLEAU_TOP;
                 if (pile.Count == 0)
                 {
-                    DrawEmptySlot(renderer, x + pileIndex * ColumnStep, cardY, "K");
+                    DrawEmptySlot(renderer, x + pileIndex * COLUMN_STEP, cardY, "K");
                     continue;
                 }
 
                 for (var cardIndex = 0; cardIndex < pile.Count; cardIndex++)
                 {
-                    DrawCard(renderer, pile[cardIndex], x + pileIndex * ColumnStep, cardY,
+                    DrawCard(renderer, pile[cardIndex], x + pileIndex * COLUMN_STEP, cardY,
                         selected: IsSelected(SolitairePileKind.Tableau, pileIndex, cardIndex));
                     cardY += CardStep(pile[cardIndex]);
                 }
@@ -231,8 +228,8 @@ internal sealed class SolitaireTab() : IMainDialogTab
             if (game.Held.Count > 0)
             {
                 var heldTarget = SelectionRect(x, y);
-                var heldBounds = new Rect(heldTarget.X, heldTarget.Y, CardWidth + 14,
-                    CardHeight + FaceUpStep * (game.Held.Count - 1) + 22);
+                var heldBounds = new Rect(heldTarget.X, heldTarget.Y, CARD_WIDTH + 14,
+                    CARD_HEIGHT + FACE_UP_STEP * (game.Held.Count - 1) + 22);
                 if (heldBounds.Contains(input.PointerX, input.PointerY))
                 {
                     game.ActivateSelection();
@@ -241,27 +238,26 @@ internal sealed class SolitaireTab() : IMainDialogTab
             }
 
             SolitaireSelection? selection = null;
-            if (localY < CardHeight)
+            if (localY < CARD_HEIGHT)
             {
-                var column = (int)(localX / ColumnStep);
-                selection = column switch
-                {
+                var column = (int)(localX / COLUMN_STEP);
+                selection = column switch {
                     0 => new SolitaireSelection(SolitairePileKind.Stock),
                     1 => new SolitaireSelection(SolitairePileKind.Waste),
                     >= 3 and <= 6 => new SolitaireSelection(SolitairePileKind.Foundation, column - 3),
                     _ => null,
                 };
             }
-            else if (localY >= TableauTop)
+            else if (localY >= TABLEAU_TOP)
             {
-                var pileIndex = Math.Clamp((int)(localX / ColumnStep), 0, SolitaireGame.TableauCount - 1);
+                var pileIndex = Math.Clamp((int)(localX / COLUMN_STEP), 0, SolitaireGame.TABLEAU_COUNT - 1);
                 var pile = game.Tableau[pileIndex];
                 var cardIndex = 0;
-                var cardY = TableauTop;
+                var cardY = TABLEAU_TOP;
                 for (var index = 0; index < pile.Count; index++)
                 {
                     cardIndex = index;
-                    if (localY < cardY + (index == pile.Count - 1 ? CardHeight : CardStep(pile[index])))
+                    if (localY < cardY + (index == pile.Count - 1 ? CARD_HEIGHT : CardStep(pile[index])))
                     {
                         break;
                     }
@@ -292,8 +288,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
                 Color.FromRgb(255, 210, 45));
         }
 
-        private bool SelectionHasCard() => game.Selection.Kind switch
-        {
+        private bool SelectionHasCard() => game.Selection.Kind switch {
             SolitairePileKind.Stock => game.Stock.Count > 0 || game.Shelf is not null,
             SolitairePileKind.Waste => game.Waste.Count > 0,
             SolitairePileKind.Foundation => game.Foundations[game.Selection.Pile].Count > 0,
@@ -319,40 +314,39 @@ internal sealed class SolitaireTab() : IMainDialogTab
             for (var index = 0; index < game.Held.Count; index++)
             {
                 DrawCard(renderer, game.Held[index], (int)target.X + 7, (int)heldY, selected: index == 0);
-                heldY += FaceUpStep;
+                heldY += FACE_UP_STEP;
             }
         }
 
         private Rect SelectionRect(int x, int y)
         {
             var selection = game.Selection;
-            return selection.Kind switch
-            {
-                SolitairePileKind.Stock => new Rect(x, y, CardWidth, CardHeight),
-                SolitairePileKind.Waste => new Rect(x + ColumnStep, y, CardWidth, CardHeight),
-                SolitairePileKind.Foundation => new Rect(x + (selection.Pile + 3) * ColumnStep, y, CardWidth, CardHeight),
+            return selection.Kind switch {
+                SolitairePileKind.Stock => new Rect(x, y, CARD_WIDTH, CARD_HEIGHT),
+                SolitairePileKind.Waste => new Rect(x + COLUMN_STEP, y, CARD_WIDTH, CARD_HEIGHT),
+                SolitairePileKind.Foundation => new Rect(x + (selection.Pile + 3) * COLUMN_STEP, y, CARD_WIDTH, CARD_HEIGHT),
                 SolitairePileKind.Tableau => TableauSelectionRect(selection, x, y),
-                _ => new Rect(x, y, CardWidth, CardHeight),
+                _ => new Rect(x, y, CARD_WIDTH, CARD_HEIGHT),
             };
         }
 
         private Rect TableauSelectionRect(SolitaireSelection selection, int x, int y)
         {
             var pile = game.Tableau[selection.Pile];
-            var cardY = y + TableauTop;
+            var cardY = y + TABLEAU_TOP;
             for (var index = 0; index < Math.Min(selection.Card, pile.Count); index++)
             {
                 cardY += CardStep(pile[index]);
             }
-            return new Rect(x + selection.Pile * ColumnStep, cardY, CardWidth, CardHeight);
+            return new Rect(x + selection.Pile * COLUMN_STEP, cardY, CARD_WIDTH, CARD_HEIGHT);
         }
 
-        private static int CardStep(SolitaireCard card) => card.FaceUp ? FaceUpStep : FaceDownStep;
+        private static int CardStep(SolitaireCard card) => card.FaceUp ? FACE_UP_STEP : FACE_DOWN_STEP;
 
         private static void DrawEmptySlot(IRenderApi renderer, int x, int y, string? label = null)
         {
             renderer.FillRoundedBorder(
-                new Rect(x, y, CardWidth, CardHeight),
+                new Rect(x, y, CARD_WIDTH, CARD_HEIGHT),
                 6,
                 2,
                 Color.FromRgb(205, 225, 205, 0.4f));
@@ -371,7 +365,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
             bool selected = false)
         {
             var deltaTime = Math.Max(Renderer.DeltaTime, 0.0001f);
-            var amount = 1.0f - MathF.Exp(-SolitaireConfig.AnimationSpeed * deltaTime);
+            var amount = 1.0f - MathF.Exp(-SolitaireConfig.ANIMATION_SPEED * deltaTime);
             var previousX = card.RenderX;
             card.RenderX += (x - card.RenderX) * amount;
             card.RenderY += (y - card.RenderY) * amount;
@@ -380,17 +374,17 @@ internal sealed class SolitaireTab() : IMainDialogTab
             card.Flip += (targetFlip - card.Flip) * amount;
             var horizontalVelocity = (previousX - card.RenderX) / deltaTime;
             var targetTilt = Math.Clamp(-horizontalVelocity * 0.1f,
-                -SolitaireConfig.MaximumTiltDegrees,
-                SolitaireConfig.MaximumTiltDegrees);
+                -SolitaireConfig.MAXIMUM_TILT_DEGREES,
+                SolitaireConfig.MAXIMUM_TILT_DEGREES);
             card.TiltDegrees += (targetTilt - card.TiltDegrees) * amount;
 
             var flipScale = 1.0f - MathF.Abs(MathF.Abs(0.5f - card.Flip) - 0.5f);
-            var width = CardWidth * flipScale;
+            var width = CARD_WIDTH * flipScale;
             var rect = new Rect(
-                card.RenderX + (CardWidth - width) / 2.0f,
+                card.RenderX + (CARD_WIDTH - width) / 2.0f,
                 card.RenderY,
                 width,
-                CardHeight);
+                CARD_HEIGHT);
             if (selected)
             {
                 renderer.FillRoundedBorder(
@@ -404,8 +398,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
             renderer.DrawImage(image, rect, Color.White, card.TiltDegrees * MathF.PI / 180.0f);
         }
 
-        private static string SuitSymbol(SolitaireSuit suit) => suit switch
-        {
+        private static string SuitSymbol(SolitaireSuit suit) => suit switch {
             SolitaireSuit.Diamonds => "♦",
             SolitaireSuit.Clubs => "♣",
             SolitaireSuit.Hearts => "♥",

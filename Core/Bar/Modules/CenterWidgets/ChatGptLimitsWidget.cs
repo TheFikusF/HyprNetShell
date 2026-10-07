@@ -14,13 +14,11 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
     public const int WIDTH = CenterModule.WIDTH - TodaysEventsWidget.WIDTH - 12;
     private readonly ModulesCommon.BoxState _titleState = new();
 
-    internal Node Draw() => new BoxNode(WIDTH)
-    {
+    internal Node Draw() => new BoxNode(WIDTH) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-        {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
             BorderRadius = 8,
             Spacing = 16,
         },
@@ -31,8 +29,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
         ],
     };
 
-    private BoxNode BuildHeader(ChatGptUsageSnapshot snapshot) => new(Style.Spacer, ItemsAlignment.Stretch)
-    {
+    private BoxNode BuildHeader(ChatGptUsageSnapshot snapshot) => new(Style.Spacer, ItemsAlignment.Stretch) {
         Direction = Direction.Vertical,
         Children = [
             ModulesCommon.CentralWidgetHeader(Icons.Bot, "ChatGPT limits", null, _titleState),
@@ -48,8 +45,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
     {
         if (!snapshot.Connected || snapshot.Windows.Count == 0)
         {
-            yield return new BoxNode(height: 80)
-            {
+            yield return new BoxNode(height: 80) {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Children =
@@ -68,12 +64,11 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
 
     private BoxNode BuildWindow(ChatGptLimitWindow window)
     {
-        const int BarWidth = WIDTH - 24;
+        const int BAR_WIDTH = WIDTH - 24;
         var used = Math.Clamp(window.UsedPercent, 0, 100);
         var color = used >= 90 ? ThemeManager.Current.Critical : used >= 70 ? ThemeManager.Current.Warning : ThemeManager.Current.Active;
         var reset = window.ResetsAt is { } resetsAt ? $"Resets {FormatReset(resetsAt)}" : "Reset unknown";
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
@@ -84,7 +79,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
                     new TextNode(window.Label),
                     new TextNode($"{used:0}% used", color: color),
                 },
-                new BoxNode(BarWidth, 8)
+                new BoxNode(BAR_WIDTH, 8)
                 {
                     Style = new Style
                     {
@@ -93,7 +88,7 @@ internal sealed class ChatGptLimitsWidget(ChatGptUsageService usage)
                     },
                     Children =
                     [
-                        new BoxNode(Math.Max(1, (int)Math.Round(BarWidth * used / 100)), 8)
+                        new BoxNode(Math.Max(1, (int)Math.Round(BAR_WIDTH * used / 100)), 8)
                         {
                             Style = new Style { BackgroundColor = color, BorderRadius = 999 },
                         },

@@ -13,8 +13,14 @@ public sealed class ScrollbarNode : Node
     private readonly Color _trackColor;
     private readonly Color _thumbColor;
 
-    public override int Width { get; }
-    public override int Height { get; }
+    public override int Width
+    {
+        get;
+    }
+    public override int Height
+    {
+        get;
+    }
 
     public ScrollbarNode(
         int height,

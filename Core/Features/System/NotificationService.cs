@@ -87,7 +87,9 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
             {
                 for (var index = 0; index < _items.Count; index++)
                 {
-                    _items[index] = _items[index] with { PopupUntil = DateTime.MinValue };
+                    _items[index] = _items[index] with {
+                        PopupUntil = DateTime.MinValue
+                    };
                 }
             }
         }
@@ -625,8 +627,7 @@ internal sealed partial class NotificationService : IPathMethodHandler, IDisposa
                 return null;
             }
 
-            var mimeType = global::System.IO.Path.GetExtension(path).ToLowerInvariant() switch
-            {
+            var mimeType = global::System.IO.Path.GetExtension(path).ToLowerInvariant() switch {
                 ".png" => "image/png",
                 ".jpg" or ".jpeg" => "image/jpeg",
                 ".webp" => "image/webp",

@@ -82,8 +82,7 @@ internal sealed class WorldClockTab : IMainDialogTab
     public Node Draw()
     {
         var selectedCount = _clocks.SelectedClocks.Count;
-        return new BoxNode(new Style { Spacing = 8 })
-        {
+        return new BoxNode(new Style { Spacing = 8 }) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children =
@@ -105,7 +104,7 @@ internal sealed class WorldClockTab : IMainDialogTab
                     },
                     _firstIndex,
                     _filteredClocks.Count,
-                    BoundedListUi.DefaultVisibleItemCount),
+                    BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
             ],
         };
     }
@@ -119,8 +118,7 @@ internal sealed class WorldClockTab : IMainDialogTab
             .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var time = WorldClockService.GetTime(clock, DateTime.UtcNow);
 
-        return new BoxNode(height: 56)
-        {
+        return new BoxNode(height: 56) {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
@@ -129,8 +127,7 @@ internal sealed class WorldClockTab : IMainDialogTab
                 _clocks.Toggle(clock.TimeZoneId);
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(14, 8),
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,

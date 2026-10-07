@@ -13,7 +13,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class CalendarTab : IMainDialogTab
 {
-    private const int VisibleEventCount = 7;
+    private const int VISIBLE_EVENT_COUNT = 7;
 
     private readonly CalendarService _calendar;
 
@@ -51,8 +51,7 @@ internal sealed class CalendarTab : IMainDialogTab
 
     public void MoveSelection(SelectionDirection direction)
     {
-        _selectedDate = direction switch
-        {
+        _selectedDate = direction switch {
             SelectionDirection.Left => _selectedDate.AddDays(-1),
             SelectionDirection.Right => _selectedDate.AddDays(1),
             SelectionDirection.Up => _selectedDate.AddDays(-7),
@@ -71,10 +70,9 @@ internal sealed class CalendarTab : IMainDialogTab
     {
         var snapshot = _calendar.Snapshot;
         var events = EventsOn(snapshot.Occurrences, _selectedDate);
-        BoundedListUi.NormalizeViewport(ref _firstEventIndex, events.Count, VisibleEventCount);
+        BoundedListUi.NormalizeViewport(ref _firstEventIndex, events.Count, VISIBLE_EVENT_COUNT);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 14 },
@@ -112,8 +110,7 @@ internal sealed class CalendarTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events) => new(420)
-    {
+    private BoxNode BuildEvents(IReadOnlyList<CalendarOccurrence> events) => new(420) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -121,7 +118,7 @@ internal sealed class CalendarTab : IMainDialogTab
             MainDialogTabUi.BuildSectionHeader(_selectedDate.ToString("dddd, MMMM d"),
                 events.Count == 0 ? "No events" : $"{events.Count} event{(events.Count == 1 ? "" : "s")}"),
 
-            BuildEventsList(events, _firstEventIndex, VisibleEventCount, _buttonStates, delta => ScrollEvents(delta, events.Count))
+            BuildEventsList(events, _firstEventIndex, VISIBLE_EVENT_COUNT, _buttonStates, delta => ScrollEvents(delta, events.Count))
         ],
     };
 
@@ -146,14 +143,12 @@ internal sealed class CalendarTab : IMainDialogTab
                 ? $"{occurrence.Start:HH:mm}–{occurrence.End:HH:mm}"
                 : occurrence.Start.ToString("HH:mm");
 
-        return new BoxNode()
-        {
+        return new BoxNode() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -176,15 +171,13 @@ internal sealed class CalendarTab : IMainDialogTab
     private BoxNode BuildButton(string label, string key, Action action, bool disabled)
     {
         var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = disabled ? null : state.Hovered,
             OnClick = disabled ? null : action,
             Opacity = disabled ? 0.5f : 1,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(12, 8),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -210,7 +203,7 @@ internal sealed class CalendarTab : IMainDialogTab
             ref _firstEventIndex,
             delta > 0 ? 1 : -1,
             eventCount,
-            VisibleEventCount);
+            VISIBLE_EVENT_COUNT);
     }
 
     private void Refresh() => _ = _calendar.ForceRefreshAsync();

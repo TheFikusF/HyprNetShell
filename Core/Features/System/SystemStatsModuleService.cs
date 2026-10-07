@@ -64,12 +64,12 @@ internal sealed class SystemStatsModuleService : IBarDataService
             temperatureCelsius,
             downloadBytesPerSecond,
             uploadBytesPerSecond,
-            [.._cpuHistory],
-            [.._gpuHistory],
-            [.._ramHistory],
-            [.._swapHistory],
-            [.._downloadHistory],
-            [.._uploadHistory],
+            [.. _cpuHistory],
+            [.. _gpuHistory],
+            [.. _ramHistory],
+            [.. _swapHistory],
+            [.. _downloadHistory],
+            [.. _uploadHistory],
             ReadDisks());
     }
 

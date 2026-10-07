@@ -20,9 +20,10 @@ internal sealed class NetworkModule(
     ClipboardHistoryService clipboard,
     PopupCoordinator popupCoordinator) : IDrawableModule
 {
-    private const string WifiPopupTab = "wifi";
-    private const string VpnPopupTab = "vpn";
-    private const string DetailsPopupTab = "details";
+    private const string WIFI_POPUP_TAB = "wifi";
+    private const string VPN_POPUP_TAB = "vpn";
+    private const string DETAILS_POPUP_TAB = "details";
+
     private static readonly TimeSpan WifiScanInterval = TimeSpan.FromSeconds(5);
 
     private readonly ModulesCommon.BoxState _settingsState = new();
@@ -34,10 +35,9 @@ internal sealed class NetworkModule(
     private Task? _wifiScanTask;
     private Task<WifiOperationResult>? _tailscaleOffTask;
     private bool? _wifiEnabledOverride;
-    private string _selectedPopupTab = WifiPopupTab;
+    private string _selectedPopupTab = WIFI_POPUP_TAB;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "network_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "network_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -79,20 +79,17 @@ internal sealed class NetworkModule(
                     : new ImageNode(Icons.Globe, 18, 18, ThemeManager.Current.Text);
 
         var background = ModulesCommon.ToBackground(Color.Lerp(Color.Green, Color.Blue, 0.3f));
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(background, left: false) with
-            {
+            Style = ModulesCommon.ModuleStyle(background, left: false) with {
                 ShadowColor = null
             },
             Children = [icon],
         };
     }
 
-    private BoxNode BuildPopup(NetworkSnapshot network) => new BoxNode(360)
-    {
+    private BoxNode BuildPopup(NetworkSnapshot network) => new BoxNode(360) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -100,9 +97,9 @@ internal sealed class NetworkModule(
         Children =
         [
             _popupTabSwitch.Build([
-                    new SegmentedSwitch.Item(WifiPopupTab, new TextNode("Wi-Fi")),
-                    new SegmentedSwitch.Item(VpnPopupTab, new TextNode("VPN")),
-                    new SegmentedSwitch.Item(DetailsPopupTab, new TextNode("Details")),
+                    new SegmentedSwitch.Item(WIFI_POPUP_TAB, new TextNode("Wi-Fi")),
+                    new SegmentedSwitch.Item(VPN_POPUP_TAB, new TextNode("VPN")),
+                    new SegmentedSwitch.Item(DETAILS_POPUP_TAB, new TextNode("Details")),
                 ],
                 _selectedPopupTab,
                 selected => _selectedPopupTab = selected),
@@ -110,14 +107,13 @@ internal sealed class NetworkModule(
         ]
     };
 
-    private IReadOnlyList<Node> BuildSelectedPopupTab(NetworkSnapshot network) => _selectedPopupTab switch
-    {
-        VpnPopupTab =>
+    private IReadOnlyList<Node> BuildSelectedPopupTab(NetworkSnapshot network) => _selectedPopupTab switch {
+        VPN_POPUP_TAB =>
                 [
                     ..BuildTunnelRows(network.Tunnels),
                     ..BuildTailscaleOperationFeedback(),
                 ],
-        DetailsPopupTab =>
+        DETAILS_POPUP_TAB =>
         [
             BuildDetailRow("Status", network.Connected ? "Connected" : "Disconnected"),
             BuildDetailRow("Device", network.Device),
@@ -138,12 +134,10 @@ internal sealed class NetworkModule(
     {
         var enabled = EffectiveWifiEnabled(network);
         _settingsState.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style()
-            {
+            Style = new Style() {
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
@@ -225,12 +219,10 @@ internal sealed class NetworkModule(
         }
     }
 
-    private BoxNode BuildTunnelRow(NetworkTunnelSnapshot tunnel) => new()
-    {
+    private BoxNode BuildTunnelRow(NetworkTunnelSnapshot tunnel) => new() {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-        {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
             BorderRadius = 8,
             BorderWidth = 0,
             Spacing = 6,
@@ -308,14 +300,12 @@ internal sealed class NetworkModule(
             ? Icons.Smartphone
             : Icons.Laptop;
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             IsHovered = state.Hovered,
             OnClick = ipAddress is null ? null : () => _ = clipboard.CopyTextAsync(ipAddress),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Padding = new Insets(7, 6),
@@ -351,8 +341,7 @@ internal sealed class NetworkModule(
         }
     }
 
-    private BoxNode BuildDetailRow(string label, string value) => new(Style.Spacer)
-    {
+    private BoxNode BuildDetailRow(string label, string value) => new(Style.Spacer) {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         Children =
@@ -367,16 +356,14 @@ internal sealed class NetworkModule(
         var state = _rowStates.GetState($"wifi:{wifi.Ssid}", ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
         var ssid = string.IsNullOrWhiteSpace(wifi.Ssid) ? "<hidden>" : wifi.Ssid;
         var security = string.IsNullOrWhiteSpace(wifi.Security) ? "open" : wifi.Security;
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = wifi.Active || string.IsNullOrWhiteSpace(wifi.Ssid)
                 ? null
                 : () => service.ConnectWifiAsync(wifi.Ssid, null, CancellationToken.None),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Spacing = 12,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -399,14 +386,12 @@ internal sealed class NetworkModule(
     private BoxNode BuildIpRow(string ipAddress)
     {
         var state = _rowStates.GetState($"ip:{ipAddress}", ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => _ = clipboard.CopyTextAsync(ipAddress),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Spacing = 8,
                 BorderRadius = 8
             },
@@ -419,8 +404,7 @@ internal sealed class NetworkModule(
     }
 
     private Node BuildPlainRow(string text) =>
-        new BoxNode
-        {
+        new BoxNode {
             Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
             Children = [new TextNode(text, color: ThemeManager.Current.Text.MutedColor)],
         };
@@ -474,8 +458,7 @@ internal sealed class NetworkModule(
         _ = service.SetWifiEnabledAsync(enabled, CancellationToken.None);
     }
 
-    private static int WifiStrengthIndex(int? signal) => signal switch
-    {
+    private static int WifiStrengthIndex(int? signal) => signal switch {
         null or <= 25 => 0,
         <= 50 => 1,
         <= 75 => 2,

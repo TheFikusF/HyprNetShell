@@ -19,20 +19,59 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private int? _stretchedWidth;
     private int? _stretchedHeight;
 
-    public bool IgnoreLayout { get; init; }
-    public int? Top { get; init; }
-    public int? Right { get; init; }
-    public int? Bottom { get; init; }
-    public int? Left { get; init; }
-    public ItemsAlignment HorizontalAlignment { get; init; }
-    public ItemsAlignment VerticalAlignment { get; init; }
-    public Direction Direction { get; init; }
+    public bool IgnoreLayout
+    {
+        get; init;
+    }
+    public int? Top
+    {
+        get; init;
+    }
+    public int? Right
+    {
+        get; init;
+    }
+    public int? Bottom
+    {
+        get; init;
+    }
+    public int? Left
+    {
+        get; init;
+    }
+    public ItemsAlignment HorizontalAlignment
+    {
+        get; init;
+    }
+    public ItemsAlignment VerticalAlignment
+    {
+        get; init;
+    }
+    public Direction Direction
+    {
+        get; init;
+    }
 
-    public Ref<bool>? IsHovered { get; init; }
-    public Ref<bool>? IsHoveredThrough { get; init; }
-    public Action? OnClick { get; init; }
-    public Action? OnClickThrough { get; init; }
-    public Action<float>? OnScroll { get; init; }
+    public Ref<bool>? IsHovered
+    {
+        get; init;
+    }
+    public Ref<bool>? IsHoveredThrough
+    {
+        get; init;
+    }
+    public Action? OnClick
+    {
+        get; init;
+    }
+    public Action? OnClickThrough
+    {
+        get; init;
+    }
+    public Action<float>? OnScroll
+    {
+        get; init;
+    }
 
     public bool AcceptsWidthBound => !_explicitWidth.HasValue;
     public bool AcceptsHeightBound => !_explicitHeight.HasValue;
@@ -558,8 +597,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
         var usedSize = childrenSize + spacing * Math.Max(0, childrenCount - 1);
         var extraSpace = Math.Max(0, available - usedSize);
 
-        return alignment switch
-        {
+        return alignment switch {
             ItemsAlignment.Center => extraSpace / 2,
             ItemsAlignment.End => extraSpace,
             ItemsAlignment.Spread when childrenCount == 1 => extraSpace / 2,
@@ -571,8 +609,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     {
         var extraSpace = (float)Math.Max(0, available - childSize);
 
-        return (int)(alignment switch
-        {
+        return (int)(alignment switch {
             ItemsAlignment.Center => extraSpace / 2,
             ItemsAlignment.End => extraSpace,
             ItemsAlignment.Spread or ItemsAlignment.Stretch => 0,
@@ -613,8 +650,7 @@ public class BoxNode : Node, IEnumerable<Node>, IWidthBoundNode, IHeightBoundNod
     private static int GetAnchorOffset(ItemsAlignment alignment, int available, int childSize)
     {
         var extraSpace = available - childSize;
-        return alignment switch
-        {
+        return alignment switch {
             ItemsAlignment.Center or ItemsAlignment.Spread => extraSpace / 2,
             ItemsAlignment.End => extraSpace,
             _ => 0,

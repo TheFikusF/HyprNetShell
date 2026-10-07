@@ -10,7 +10,10 @@ internal enum HistoryDateRange
 
 internal static class HistoryDateFilter
 {
-    public static IReadOnlyList<string> Labels { get; } =
+    public static IReadOnlyList<string> Labels
+    {
+        get;
+    } =
     [
         "All time",
         "Today",
@@ -27,8 +30,7 @@ internal static class HistoryDateFilter
 
         var localTimestamp = timestamp.Kind == DateTimeKind.Local ? timestamp : timestamp.ToLocalTime();
         var localNow = (now ?? DateTime.Now).ToLocalTime();
-        return range switch
-        {
+        return range switch {
             HistoryDateRange.Today => localTimestamp.Date == localNow.Date,
             HistoryDateRange.PastWeek => localTimestamp >= localNow.AddDays(-7),
             HistoryDateRange.PastMonth => localTimestamp >= localNow.AddMonths(-1),

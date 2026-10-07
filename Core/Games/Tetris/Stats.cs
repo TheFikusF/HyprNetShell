@@ -9,7 +9,10 @@ internal sealed class Stats(int startingLevel)
     private int _consecutiveDifficultClears;
 
     internal int Score => _score;
-    internal int Level { get; private set; }
+    internal int Level
+    {
+        get; private set;
+    }
     internal int LinesCleared => _linesCleared;
     internal int Combo => _combo;
     internal float TimeSpent => _timeSpent;
@@ -95,8 +98,7 @@ internal sealed class Stats(int startingLevel)
 
 
 
-    private static int GetSpinBonus(SpinType spin, int linesCleared) => spin switch
-    {
+    private static int GetSpinBonus(SpinType spin, int linesCleared) => spin switch {
         SpinType.TSpinMini when linesCleared == 0 => 100,
         SpinType.TSpin => (linesCleared + 1) * 400,
         SpinType.TSpinElegant => (linesCleared + 1) * 600,

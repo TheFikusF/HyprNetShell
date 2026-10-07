@@ -215,8 +215,7 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
 
         var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = await connection.AddMatchAsync(
-            new MatchRule
-            {
+            new MatchRule {
                 Type = MessageType.Signal,
                 Path = promptPath,
                 Interface = PromptInterface,

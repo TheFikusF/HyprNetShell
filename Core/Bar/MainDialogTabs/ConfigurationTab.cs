@@ -46,8 +46,7 @@ internal sealed class ConfigurationTab(
     {
     }
 
-    public Node Draw() => new BoxNode
-    {
+    public Node Draw() => new BoxNode {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 12 },
@@ -78,13 +77,11 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildSlideshowToggle()
     {
         var enabled = wallpapers.SlideshowEnabled;
-        return new(height: 64)
-        {
+        return new(height: 64) {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => wallpapers.SetSlideshowEnabled(!enabled),
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 Padding = new Insets(18, 0),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -105,12 +102,10 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildDurationControl()
     {
         var duration = wallpapers.DurationMinutes;
-        return new(height: 78)
-        {
+        return new(height: 78) {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 Padding = new Insets(18, 0),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -153,12 +148,10 @@ internal sealed class ConfigurationTab(
         int value,
         Action<int> setValue,
         ModulesCommon.BoxState decreaseState,
-        ModulesCommon.BoxState increaseState) => new(height: 78)
-        {
+        ModulesCommon.BoxState increaseState) => new(height: 78) {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 Padding = new Insets(18, 0),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -197,14 +190,12 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildValueButton(string label, Action onClick, ModulesCommon.BoxState buttonState)
     {
         var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
-        return new BoxNode(38, 34)
-        {
+        return new BoxNode(38, 34) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = onClick,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -216,14 +207,12 @@ internal sealed class ConfigurationTab(
     private BoxNode BuildDurationButton(string label, int delta, ModulesCommon.BoxState buttonState)
     {
         var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
-        return new(38, 34)
-        {
+        return new(38, 34) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => wallpapers.SetDurationMinutes(wallpapers.DurationMinutes + delta),
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 0,
                 BorderRadius = 8,
                 BorderWidth = 0,

@@ -68,12 +68,10 @@ internal sealed class PipeWireGraphService : IDisposable, IAsyncDisposable
 
     private async Task RunMonitorAsync(CancellationToken cancellationToken)
     {
-        using var process = new Process
-        {
+        using var process = new Process {
             // pw-dump does not flush every monitor event when stdout is a pipe.
             // Line buffering keeps small state/removal updates from waiting for a full buffer.
-            StartInfo = new ProcessStartInfo("stdbuf")
-            {
+            StartInfo = new ProcessStartInfo("stdbuf") {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

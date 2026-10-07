@@ -94,8 +94,7 @@ internal sealed class TetrisTab : IMainDialogTab
     {
         _game.Update(Renderer.DeltaTime);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 12 },
@@ -126,8 +125,7 @@ internal sealed class TetrisTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildSidebar() => new(150 + 150 + 8)
-    {
+    private BoxNode BuildSidebar() => new(150 + 150 + 8) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -150,12 +148,10 @@ internal sealed class TetrisTab : IMainDialogTab
         ],
     };
 
-    private BoxNode BuildStats() => new()
-    {
+    private BoxNode BuildStats() => new() {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-        {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
             BorderRadius = 8,
             Padding = 14,
             Spacing = 6,
@@ -169,12 +165,10 @@ internal sealed class TetrisTab : IMainDialogTab
         ],
     };
 
-    private BoxNode BuildPreview(string title, TetraminoType? piece) => new(150)
-    {
+    private BoxNode BuildPreview(string title, TetraminoType? piece) => new(150) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Center,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-        {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
             BorderRadius = 8,
             Padding = 8,
             Spacing = 4,
@@ -188,24 +182,24 @@ internal sealed class TetrisTab : IMainDialogTab
 
     private sealed class TetrisBoardNode(TetrisGame game) : Node
     {
-        private const int CellSize = 18;
+        private const int CELL_SIZE = 18;
 
-        public override int Width => TetrisGame.BoardWidth * CellSize;
-        public override int Height => TetrisGame.BoardHeight * CellSize;
+        public override int Width => TetrisGame.BOARD_WIDTH * CELL_SIZE;
+        public override int Height => TetrisGame.BOARD_HEIGHT * CELL_SIZE;
 
         public override void Draw(IRenderApi renderer, int x, int y)
         {
             UpdateInteractionState(x, y);
 
-            for (var row = 0; row < TetrisGame.BoardHeight; row++)
+            for (var row = 0; row < TetrisGame.BOARD_HEIGHT; row++)
             {
-                for (var column = 0; column < TetrisGame.BoardWidth; column++)
+                for (var column = 0; column < TetrisGame.BOARD_WIDTH; column++)
                 {
                     renderer.FillRect(
-                        new Rect(x + column * CellSize,
-                            y + (TetrisGame.BoardHeight - 1 - row) * CellSize,
-                            CellSize - 1,
-                            CellSize - 1),
+                        new Rect(x + column * CELL_SIZE,
+                            y + (TetrisGame.BOARD_HEIGHT - 1 - row) * CELL_SIZE,
+                            CELL_SIZE - 1,
+                            CELL_SIZE - 1),
                         Color.FromRgb(0, 0, 0, 0.20f));
                 }
             }
@@ -216,8 +210,7 @@ internal sealed class TetrisTab : IMainDialogTab
             }
         }
 
-        private static int DrawOrder(Block block) => block.Layer switch
-        {
+        private static int DrawOrder(Block block) => block.Layer switch {
             BlockLayer.Ghost => 0,
             BlockLayer.Board => 1,
             BlockLayer.Current => 2,
@@ -232,14 +225,16 @@ internal sealed class TetrisTab : IMainDialogTab
                 return;
             }
 
-            var size = (CellSize - 2) * block.Scale;
-            var centerX = x + block.RenderPosition.X * CellSize + CellSize / 2f;
-            var centerY = y + (TetrisGame.BoardHeight - 1 - block.RenderPosition.Y) * CellSize + CellSize / 2f;
+            var size = (CELL_SIZE - 2) * block.Scale;
+            var centerX = x + block.RenderPosition.X * CELL_SIZE + CELL_SIZE / 2f;
+            var centerY = y + (TetrisGame.BOARD_HEIGHT - 1 - block.RenderPosition.Y) * CELL_SIZE + CELL_SIZE / 2f;
             var rect = new Rect(centerX - size / 2f, centerY - size / 2f, size, size);
             var color = PieceColor(block.Type);
             if (block.Layer == BlockLayer.Ghost)
             {
-                color = color with { A = 0.333f };
+                color = color with {
+                    A = 0.333f
+                };
             }
 
             renderer.FillRoundedRect(rect, Math.Min(3, size / 4f), color);
@@ -264,24 +259,23 @@ internal sealed class TetrisTab : IMainDialogTab
                 return;
             }
 
-            const int size = 14;
+            const int SIZE = 14;
             var cells = TetrisGame.Cells(type);
             var minX = cells.Min(cell => cell.X);
             var maxX = cells.Max(cell => cell.X);
             var minY = cells.Min(cell => cell.Y);
             var maxY = cells.Max(cell => cell.Y);
-            var originX = x + (Width - (maxX - minX + 1) * size) / 2 - minX * size;
-            var originY = y + (Height - (maxY - minY + 1) * size) / 2 + maxY * size;
+            var originX = x + (Width - (maxX - minX + 1) * SIZE) / 2 - minX * SIZE;
+            var originY = y + (Height - (maxY - minY + 1) * SIZE) / 2 + maxY * SIZE;
             foreach (var cell in cells)
             {
-                renderer.FillRoundedRect(new Rect(originX + cell.X * size, originY - cell.Y * size, size - 2, size - 2),
+                renderer.FillRoundedRect(new Rect(originX + cell.X * SIZE, originY - cell.Y * SIZE, SIZE - 2, SIZE - 2),
                     3, PieceColor(type));
             }
         }
     }
 
-    private static Color PieceColor(TetraminoType type) => type switch
-    {
+    private static Color PieceColor(TetraminoType type) => type switch {
         TetraminoType.I => Color.FromRgb(1, 237, 250),
         TetraminoType.J => Color.FromRgb(24, 130, 246),
         TetraminoType.L => Color.FromRgb(255, 120, 12),

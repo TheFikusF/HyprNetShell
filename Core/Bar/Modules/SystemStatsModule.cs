@@ -17,8 +17,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
     private const int GRAPH_WIDTH = 400;
     private const int GRAPH_HEIGHT = 92;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "system_stats_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "system_stats_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -69,8 +68,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         var width = DIRECTION == Direction.Horizontal ? WIDTH : WIDTH - 30;
         var radius = DIRECTION == Direction.Horizontal ? ThemeManager.Current.Border.Radius : 12;
 
-        var style = new Style()
-        {
+        var style = new Style() {
             BackgroundColor = color,
             BorderRadius = new BorderRadius(left ? radius : 0, right ? radius : 0,
                 right ? radius : 0, left ? radius : 0),
@@ -83,13 +81,14 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
 
         if (left == false && right == false)
         {
-            style = style with { BorderWidth = new Insets(1, ThemeManager.Current.Border.Width) };
+            style = style with {
+                BorderWidth = new Insets(1, ThemeManager.Current.Border.Width)
+            };
         }
 
         return new BoxNode(width, DIRECTION == Direction.Vertical
             ? 52 - (int)(ThemeManager.Current.Border.Width * 2)
-            : 18 + 6 * 2 + 3 * 2)
-        {
+            : 18 + 6 * 2 + 3 * 2) {
             Direction = DIRECTION,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
@@ -102,13 +101,11 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         };
     }
 
-    private BoxNode BuildStateModule(SystemStatsSnapshot stats) => new()
-    {
+    private BoxNode BuildStateModule(SystemStatsSnapshot stats) => new() {
         Direction = Direction.Horizontal,
         VerticalAlignment = ItemsAlignment.Center,
         HorizontalAlignment = ItemsAlignment.Center,
-        Style = new Style()
-        {
+        Style = new Style() {
             BorderRadius = 999,
             ShadowColor = Color.Black with { A = 0.45f },
             ShadowDistance = 5.0f
@@ -131,8 +128,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         var uploadColor = Color.FromRgb(80, 225, 215, 0.9f);
         var networkMaximum = NetworkScale(stats.DownloadHistory, stats.UploadHistory);
 
-        return new BoxNode()
-        {
+        return new BoxNode() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
@@ -190,9 +186,12 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         IReadOnlyList<float>? downData = null, Color? downColor = null, ICollection<Node>? downLabel = null)
     {
         var graphBackground = ThemeManager.Current.Panel;
-        var grid = ThemeManager.Current.Text.MutedColor with { A = 0.22f };
-        return new BoxNode(ModulesCommon.PopupStyle() with { Padding = 0 })
-        {
+        var grid = ThemeManager.Current.Text.MutedColor with {
+            A = 0.22f
+        };
+        return new BoxNode(ModulesCommon.PopupStyle() with {
+            Padding = 0
+        }) {
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children =
             [
@@ -230,8 +229,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         }
 
         yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, GRAPH_WIDTH, 12);
-        yield return new BoxNode(GRAPH_WIDTH)
-        {
+        yield return new BoxNode(GRAPH_WIDTH) {
             HorizontalAlignment = ItemsAlignment.Center,
             Children = [ModulesCommon.BuildTextWithIcon(Icons.HardDrive, "Disks")],
         };
@@ -246,15 +244,13 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
     {
         const int BAR_HEIGHT = 10;
         var percentage = disk.Percent;
-        var fill = percentage switch
-        {
+        var fill = percentage switch {
             >= 90 => ThemeManager.Current.Critical,
             >= 75 => ThemeManager.Current.Warning,
             _ => Color.FromRgb(80, 180, 255),
         };
 
-        return new BoxNode(GRAPH_WIDTH)
-        {
+        return new BoxNode(GRAPH_WIDTH) {
             Direction = Direction.Vertical,
             Style = new Style { Spacing = 4 },
             Children =

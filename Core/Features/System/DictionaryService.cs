@@ -8,8 +8,7 @@ namespace HyprNetShell.Core.Features.System;
 internal sealed class DictionaryService
 {
     private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(8);
-    private static readonly HttpClient Http = new()
-    {
+    private static readonly HttpClient Http = new() {
         Timeout = Timeout.InfiniteTimeSpan,
         DefaultRequestHeaders =
         {
@@ -17,7 +16,10 @@ internal sealed class DictionaryService
         },
     };
 
-    internal string TranslationLanguage { get; }
+    internal string TranslationLanguage
+    {
+        get;
+    }
 
     internal DictionaryService()
     {

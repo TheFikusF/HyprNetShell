@@ -22,13 +22,11 @@ internal sealed class KdeConnectWidget(KdeConnectService service)
             ?? devices.FirstOrDefault(candidate => candidate.IsPaired && candidate.IsReachable)
             ?? devices.FirstOrDefault(candidate => candidate.IsPaired);
 
-        return new BoxNode(WIDTH)
-        {
+        return new BoxNode(WIDTH) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Start,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 BorderRadius = 8,
                 Spacing = 8,
             },
@@ -48,16 +46,14 @@ internal sealed class KdeConnectWidget(KdeConnectService service)
     {
         if (device is null)
         {
-            return new BoxNode(height: 70)
-            {
+            return new BoxNode(height: 70) {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Children = [new TextNode("No paired device", color: ThemeManager.Current.Text.MutedColor)],
             };
         }
 
-        return new BoxNode(height: 70)
-        {
+        return new BoxNode(height: 70) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,

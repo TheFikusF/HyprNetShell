@@ -21,9 +21,9 @@ internal sealed class DictionaryTab(
         public ModulesCommon.BoxState Copy { get; } = new();
     }
 
-    private const int VisibleResultCount = 5;
-    private const int MaximumQueryLength = 160;
-    private const int SearchSelectionIndex = -1;
+    private const int VISIBLE_RESULT_COUNT = 5;
+    private const int MAXIMUM_QUERY_LENGTH = 160;
+    private const int SEARCH_SELECTION_INDEX = -1;
 
     private readonly Lock _stateLock = new();
     private readonly Dictionary<int, ResultState> _resultStates = [];
@@ -32,13 +32,13 @@ internal sealed class DictionaryTab(
         "",
         "",
         "Type an English word or phrase...",
-        MaximumQueryLength,
+        MAXIMUM_QUERY_LENGTH,
         alwaysActive: true);
 
     private DictionaryLookupResult _result = DictionaryLookupResult.Empty;
     private CancellationTokenSource? _lookupCancellation;
     private string _query = "";
-    private int _selectedIndex = SearchSelectionIndex;
+    private int _selectedIndex = SEARCH_SELECTION_INDEX;
     private int _firstIndex;
     private bool _isLookingUp;
     private bool _disposed;
@@ -54,7 +54,7 @@ internal sealed class DictionaryTab(
         inputs.Activate(_queryInput);
         lock (_stateLock)
         {
-            _selectedIndex = SearchSelectionIndex;
+            _selectedIndex = SEARCH_SELECTION_INDEX;
             _firstIndex = 0;
         }
     }
@@ -72,25 +72,23 @@ internal sealed class DictionaryTab(
             var itemCount = _result.Items.Count;
             if (itemCount == 0)
             {
-                _selectedIndex = SearchSelectionIndex;
+                _selectedIndex = SEARCH_SELECTION_INDEX;
                 return;
             }
 
             if (direction == SelectionDirection.Up)
             {
-                _selectedIndex = _selectedIndex switch
-                {
-                    SearchSelectionIndex => itemCount - 1,
-                    0 => SearchSelectionIndex,
+                _selectedIndex = _selectedIndex switch {
+                    SEARCH_SELECTION_INDEX => itemCount - 1,
+                    0 => SEARCH_SELECTION_INDEX,
                     _ => _selectedIndex - 1,
                 };
             }
             else
             {
-                _selectedIndex = _selectedIndex switch
-                {
-                    SearchSelectionIndex => 0,
-                    _ when _selectedIndex == itemCount - 1 => SearchSelectionIndex,
+                _selectedIndex = _selectedIndex switch {
+                    SEARCH_SELECTION_INDEX => 0,
+                    _ when _selectedIndex == itemCount - 1 => SEARCH_SELECTION_INDEX,
                     _ => _selectedIndex + 1,
                 };
             }
@@ -101,7 +99,7 @@ internal sealed class DictionaryTab(
                     ref _selectedIndex,
                     ref _firstIndex,
                     itemCount,
-                    VisibleResultCount);
+                    VISIBLE_RESULT_COUNT);
             }
         }
     }
@@ -160,15 +158,14 @@ internal sealed class DictionaryTab(
         }
 
         var status = BuildStatus(result, isLookingUp);
-        var content = new BoxNode
-        {
+        var content = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = result.Items.Count == 0
                 ? [new TextNode(EmptyMessage(query, result, isLookingUp), 18, ThemeManager.Current.Text.MutedColor)]
                 : result.Items
-                    .VisibleItems(firstIndex, VisibleResultCount)
+                    .VisibleItems(firstIndex, VISIBLE_RESULT_COUNT)
                     .Select(item => BuildResult(item.Item, item.Index, selectedIndex))
                     .ToArray(),
         };
@@ -184,22 +181,21 @@ internal sealed class DictionaryTab(
                 Children =
                 [
                     inputs.Build(_queryInput),
-                    BuildSearchButton(selectedIndex == SearchSelectionIndex, isLookingUp),
+                    BuildSearchButton(selectedIndex == SEARCH_SELECTION_INDEX, isLookingUp),
                 ],
             },
             BoundedListUi.BuildScrollableResults(
                 content,
                 firstIndex,
                 result.Items.Count,
-                VisibleResultCount),
+                VISIBLE_RESULT_COUNT),
         };
         if (result.Errors.Count > 0)
         {
             children.Add(new TextNode(string.Join(" · ", result.Errors), color: ThemeManager.Current.Warning));
         }
 
-        return new BoxNode(Style.Spacer)
-        {
+        return new BoxNode(Style.Spacer) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children = children,
@@ -219,7 +215,7 @@ internal sealed class DictionaryTab(
                 }
 
                 _result = result;
-                _selectedIndex = result.Items.Count == 0 ? SearchSelectionIndex : 0;
+                _selectedIndex = result.Items.Count == 0 ? SEARCH_SELECTION_INDEX : 0;
                 _firstIndex = 0;
                 _resultStates.Clear();
             }
@@ -261,8 +257,7 @@ internal sealed class DictionaryTab(
             ? $"Example: {item.Example}"
             : item.Attribution ?? "";
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
@@ -274,8 +269,7 @@ internal sealed class DictionaryTab(
                 }
             },
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(8, 8, 8, 16),
@@ -301,14 +295,12 @@ internal sealed class DictionaryTab(
     private BoxNode BuildSearchButton(bool selected, bool isLookingUp)
     {
         _searchState.UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode(46, 46)
-        {
+        return new BoxNode(46, 46) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = _searchState.Hovered,
             OnClick = isLookingUp ? null : SelectSearchAndActivate,
-            Style = ModulesCommon.ModuleStyle(_searchState.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(_searchState.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = 0,
@@ -323,14 +315,12 @@ internal sealed class DictionaryTab(
             ? $"\nExample: {item.Example}"
             : "";
         state.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode(32, 32)
-        {
+        return new BoxNode(32, 32) {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => _ = clipboard.CopyTextAsync(GetTextToCopy(item)),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = 0,
                 Padding = 0,
@@ -353,7 +343,7 @@ internal sealed class DictionaryTab(
     {
         lock (_stateLock)
         {
-            _selectedIndex = SearchSelectionIndex;
+            _selectedIndex = SEARCH_SELECTION_INDEX;
         }
 
         ActivateSelection();
@@ -368,7 +358,7 @@ internal sealed class DictionaryTab(
                 ref _selectedIndex,
                 ref _firstIndex,
                 _result.Items.Count,
-                VisibleResultCount);
+                VISIBLE_RESULT_COUNT);
         }
     }
 
@@ -387,7 +377,7 @@ internal sealed class DictionaryTab(
         _lookupCancellation = null;
         _isLookingUp = false;
         _result = DictionaryLookupResult.Empty;
-        _selectedIndex = SearchSelectionIndex;
+        _selectedIndex = SEARCH_SELECTION_INDEX;
         _firstIndex = 0;
         _resultStates.Clear();
     }

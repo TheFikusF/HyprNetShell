@@ -15,8 +15,7 @@ internal sealed class MusicModuleService : IDisposable
     private const string PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player";
     private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
 
-    private static readonly HttpClient Http = new()
-    {
+    private static readonly HttpClient Http = new() {
         Timeout = TimeSpan.FromSeconds(2),
     };
     private readonly SpotifyPlaybackService _spotify;
@@ -46,19 +45,26 @@ internal sealed class MusicModuleService : IDisposable
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        if (_initialized) return;
+        if (_initialized)
+        {
+            return;
+        }
+
         await _initializeGate.WaitAsync(cancellationToken);
         try
         {
-            if (_initialized) return;
+            if (_initialized)
+            {
+                return;
+            }
+
             var connection = new DBusConnection(Dbus.SessionAddress);
             await connection.ConnectAsync();
             _connection = connection;
 
             _propertiesSubscription = await AddSignalSubscriptionAsync(
                 connection,
-                new MatchRule
-                {
+                new MatchRule {
                     Type = MessageType.Signal,
                     Path = PLAYER_PATH,
                     Interface = PROPERTIES_INTERFACE,
@@ -66,8 +72,7 @@ internal sealed class MusicModuleService : IDisposable
                 });
             _seekedSubscription = await AddSignalSubscriptionAsync(
                 connection,
-                new MatchRule
-                {
+                new MatchRule {
                     Type = MessageType.Signal,
                     Path = PLAYER_PATH,
                     Interface = PLAYER_INTERFACE,
@@ -75,8 +80,7 @@ internal sealed class MusicModuleService : IDisposable
                 });
             _nameOwnerSubscription = await AddSignalSubscriptionAsync(
                 connection,
-                new MatchRule
-                {
+                new MatchRule {
                     Type = MessageType.Signal,
                     Interface = Dbus.BUS_INTERFACE,
                     Member = "NameOwnerChanged",
@@ -104,7 +108,11 @@ internal sealed class MusicModuleService : IDisposable
             static (message, state) =>
             {
                 var subscription = ((MusicModuleService Service, bool OnlyMprisOwnerChanges))state!;
-                if (!subscription.OnlyMprisOwnerChanges) return true;
+                if (!subscription.OnlyMprisOwnerChanges)
+                {
+                    return true;
+                }
+
                 var reader = message.GetBodyReader();
                 return reader.ReadString().StartsWith("org.mpris.MediaPlayer2.", StringComparison.Ordinal);
             },
@@ -135,18 +143,17 @@ internal sealed class MusicModuleService : IDisposable
 
         try
         {
-        var info = await ReadMprisAsync(cancellationToken);
-        if (info is null || string.IsNullOrWhiteSpace(info.Label))
-        {
-            _cached = MusicSnapshot.Empty;
-            return;
-        }
+            var info = await ReadMprisAsync(cancellationToken);
+            if (info is null || string.IsNullOrWhiteSpace(info.Label))
+            {
+                _cached = MusicSnapshot.Empty;
+                return;
+            }
 
             var spotify = info.IsSpotify
                 ? await _spotify.GetPlaybackAsync(cancellationToken)
                 : null;
-            _cached = info with
-            {
+            _cached = info with {
                 ImagePath = await LocalImagePathAsync(info.ArtUrl, cancellationToken),
                 PositionObservedAtUtc = DateTime.UtcNow,
                 Queue = spotify?.Queue ?? [],
@@ -233,7 +240,9 @@ internal sealed class MusicModuleService : IDisposable
 
         if (await _spotify.ToggleShuffleAsync(enabled, cancellationToken))
         {
-            _cached = _cached with { ShuffleEnabled = !enabled };
+            _cached = _cached with {
+                ShuffleEnabled = !enabled
+            };
             await RefreshCachedAsync(cancellationToken, waitForGate: true);
         }
     }
@@ -247,7 +256,9 @@ internal sealed class MusicModuleService : IDisposable
 
         if (await _spotify.CycleRepeatAsync(repeatMode, cancellationToken) is { } next)
         {
-            _cached = _cached with { RepeatMode = next };
+            _cached = _cached with {
+                RepeatMode = next
+            };
             await RefreshCachedAsync(cancellationToken, waitForGate: true);
         }
     }
@@ -313,7 +324,7 @@ internal sealed class MusicModuleService : IDisposable
             $"call --session --dest {bus} --object-path /org/mpris/MediaPlayer2 --method org.freedesktop.DBus.Properties.Get org.mpris.MediaPlayer2.Player {property}",
             TimeSpan.FromMilliseconds(500),
             cancellationToken);
-    
+
     private static IEnumerable<string> ExtractMprisBusNames(string output)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -369,11 +380,10 @@ internal sealed class MusicModuleService : IDisposable
 
     private static string FormatLabel(string artist, string title)
     {
-        return (artist, title) switch
-        {
-            ({ Length: > 0 }, { Length: > 0 }) => $"{artist} - {title}",
+        return (artist, title) switch {
+            ( { Length: > 0 }, { Length: > 0 }) => $"{artist} - {title}",
             (_, { Length: > 0 }) => title,
-            ({ Length: > 0 }, _) => artist,
+            ( { Length: > 0 }, _) => artist,
             _ => "",
         };
     }

@@ -55,7 +55,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     {
         lock (_curveLock)
         {
-            return [.._temperatureCurve];
+            return [.. _temperatureCurve];
         }
     }
 
@@ -71,7 +71,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     {
         lock (_curveLock)
         {
-            return [.._brightnessCurve];
+            return [.. _brightnessCurve];
         }
     }
 
@@ -133,7 +133,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             TemperatureCurvePoint[] curve;
             lock (_curveLock)
             {
-                curve = [.._temperatureCurve];
+                curve = [.. _temperatureCurve];
             }
 
             _temperature = TemperatureCurveMath.Evaluate(curve, CurrentHour(localNow));
@@ -156,13 +156,12 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             BrightnessCurvePoint[] curve;
             lock (_curveLock)
             {
-                curve = [.._brightnessCurve];
+                curve = [.. _brightnessCurve];
             }
 
             var percentage = BrightnessCurveMath.Evaluate(curve, CurrentHour(localNow));
             await SetBacklightAsync(display, percentage);
-            display = display with
-            {
+            display = display with {
                 Value = (int)Math.Round(display.Maximum * percentage / 100.0, MidpointRounding.AwayFromZero),
             };
             _nextBrightnessUpdate = localNow.AddMinutes(5);
@@ -172,8 +171,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         BrightnessCurvePoint[] snapshotBrightnessCurve;
         lock (_curveLock)
         {
-            snapshotTemperatureCurve = [.._temperatureCurve];
-            snapshotBrightnessCurve = [.._brightnessCurve];
+            snapshotTemperatureCurve = [.. _temperatureCurve];
+            snapshotBrightnessCurve = [.. _brightnessCurve];
         }
 
         Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
@@ -331,18 +330,23 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private void PublishBacklightValue(BacklightSnapshot backlight, int value)
     {
         var current = Snapshot;
-        var updated = backlight with { Value = value };
+        var updated = backlight with {
+            Value = value
+        };
         Volatile.Write(ref _snapshot, string.Equals(current.Display?.DevicePath, backlight.DevicePath, StringComparison.Ordinal)
-            ? current with { Display = updated }
-            : current with { Keyboard = updated });
+            ? current with {
+                Display = updated
+            }
+            : current with {
+                Keyboard = updated
+            });
     }
 
     private void PublishTemperature(int temperatureKelvin, bool running)
     {
         _temperature = temperatureKelvin;
         var current = Snapshot;
-        Volatile.Write(ref _snapshot, current with
-        {
+        Volatile.Write(ref _snapshot, current with {
             HyprsunsetInstalled = true,
             HyprsunsetRunning = running,
             TemperatureKelvin = temperatureKelvin,
@@ -405,8 +409,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         bool brightnessEnabled;
         lock (_curveLock)
         {
-            temperatureCurve = [.._temperatureCurve];
-            brightnessCurve = [.._brightnessCurve];
+            temperatureCurve = [.. _temperatureCurve];
+            brightnessCurve = [.. _brightnessCurve];
             temperatureEnabled = _automaticTemperatureEnabled;
             brightnessEnabled = _automaticBrightnessEnabled;
         }
@@ -481,7 +485,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                 return;
             }
 
-            curve = [.._temperatureCurve];
+            curve = [.. _temperatureCurve];
         }
 
         var now = DateTime.Now;
@@ -550,7 +554,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                 return;
             }
 
-            curve = [.._brightnessCurve];
+            curve = [.. _brightnessCurve];
             display = Snapshot.Display;
         }
 
@@ -619,8 +623,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     {
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
+            var startInfo = new ProcessStartInfo {
                 FileName = "hyprsunset",
                 UseShellExecute = false,
                 CreateNoWindow = true,

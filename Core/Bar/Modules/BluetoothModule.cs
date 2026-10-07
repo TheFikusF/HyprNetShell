@@ -25,8 +25,7 @@ internal sealed class BluetoothModule(
     private readonly Ref<float> _powerSwitchAnimation = new();
     private bool? _poweredOverride;
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "bluetooth_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "bluetooth_module") {
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
@@ -48,15 +47,13 @@ internal sealed class BluetoothModule(
 
         var bg = ModulesCommon.ToBackground(Color.Lerp(Color.Lazure, Color.Blue, 0.3f));
         return ModulesCommon.BuildTextWithIcon(icon, connectedCount.ToString(),
-            style: ModulesCommon.ModuleStyle(bg, false, false) with
-            {
+            style: ModulesCommon.ModuleStyle(bg, false, false) with {
                 BorderWidth = new Insets(1, ThemeManager.Current.Border.Width),
                 ShadowColor = null
             }, width: 55);
     }
 
-    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new(360)
-    {
+    private BoxNode BuildPopup(BluetoothSnapshot bluetooth) => new(360) {
         Direction = Direction.Vertical,
         VerticalAlignment = ItemsAlignment.Start,
         HorizontalAlignment = ItemsAlignment.Stretch,
@@ -72,12 +69,10 @@ internal sealed class BluetoothModule(
     {
         var powered = EffectivePowered(bluetooth);
         _settingsState.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = new Style
-            {
+            Style = new Style {
                 BorderRadius = 8,
                 BorderWidth = 0,
             },
@@ -155,15 +150,13 @@ internal sealed class BluetoothModule(
         var connected = EffectiveConnected(device);
         var state = _rowStates.GetState(device.Address, ThemeManager.Current.Panel)
             .UpdateColor(connected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = () => ToggleConnection(device),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = connected ? ThemeManager.Current.Border.Width : 0,
             },
@@ -200,9 +193,10 @@ internal sealed class BluetoothModule(
         };
     }
 
-    private BoxNode BuildPlainRow(string text) => new()
-    {
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with { BorderRadius = 8 },
+    private BoxNode BuildPlainRow(string text) => new() {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
+            BorderRadius = 8
+        },
         Children = [new TextNode(text, color: ThemeManager.Current.Text.MutedColor)],
     };
 

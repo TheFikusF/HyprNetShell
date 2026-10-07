@@ -53,8 +53,7 @@ internal sealed class CalculatorTab(
         _ = clipboard.CopyTextAsync(_result);
     }
 
-    public Node Draw() => new BoxNode
-    {
+    public Node Draw() => new BoxNode {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = new Style { Spacing = 8 },

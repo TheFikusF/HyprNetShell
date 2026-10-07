@@ -15,7 +15,10 @@ public class NodeWithPopup
     private float _popupOpacity = 0f;
 
     public int TopOffset { get; init; } = 33;
-    public ItemsAlignment HorizontalAlignment { get; init; }
+    public ItemsAlignment HorizontalAlignment
+    {
+        get; init;
+    }
     public Func<bool, bool> GetShouldShowPopup { get; init; } = hovered => hovered;
 
     private readonly Ref<bool> _hovered = new();
@@ -47,8 +50,7 @@ public class NodeWithPopup
 
         _popupOpacity = PrimitivesMath.LerpSmooth(_popupOpacity, shouldShow ? 1 : 0, 24.0f, Renderer.DeltaTime);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = HorizontalAlignment,

@@ -5,26 +5,26 @@ namespace HyprNetShell.GUI.Layout.Nodes;
 
 public sealed class CheckboxNode(bool selected, SvgAsset checkIcon) : Node
 {
-    private const int Size = 24;
-    private const float BoxSize = 18.0f;
-    private const float BorderWidth = 2.0f;
+    private const int SIZE = 24;
+    private const float BOX_SIZE = 18.0f;
+    private const float BORDER_WIDTH = 2.0f;
 
     public Color SelectedColor { get; init; } = Color.Orange;
     public Color UnselectedColor { get; init; } = Color.FromRgb(160, 160, 160);
     public Color BackgroundColor { get; init; } = Color.FromRgb(31, 35, 44);
     public Color CheckColor { get; init; } = Color.White;
 
-    public override int Width => Size;
-    public override int Height => Size;
+    public override int Width => SIZE;
+    public override int Height => SIZE;
 
     public override void Draw(IRenderApi renderer, int x, int y)
     {
-        var boxX = x + (Width - BoxSize) / 2.0f;
-        var boxY = y + (Height - BoxSize) / 2.0f;
+        var boxX = x + (Width - BOX_SIZE) / 2.0f;
+        var boxY = y + (Height - BOX_SIZE) / 2.0f;
         var borderColor = selected ? SelectedColor : UnselectedColor;
 
         renderer.FillRoundedRect(
-            new Rect(boxX, boxY, BoxSize, BoxSize),
+            new Rect(boxX, boxY, BOX_SIZE, BOX_SIZE),
             4.0f,
             borderColor.PushOpacity(Opacity));
 
@@ -40,10 +40,10 @@ public sealed class CheckboxNode(bool selected, SvgAsset checkIcon) : Node
         {
             renderer.FillRoundedRect(
                 new Rect(
-                    boxX + BorderWidth,
-                    boxY + BorderWidth,
-                    BoxSize - BorderWidth * 2.0f,
-                    BoxSize - BorderWidth * 2.0f),
+                    boxX + BORDER_WIDTH,
+                    boxY + BORDER_WIDTH,
+                    BOX_SIZE - BORDER_WIDTH * 2.0f,
+                    BOX_SIZE - BORDER_WIDTH * 2.0f),
                 2.0f,
                 BackgroundColor.PushOpacity(Opacity));
         }

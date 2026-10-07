@@ -12,12 +12,30 @@ internal sealed class ScreenshotController
     {
         internal ulong OutputId { get; } = outputId;
         internal ScreenshotMode Mode { get; } = mode;
-        internal bool HasStart { get; set; }
-        internal bool WasPointerDown { get; set; }
-        internal float StartX { get; set; }
-        internal float StartY { get; set; }
-        internal float EndX { get; set; }
-        internal float EndY { get; set; }
+        internal bool HasStart
+        {
+            get; set;
+        }
+        internal bool WasPointerDown
+        {
+            get; set;
+        }
+        internal float StartX
+        {
+            get; set;
+        }
+        internal float StartY
+        {
+            get; set;
+        }
+        internal float EndX
+        {
+            get; set;
+        }
+        internal float EndY
+        {
+            get; set;
+        }
     }
 
     private readonly record struct CaptureRequest(ulong OutputId, ScreenshotMode Mode, SelectionRect? Selection);
@@ -36,6 +54,7 @@ internal sealed class ScreenshotController
     {
         while (services.TryTakeScreenshotRequest(out var mode))
         {
+            services.Overview.Close();
             if (outputId is not ulong target)
             {
                 services.ShowShellNotification("Screenshot failed", "No output is available.", "camera");

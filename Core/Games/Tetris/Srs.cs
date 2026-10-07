@@ -2,7 +2,10 @@ namespace HyprNetShell.Core.Games.Tetris;
 
 internal interface IRotationSystem
 {
-    int WallKickChecksCount { get; }
+    int WallKickChecksCount
+    {
+        get;
+    }
     int[,] this[TetraminoType type] { get; }
     Block?[,] GetRotation(Tetramino tetramino, RotationDirection direction);
     bool Rotate(Tetramino tetramino, RotationDirection direction, out int testIndex);
@@ -10,7 +13,7 @@ internal interface IRotationSystem
 
 internal sealed class Srs(TetrisGame game) : IRotationSystem
 {
-    internal const int TestsCount = 5;
+    internal const int TESTS_COUNT = 5;
 
     private static readonly CellPoint[,] WallKickData =
     {
@@ -44,7 +47,7 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
         { new(0, 0), new(-2, 0), new(+1, 0), new(-2, -1), new(+1, +2) },
     };
 
-    public int WallKickChecksCount => TestsCount;
+    public int WallKickChecksCount => TESTS_COUNT;
     public int[,] this[TetraminoType type] => GetTetramino(type);
 
     public Block?[,] GetRotation(Tetramino tetramino, RotationDirection direction) =>
@@ -54,7 +57,7 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
 
     public bool Rotate(Tetramino tetramino, RotationDirection direction, out int testIndex)
     {
-        for (testIndex = 0; testIndex < TestsCount; testIndex++)
+        for (testIndex = 0; testIndex < TESTS_COUNT; testIndex++)
         {
             var offset = GetWallKick(tetramino.Type, testIndex, tetramino.CurrentRotation, direction);
             if (!IsRotationAvailable(tetramino, offset.X, offset.Y, direction))
@@ -72,9 +75,9 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
     private bool IsRotationAvailable(Tetramino tetramino, int dx, int dy, RotationDirection direction)
     {
         var layout = GetRotation(tetramino, direction);
-        for (var y = 0; y < TetrisGame.TetraminoSize; y++)
+        for (var y = 0; y < TetrisGame.TETRAMINO_SIZE; y++)
         {
-            for (var x = 0; x < TetrisGame.TetraminoSize; x++)
+            for (var x = 0; x < TetrisGame.TETRAMINO_SIZE; x++)
             {
                 if (layout[x, y] is null)
                 {
@@ -83,7 +86,7 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
 
                 var boardX = tetramino.X + x + dx;
                 var boardY = tetramino.Y - y + dy;
-                if (boardX >= TetrisGame.BoardWidth || boardY >= TetrisGame.BoardHeight || boardX < 0 || boardY < 0 ||
+                if (boardX >= TetrisGame.BOARD_WIDTH || boardY >= TetrisGame.BOARD_HEIGHT || boardX < 0 || boardY < 0 ||
                     game.Board.HasBlock(boardX, boardY))
                 {
                     return false;
@@ -97,8 +100,7 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
     private static CellPoint GetWallKick(TetraminoType type, int testIndex, int rotation, RotationDirection direction)
     {
         var clockwise = direction == RotationDirection.Clockwise;
-        return type switch
-        {
+        return type switch {
             TetraminoType.O => new CellPoint(0, 0),
             TetraminoType.I => clockwise
                 ? WallKickDataI[rotation, testIndex]
@@ -109,8 +111,7 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
         };
     }
 
-    internal static int[,] GetTetramino(TetraminoType type) => type switch
-    {
+    internal static int[,] GetTetramino(TetraminoType type) => type switch {
         TetraminoType.I => new int[,]
         {
             { 0, 1, 0, 0 },
@@ -160,6 +161,6 @@ internal sealed class Srs(TetrisGame game) : IRotationSystem
             { 7, 0, 0, 0 },
             { 0, 0, 0, 0 },
         },
-        _ => new int[TetrisGame.TetraminoSize, TetrisGame.TetraminoSize],
+        _ => new int[TetrisGame.TETRAMINO_SIZE, TetrisGame.TETRAMINO_SIZE],
     };
 }

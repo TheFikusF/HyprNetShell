@@ -7,7 +7,10 @@ internal sealed class Timer(float maxTime, bool repeat = false)
     internal float Time => _time;
     internal float MaxTime { get; set; } = maxTime;
     internal bool Repeat { get; set; } = repeat;
-    internal bool Started { get; private set; }
+    internal bool Started
+    {
+        get; private set;
+    }
     internal event Action? Completed;
 
     internal void Resume() => Started = true;

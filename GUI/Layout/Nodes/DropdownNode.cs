@@ -6,12 +6,12 @@ namespace HyprNetShell.GUI.Layout.Nodes;
 
 public sealed class DropdownNode : Node
 {
-    private const int TriggerHeight = 36;
-    private const int OptionHeight = 34;
-    private const int TriggerSpacing = 4;
-    private const int OptionsSpacing = 8;
-    private const int PopupPadding = 8;
-    private const float AnimationSpeed = 18.0f;
+    private const int TRIGGER_HEIGHT = 36;
+    private const int OPTION_HEIGHT = 34;
+    private const int TRIGGER_SPACING = 4;
+    private const int OPTIONS_SPACING = 8;
+    private const int POPUP_PADDING = 8;
+    private const float ANIMATION_SPEED = 18.0f;
 
     private readonly IReadOnlyList<string> _options;
     private readonly SvgAsset _chevronIcon;
@@ -24,10 +24,16 @@ public sealed class DropdownNode : Node
     private float _chevronRotation;
     private bool _isOpen;
 
-    public override int Width { get; }
-    public override int Height => TriggerHeight;
+    public override int Width
+    {
+        get;
+    }
+    public override int Height => TRIGGER_HEIGHT;
 
-    public int SelectedIndex { get; set; }
+    public int SelectedIndex
+    {
+        get; set;
+    }
     public float FontSize { get; init; } = ThemeManager.Current.Text.Size;
     public Color BackgroundColor { get; init; } = Color.FromRgb(31, 35, 44, 0.9f);
     public Color HoverColor { get; init; } = Color.FromRgb(65, 69, 78, 0.95f);
@@ -86,11 +92,10 @@ public sealed class DropdownNode : Node
         _chevronRotation = PrimitivesMath.LerpSmooth(
             _chevronRotation,
             _isOpen ? MathF.PI : 0.0f,
-            AnimationSpeed,
+            ANIMATION_SPEED,
             Renderer.DeltaTime);
 
-        var root = new BoxNode(Width, TriggerHeight)
-        {
+        var root = new BoxNode(Width, TRIGGER_HEIGHT) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Children = [BuildTrigger()],
@@ -102,7 +107,7 @@ public sealed class DropdownNode : Node
         Rect? optionsRect = null;
         if (wasOpen)
         {
-            var optionsY = y + TriggerHeight + TriggerSpacing;
+            var optionsY = y + TRIGGER_HEIGHT + TRIGGER_SPACING;
             var optionsOverlay = BuildOptionsOverlay();
             optionsRect = new Rect(x, optionsY, optionsOverlay.Width, optionsOverlay.Height);
             Layout.RegisterLayerInputRegion(RenderLayer.OptionsSelector, optionsRect.Value);
@@ -117,7 +122,7 @@ public sealed class DropdownNode : Node
             });
         }
 
-        var triggerRect = new Rect(x, y, Width, TriggerHeight);
+        var triggerRect = new Rect(x, y, Width, TRIGGER_HEIGHT);
         if (wasOpen &&
             Layout.Input.PointerPressed &&
             !Layout.Input.Contains(triggerRect) &&
@@ -137,8 +142,7 @@ public sealed class DropdownNode : Node
         Opacity = 1.0f;
     }
 
-    private Node BuildTrigger() => new BoxNode(Width, TriggerHeight)
-    {
+    private Node BuildTrigger() => new BoxNode(Width, TRIGGER_HEIGHT) {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         IsHovered = _triggerHovered,
@@ -162,28 +166,26 @@ public sealed class DropdownNode : Node
     private Node BuildOptionsOverlay()
     {
         var borderInset = (int)MathF.Ceiling(BorderWidth * 2.0f);
-        var width = Width + PopupPadding * 2 + borderInset;
-        var height = OptionHeight * _options.Count +
-                     OptionsSpacing * Math.Max(0, _options.Count - 1) +
-                     PopupPadding * 2 +
+        var width = Width + POPUP_PADDING * 2 + borderInset;
+        var height = OPTION_HEIGHT * _options.Count +
+                     OPTIONS_SPACING * Math.Max(0, _options.Count - 1) +
+                     POPUP_PADDING * 2 +
                      borderInset;
-        return new BoxNode(width, height)
-        {
+        return new BoxNode(width, height) {
             IgnoreLayout = true,
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = PopupBackgroundColor,
                 BorderColor = BorderColor,
                 BorderWidth = BorderWidth,
                 BorderRadius = 8,
-                Padding = PopupPadding,
-                Spacing = OptionsSpacing,
+                Padding = POPUP_PADDING,
+                Spacing = OPTIONS_SPACING,
                 ShadowColor = Color.Black with { A = 0.65f },
                 ShadowDistance = 8.0f,
             },
-            Children = [..BuildOptions()],
+            Children = [.. BuildOptions()],
         };
     }
 
@@ -197,8 +199,7 @@ public sealed class DropdownNode : Node
                 : index == SelectedIndex ? SelectedColor : BackgroundColor;
             _optionBackgrounds[index] = AnimateColor(_optionBackgrounds[index], target);
 
-            yield return new BoxNode(Width, OptionHeight)
-            {
+            yield return new BoxNode(Width, OPTION_HEIGHT) {
                 HorizontalAlignment = ItemsAlignment.Spread,
                 VerticalAlignment = ItemsAlignment.Center,
                 IsHovered = _optionHovered[index],
@@ -227,17 +228,19 @@ public sealed class DropdownNode : Node
         _onSelected(index);
     }
 
-    private Style ButtonStyle(Color background) => new()
-    {
-        BackgroundColor = background with { A = 1.0f },
+    private Style ButtonStyle(Color background) => new() {
+        BackgroundColor = background with {
+            A = 1.0f
+        },
         BorderColor = BorderColor,
         BorderWidth = BorderWidth,
         BorderRadius = BorderRadius,
     };
 
-    private Style OptionStyle(Color background, bool selected) => new()
-    {
-        BackgroundColor = background with { A = 1.0f },
+    private Style OptionStyle(Color background, bool selected) => new() {
+        BackgroundColor = background with {
+            A = 1.0f
+        },
         BorderColor = BorderColor,
         BorderWidth = selected ? BorderWidth : 0,
         BorderRadius = BorderRadius,
@@ -245,5 +248,5 @@ public sealed class DropdownNode : Node
     };
 
     private static Color AnimateColor(Color current, Color target) =>
-        Color.LerpSmooth(current, target, AnimationSpeed, Renderer.DeltaTime);
+        Color.LerpSmooth(current, target, ANIMATION_SPEED, Renderer.DeltaTime);
 }

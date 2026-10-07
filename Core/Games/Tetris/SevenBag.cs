@@ -2,7 +2,10 @@ namespace HyprNetShell.Core.Games.Tetris;
 
 internal interface IRandomGenerator
 {
-    TetraminoType Next { get; }
+    TetraminoType Next
+    {
+        get;
+    }
     TetraminoType Dequeue();
     TetraminoType? GetNext(int index);
     void Init();

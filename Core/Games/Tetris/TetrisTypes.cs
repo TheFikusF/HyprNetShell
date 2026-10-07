@@ -66,13 +66,31 @@ public sealed class Block
         Scale = 1f;
     }
 
-    public TetraminoType Type { get; }
-    public BlockLayer Layer { get; internal set; }
-    public Vector2 RenderPosition { get; private set; }
-    public Vector2 TargetPosition { get; internal set; }
-    public float Scale { get; private set; }
+    public TetraminoType Type
+    {
+        get;
+    }
+    public BlockLayer Layer
+    {
+        get; internal set;
+    }
+    public Vector2 RenderPosition
+    {
+        get; private set;
+    }
+    public Vector2 TargetPosition
+    {
+        get; internal set;
+    }
+    public float Scale
+    {
+        get; private set;
+    }
     public bool IsVisible => !IsAnimationComplete;
-    public bool IsAnimationComplete { get; private set; }
+    public bool IsAnimationComplete
+    {
+        get; private set;
+    }
 
     internal void Appear(float duration)
     {

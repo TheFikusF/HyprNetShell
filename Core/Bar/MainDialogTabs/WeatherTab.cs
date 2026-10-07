@@ -42,8 +42,7 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
             return;
         }
 
-        _selectedDayIndex = direction switch
-        {
+        _selectedDayIndex = direction switch {
             SelectionDirection.Up => Math.Max(0, _selectedDayIndex - 1),
             SelectionDirection.Down => Math.Min(dayCount - 1, _selectedDayIndex + 1),
             _ => _selectedDayIndex,
@@ -59,8 +58,7 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
         var state = weather.Snapshot;
         if (state.Forecast.Count == 0)
         {
-            return new BoxNode
-            {
+            return new BoxNode {
                 Direction = Direction.Vertical,
                 Style = new Style { Spacing = 12 },
                 Children =
@@ -75,8 +73,7 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
         _selectedDayIndex = Math.Min(_selectedDayIndex, state.Forecast.Count - 1);
         var selectedDay = state.Forecast[_selectedDayIndex];
         var condition = weather.GetCondition(state.CurrentWeatherCode);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 16 },
@@ -145,8 +142,7 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
             return new TextNode("Hourly forecast unavailable", color: ThemeManager.Current.Text.MutedColor);
         }
 
-        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Stretch)
-        {
+        return new BoxNode(Style.Spacer, ItemsAlignment.Stretch, ItemsAlignment.Stretch) {
             Children = [.. visible.Select(BuildHour)],
         };
     }
@@ -155,13 +151,11 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
     {
         var condition = weather.GetCondition(hour.WeatherCode);
         var current = hour.Time.Date == DateTime.Today && hour.Time.Hour >= DateTime.Now.Hour && hour.Time.Hour <= (DateTime.Now.Hour + 2);
-        return new()
-        {
+        return new() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(current ? ThemeManager.Current.Active : ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(current ? ThemeManager.Current.Active : ThemeManager.Current.Panel) with {
                 Padding = 8 + (current ? 0 : (int)ThemeManager.Current.Border.Width),
                 BorderRadius = 8,
                 BorderWidth = current ? ThemeManager.Current.Border.Width : 0,
@@ -181,8 +175,7 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
     {
         var overallMinimum = forecast.Min(day => day.Minimum);
         var overallMaximum = forecast.Max(day => day.Maximum);
-        return new()
-        {
+        return new() {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
@@ -196,14 +189,12 @@ internal sealed class WeatherTab(WeatherService weather) : IMainDialogTab
         var today = day.Date == DateOnly.FromDateTime(DateTime.Today);
         var selected = index == _selectedDayIndex;
         var state = _dayStates.GetState(day.Date, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () => _selectedDayIndex = index,
             IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(14, 9),
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,

@@ -9,7 +9,7 @@ internal sealed class DeviceBatteryService(
     KdeConnectService kdeConnect,
     NotificationService notifications)
 {
-    internal const int LowBatteryPercentage = 15;
+    internal const int LOW_BATTERY_PERCENTAGE = 15;
 
     private readonly Dictionary<string, DeviceState> _states = new(StringComparer.Ordinal);
     private DeviceBatteriesSnapshot _snapshot = DeviceBatteriesSnapshot.Empty;
@@ -86,7 +86,7 @@ internal sealed class DeviceBatteryService(
 
     private void CheckNotifications(DeviceBatterySnapshot device)
     {
-        var isLow = device.Percentage <= LowBatteryPercentage && device.IsCharging is not true;
+        var isLow = device.Percentage <= LOW_BATTERY_PERCENTAGE && device.IsCharging is not true;
         var isFull = device.Percentage == 100;
 
         if (!_states.TryGetValue(device.Id, out var previous))

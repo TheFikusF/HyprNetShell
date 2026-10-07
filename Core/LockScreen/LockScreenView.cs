@@ -26,8 +26,7 @@ public sealed class LockScreenView()
         RawImageData? background)
     {
         var bullets = new string('•', Math.Clamp(passwordLength, 0, 64));
-        var statusText = status switch
-        {
+        var statusText = status switch {
             LockScreenStatus.Authenticating => "Checking…",
             LockScreenStatus.Denied => "Authentication failed",
             LockScreenStatus.Error => "Authentication unavailable",
@@ -40,8 +39,7 @@ public sealed class LockScreenView()
 
         var now = DateTime.Now;
 
-        var panel = new BoxNode(440)
-        {
+        var panel = new BoxNode(440) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Center,
             Style = new Style { Spacing = 32 },
@@ -105,7 +103,9 @@ public sealed class LockScreenView()
                 }            ]
         };
 
-        return new LockScreenRootNode(width, height, background, panel, ThemeManager.Current.Panel with { A = 1 });
+        return new LockScreenRootNode(width, height, background, panel, ThemeManager.Current.Panel with {
+            A = 1
+        });
     }
 
     private sealed class LockScreenRootNode(
@@ -130,7 +130,9 @@ public sealed class LockScreenView()
                 renderer.DrawImage(background, bounds, Color.White);
             }
 
-            renderer.FillRect(bounds, Color.Black with { A = 0.28f });
+            renderer.FillRect(bounds, Color.Black with {
+                A = 0.28f
+            });
             content.Draw(
                 renderer,
                 x + Math.Max(0, (Width - content.Width) / 2),

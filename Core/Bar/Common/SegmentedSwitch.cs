@@ -11,12 +11,11 @@ internal sealed class SegmentedSwitch
 
     private readonly Dictionary<string, ModulesCommon.BoxState> _states = [];
 
-    public BoxNode Build(IReadOnlyList<Item> items, string selectedId, Action<string> onSelected) => new()
-    {
+    public BoxNode Build(IReadOnlyList<Item> items, string selectedId, Action<string> onSelected) => new() {
         Direction = Direction.Horizontal,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Center,
-        Children = [..items.Select((item, index) => BuildItem(item, selectedId, onSelected, index, items.Count))],
+        Children = [.. items.Select((item, index) => BuildItem(item, selectedId, onSelected, index, items.Count))],
     };
 
     private BoxNode BuildItem(Item item,
@@ -29,14 +28,12 @@ internal sealed class SegmentedSwitch
         var normal = selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         var state = _states.GetState(item.Id, normal).UpdateColor(normal);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = selected ? null : () => onSelected(item.Id),
-            Style = ModulesCommon.ModuleStyle(state.Background, index == 0, index == count - 1) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background, index == 0, index == count - 1) with {
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
                 Padding = new Insets(8, 6),
             },

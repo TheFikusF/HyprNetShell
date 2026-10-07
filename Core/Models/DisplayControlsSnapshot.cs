@@ -24,7 +24,10 @@ public sealed record DisplayControlsSnapshot(
 {
     public bool Available => Display is not null || Keyboard is not null || HyprsunsetInstalled;
 
-    public static DisplayControlsSnapshot Empty { get; } = new(
+    public static DisplayControlsSnapshot Empty
+    {
+        get;
+    } = new(
         null,
         null,
         false,
@@ -45,7 +48,10 @@ public static class TemperatureCurveMath
     public const int MINIMUM_TEMPERATURE = 2000;
     public const int MAXIMUM_TEMPERATURE = 6500;
 
-    public static IReadOnlyList<TemperatureCurvePoint> DefaultPoints { get; } =
+    public static IReadOnlyList<TemperatureCurvePoint> DefaultPoints
+    {
+        get;
+    } =
     [
         new(0.0f, 3500),
         new(7.0f, 6000),
@@ -62,7 +68,10 @@ public static class BrightnessCurveMath
     public const int MINIMUM_BRIGHTNESS = 1;
     public const int MAXIMUM_BRIGHTNESS = 100;
 
-    public static IReadOnlyList<BrightnessCurvePoint> DefaultPoints { get; } =
+    public static IReadOnlyList<BrightnessCurvePoint> DefaultPoints
+    {
+        get;
+    } =
     [
         new(0.0f, 30),
         new(7.0f, 55),

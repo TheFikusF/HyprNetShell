@@ -21,8 +21,7 @@ internal static class GoogleCalendarClient
         string? pageToken = null;
         for (var page = 0; page < MaximumPages; page++)
         {
-            var parameters = new Dictionary<string, string>
-            {
+            var parameters = new Dictionary<string, string> {
                 ["maxResults"] = "250",
                 ["showDeleted"] = "false",
                 ["showHidden"] = "true",
@@ -78,8 +77,7 @@ internal static class GoogleCalendarClient
         string? pageToken = null;
         for (var page = 0; page < MaximumPages; page++)
         {
-            var parameters = new Dictionary<string, string>
-            {
+            var parameters = new Dictionary<string, string> {
                 ["maxResults"] = "2500",
                 ["singleEvents"] = "true",
                 ["orderBy"] = "startTime",

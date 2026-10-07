@@ -10,18 +10,38 @@ internal sealed partial class WeatherJsonContext : JsonSerializerContext
 
 internal sealed class WeatherResponse
 {
-    [JsonPropertyName("current")] public CurrentWeather? Current { get; init; }
+    [JsonPropertyName("current")]
+    public CurrentWeather? Current
+    {
+        get; init;
+    }
 
-    [JsonPropertyName("daily")] public DailyWeather? Daily { get; init; }
+    [JsonPropertyName("daily")]
+    public DailyWeather? Daily
+    {
+        get; init;
+    }
 
-    [JsonPropertyName("hourly")] public HourlyWeather? Hourly { get; init; }
+    [JsonPropertyName("hourly")]
+    public HourlyWeather? Hourly
+    {
+        get; init;
+    }
 }
 
 internal sealed class CurrentWeather
 {
-    [JsonPropertyName("temperature_2m")] public double Temperature { get; init; }
+    [JsonPropertyName("temperature_2m")]
+    public double Temperature
+    {
+        get; init;
+    }
 
-    [JsonPropertyName("weather_code")] public int WeatherCode { get; init; }
+    [JsonPropertyName("weather_code")]
+    public int WeatherCode
+    {
+        get; init;
+    }
 }
 
 internal sealed class HourlyWeather

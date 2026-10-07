@@ -221,9 +221,18 @@ internal sealed class KdeConnectPacket : IDisposable
 {
     private readonly JsonDocument _document;
 
-    internal long Id { get; }
-    internal string Type { get; }
-    internal JsonElement Body { get; }
+    internal long Id
+    {
+        get;
+    }
+    internal string Type
+    {
+        get;
+    }
+    internal JsonElement Body
+    {
+        get;
+    }
 
     internal KdeConnectPacket(JsonDocument document, long id, string type, JsonElement body)
     {

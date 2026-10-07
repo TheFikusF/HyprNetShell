@@ -20,12 +20,10 @@ internal sealed class TrayModule(
         var items = service.Snapshot;
 
         return items.Count != 0
-            ? new BoxNode
-            {
+            ? new BoxNode {
                 Direction = Direction.Horizontal,
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = new Style()
-                {
+                Style = new Style() {
                     BorderRadius = 999,
                     ShadowColor = Color.Black with { A = 0.45f },
                     ShadowDistance = 5.0f
@@ -40,8 +38,9 @@ internal sealed class TrayModule(
     {
         if (_nodes.TryGetValue(item.Id, out var node) == false)
         {
-            node = new NodeWithPopup(popupCoordinator, $"tray_module_{item.Id}")
-            { HorizontalAlignment = ItemsAlignment.End };
+            node = new NodeWithPopup(popupCoordinator, $"tray_module_{item.Id}") {
+                HorizontalAlignment = ItemsAlignment.End
+            };
             _nodes[item.Id] = node;
         }
 
@@ -68,8 +67,7 @@ internal sealed class TrayModule(
     private BoxNode BuildPopup(TrayItemSnapshot item)
     {
         var rows = item.Menu?.Rows;
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = ModulesCommon.PopupStyle(),
@@ -90,16 +88,14 @@ internal sealed class TrayModule(
         var target = state.Hovered && row.Enabled ? Color.Lighten(ThemeManager.Current.Panel, 0.12f) : ThemeManager.Current.Panel;
         state.Background = Color.LerpSmooth(state.Background, target, 18, Renderer.DeltaTime);
 
-        return new BoxNode(height: 30)
-        {
+        return new BoxNode(height: 30) {
             Direction = Direction.Horizontal,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = state.Hovered,
             OnClick = row is { Enabled: true, ActionId: { } actionId }
                 ? () => _ = service.TriggerMenuActionAsync(item, actionId)
                 : null,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = state.Background,
                 BorderRadius = 6,
                 Padding = new Insets(8, 4),

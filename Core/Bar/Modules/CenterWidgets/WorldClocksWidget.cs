@@ -30,13 +30,11 @@ internal sealed class WorldClocksWidget
         _clipboard = clipboard;
     }
 
-    public Node Draw(DateTime now, Action? openClocks = null) => new BoxNode(WIDTH)
-    {
+    public Node Draw(DateTime now, Action? openClocks = null) => new BoxNode(WIDTH) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Start,
-        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-        {
+        Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
             BorderRadius = 8,
             Spacing = 8,
         },

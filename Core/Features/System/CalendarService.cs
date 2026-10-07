@@ -26,7 +26,7 @@ internal sealed class CalendarService : IBarDataService, IDisposable
 
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(12);
-    private const int MaximumOccurrencesPerSource = 50_000;
+    private const int MAXIMUM_OCCURRENCES_PER_SOURCE = 50_000;
 
     private readonly Lock _stateLock = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
@@ -49,8 +49,7 @@ internal sealed class CalendarService : IBarDataService, IDisposable
     public CalendarService(OnlineAccountsService accounts)
     {
         _accounts = accounts;
-        _httpClient = new HttpClient
-        {
+        _httpClient = new HttpClient {
             Timeout = Timeout.InfiniteTimeSpan,
             MaxResponseContentBufferSize = 16 * 1024 * 1024,
         };
@@ -523,7 +522,7 @@ internal sealed class CalendarService : IBarDataService, IDisposable
                 calendar,
                 rangeStart,
                 rangeEnd,
-                MaximumOccurrencesPerSource,
+                MAXIMUM_OCCURRENCES_PER_SOURCE,
                 requestCancellation.Token);
             return new SourceRefreshResult(sourceKey, occurrences, null, DateTime.Now);
         }
@@ -588,10 +587,10 @@ internal sealed class CalendarService : IBarDataService, IDisposable
                 calendarEvent.IsAllDay,
                 string.IsNullOrWhiteSpace(calendarEvent.Location) ? null : calendarEvent.Location.Trim(),
                 sourceUrl));
-            if (occurrences.Count >= MaximumOccurrencesPerSource)
+            if (occurrences.Count >= MAXIMUM_OCCURRENCES_PER_SOURCE)
             {
                 throw new InvalidDataException(
-                    $"Calendar contains more than {MaximumOccurrencesPerSource:N0} occurrences in the supported range.");
+                    $"Calendar contains more than {MAXIMUM_OCCURRENCES_PER_SOURCE:N0} occurrences in the supported range.");
             }
         }
 

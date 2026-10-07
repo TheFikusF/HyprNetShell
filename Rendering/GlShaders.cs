@@ -13,6 +13,7 @@ internal static class GlShaders
     public static readonly string TEXTURED_VERTEX = Load("textured.vert.glsl");
     public static readonly string TEXTURE_FRAGMENT = Load("texture.frag.glsl");
     public static readonly string SVG_TEXTURE_FRAGMENT = Load("svg-texture.frag.glsl");
+    public static readonly string IMAGE_SHADOW_FRAGMENT = Load("image-shadow.frag.glsl");
     public static readonly string ALPHA_TEXTURE_FRAGMENT = Load("alpha-texture.frag.glsl");
 
     public static uint CreateProgram(GL gl, string vertexShader, string fragmentShader, string label)

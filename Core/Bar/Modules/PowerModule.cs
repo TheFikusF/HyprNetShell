@@ -24,8 +24,7 @@ internal sealed class PowerModule(
     private readonly Ref<bool> _powerOffHovered = new();
     private readonly Ref<bool> _rebootHovered = new();
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "power_module")
-    {
+    private readonly NodeWithPopup _node = new(popupCoordinator, "power_module") {
         HorizontalAlignment = ItemsAlignment.End,
     };
 
@@ -44,8 +43,7 @@ internal sealed class PowerModule(
         ],
         BuildPopup);
 
-    private Node BuildPopup() => new BoxNode(260)
-    {
+    private Node BuildPopup() => new BoxNode(260) {
         Direction = Direction.Vertical,
         HorizontalAlignment = ItemsAlignment.Stretch,
         Style = ModulesCommon.PopupStyle(),
@@ -69,13 +67,11 @@ internal sealed class PowerModule(
             background = Color.Lighten(background, 0.12f);
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = hovered,
             OnClick = onClick,
-            Style = ModulesCommon.ModuleStyle(background) with
-            {
+            Style = ModulesCommon.ModuleStyle(background) with {
                 BorderWidth = 0,
                 BorderRadius = 8,
                 Spacing = 10,

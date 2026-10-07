@@ -11,7 +11,10 @@ public sealed record WindowSummary(
     string Address,
     string ClassName,
     string InitialClassName,
-    string Title);
+    string Title,
+    string Identifier = "",
+    int Width = 0,
+    int Height = 0);
 
 public sealed record MonitorWorkspaceSnapshot(
     string Name,

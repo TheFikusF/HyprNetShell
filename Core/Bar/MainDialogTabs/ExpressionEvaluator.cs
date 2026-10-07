@@ -29,9 +29,18 @@ internal sealed class ExpressionEvaluator(string expression)
         while (true)
         {
             SkipWhitespace();
-            if (Take('+')) value += ParseTerm();
-            else if (Take('-')) value -= ParseTerm();
-            else return value;
+            if (Take('+'))
+            {
+                value += ParseTerm();
+            }
+            else if (Take('-'))
+            {
+                value -= ParseTerm();
+            }
+            else
+            {
+                return value;
+            }
         }
     }
 
@@ -41,22 +50,43 @@ internal sealed class ExpressionEvaluator(string expression)
         while (true)
         {
             SkipWhitespace();
-            if (Take('*')) value *= ParseFactor();
-            else if (Take('/')) value /= ParseFactor();
-            else return value;
+            if (Take('*'))
+            {
+                value *= ParseFactor();
+            }
+            else if (Take('/'))
+            {
+                value /= ParseFactor();
+            }
+            else
+            {
+                return value;
+            }
         }
     }
 
     private double ParseFactor()
     {
         SkipWhitespace();
-        if (Take('+')) return ParseFactor();
-        if (Take('-')) return -ParseFactor();
+        if (Take('+'))
+        {
+            return ParseFactor();
+        }
+
+        if (Take('-'))
+        {
+            return -ParseFactor();
+        }
+
         if (Take('('))
         {
             var value = ParseExpression();
             SkipWhitespace();
-            if (!Take(')')) throw new FormatException();
+            if (!Take(')'))
+            {
+                throw new FormatException();
+            }
+
             return value;
         }
 

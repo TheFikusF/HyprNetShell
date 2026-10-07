@@ -38,6 +38,7 @@ internal sealed class HyprlandService : IDisposable
     private bool _disposed;
 
     public HyprlandSnapshot Snapshot => _snapshot;
+    internal string FocusedAddress => Volatile.Read(ref _focusedAddress);
 
     public HyprlandService()
     {
@@ -539,8 +540,7 @@ internal sealed class HyprlandService : IDisposable
             .ToDictionary(group => group.Key, group => group.Select(ToWindowSummary).ToArray());
 
         var monitors = current.MonitorWorkspaces
-            .Select(monitor => monitor with
-            {
+            .Select(monitor => monitor with {
                 Workspaces = monitor.Workspaces
                     .Select(workspace => WithWindows(
                         workspace,
@@ -551,8 +551,7 @@ internal sealed class HyprlandService : IDisposable
             })
             .ToArray();
 
-        var updated = current with
-        {
+        var updated = current with {
             Windows = windows,
             MonitorWorkspaces = monitors,
             Workspaces = monitors.SelectMany(monitor => monitor.Workspaces).OrderBy(workspace => workspace.Id).ToArray(),
@@ -617,8 +616,7 @@ internal sealed class HyprlandService : IDisposable
         }
 
         var focusedWorkspaceId = currentMonitor?.ActiveWorkspace?.Id;
-        return current with
-        {
+        return current with {
             MonitorWorkspaces = monitorSnapshots,
             Workspaces = monitorSnapshots.SelectMany(monitor => monitor.Workspaces)
                 .OrderBy(workspace => workspace.Id)
@@ -632,15 +630,13 @@ internal sealed class HyprlandService : IDisposable
     {
         if (active is null)
         {
-            return current with
-            {
+            return current with {
                 FocusedTitle = "Desktop",
                 FocusedClassName = "",
             };
         }
 
-        return current with
-        {
+        return current with {
             FocusedTitle = FirstNonEmpty(active.Title, active.ClassName, "Desktop"),
             FocusedClassName = active.ClassName ?? "",
             FocusedWorkspaceId = active.Workspace?.Id > 0
@@ -656,7 +652,10 @@ internal sealed class HyprlandService : IDisposable
         client.Address ?? "",
         client.ClassName ?? "",
         client.InitialClassName ?? "",
-        FirstNonEmpty(client.Title, client.ClassName, client.InitialClassName, "(untitled)"));
+        FirstNonEmpty(client.Title, client.ClassName, client.InitialClassName, "(untitled)"),
+        client.Identifier ?? "",
+        client.Size is { Length: >= 2 } ? client.Size[0] : 0,
+        client.Size is { Length: >= 2 } ? client.Size[1] : 0);
 
     private void UpdateLayoutFromEvent(string data)
     {
@@ -665,8 +664,7 @@ internal sealed class HyprlandService : IDisposable
         var layoutName = parts.ElementAtOrDefault(1) ?? "";
         var current = _snapshot;
 
-        _snapshot = current with
-        {
+        _snapshot = current with {
             KeyboardName = string.IsNullOrWhiteSpace(keyboardName) ? current.KeyboardName : keyboardName,
             LayoutName = layoutName,
         };
@@ -678,8 +676,7 @@ internal sealed class HyprlandService : IDisposable
         var className = parts.ElementAtOrDefault(0) ?? "";
         var title = parts.ElementAtOrDefault(1) ?? "";
         _focusedAddress = "";
-        _snapshot = _snapshot with
-        {
+        _snapshot = _snapshot with {
             FocusedTitle = FirstNonEmpty(title, className, "Desktop"),
             FocusedClassName = className,
         };
@@ -699,8 +696,7 @@ internal sealed class HyprlandService : IDisposable
             .SelectMany(monitor => monitor.Workspaces)
             .FirstOrDefault(workspace => workspace.Windows.Any(candidate => AddressEquals(candidate.Address, address)));
         _focusedAddress = address;
-        _snapshot = current with
-        {
+        _snapshot = current with {
             FocusedTitle = window.Title,
             FocusedClassName = window.ClassName,
             FocusedWorkspaceId = workspace?.Id ?? current.FocusedWorkspaceId,
@@ -735,8 +731,7 @@ internal sealed class HyprlandService : IDisposable
                 workspaces.Add(BuildWorkspaceSnapshot(workspaceId, monitor.Name, true, []));
             }
 
-            return monitor with
-            {
+            return monitor with {
                 Current = monitorName is null ? monitor.Current : selected,
                 ActiveWorkspaceId = activeWorkspaceId,
                 Workspaces = workspaces
@@ -746,8 +741,7 @@ internal sealed class HyprlandService : IDisposable
             };
         }).ToArray();
 
-        _snapshot = current with
-        {
+        _snapshot = current with {
             MonitorWorkspaces = monitors,
             Workspaces = monitors.SelectMany(monitor => monitor.Workspaces).OrderBy(workspace => workspace.Id).ToArray(),
             FocusedWorkspaceId = workspaceId,
@@ -763,15 +757,13 @@ internal sealed class HyprlandService : IDisposable
         }
 
         var current = _snapshot;
-        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with
-        {
+        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with {
             Workspaces = monitor.Workspaces.Select(workspace => WithWindows(
                     workspace,
                     workspace.Windows.Where(window => !AddressEquals(window.Address, address)).ToArray()))
                 .ToArray(),
         }).ToArray();
-        _snapshot = current with
-        {
+        _snapshot = current with {
             Windows = current.Windows.Where(window => !AddressEquals(window.Address, address)).ToArray(),
             MonitorWorkspaces = monitors,
             Workspaces = monitors.SelectMany(monitor => monitor.Workspaces).OrderBy(workspace => workspace.Id).ToArray(),
@@ -790,16 +782,16 @@ internal sealed class HyprlandService : IDisposable
             return false;
         }
 
-        var updatedWindow = existing with { Title = FirstNonEmpty(title, existing.ClassName, "(untitled)") };
-        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with
-        {
+        var updatedWindow = existing with {
+            Title = FirstNonEmpty(title, existing.ClassName, "(untitled)")
+        };
+        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with {
             Workspaces = monitor.Workspaces.Select(workspace => WithWindows(
                     workspace,
                     workspace.Windows.Select(window => AddressEquals(window.Address, address) ? updatedWindow : window).ToArray()))
                 .ToArray(),
         }).ToArray();
-        _snapshot = current with
-        {
+        _snapshot = current with {
             Windows = current.Windows.Select(window => AddressEquals(window.Address, address) ? updatedWindow : window).ToArray(),
             MonitorWorkspaces = monitors,
             Workspaces = monitors.SelectMany(monitor => monitor.Workspaces).OrderBy(workspace => workspace.Id).ToArray(),
@@ -825,8 +817,7 @@ internal sealed class HyprlandService : IDisposable
             return false;
         }
 
-        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with
-        {
+        var monitors = current.MonitorWorkspaces.Select(monitor => monitor with {
             Workspaces = monitor.Workspaces.Select(workspace =>
             {
                 var windows = workspace.Windows.Where(candidate => !AddressEquals(candidate.Address, address)).ToList();
@@ -838,8 +829,7 @@ internal sealed class HyprlandService : IDisposable
                 return WithWindows(workspace, windows);
             }).ToArray(),
         }).ToArray();
-        _snapshot = current with
-        {
+        _snapshot = current with {
             MonitorWorkspaces = monitors,
             Workspaces = monitors.SelectMany(monitor => monitor.Workspaces).OrderBy(workspace => workspace.Id).ToArray(),
             FocusedWorkspaceId = AddressEquals(_focusedAddress, address) ? workspaceId : current.FocusedWorkspaceId,
@@ -923,7 +913,7 @@ internal sealed class HyprlandService : IDisposable
             Path.Combine(instanceDirectory, ".socket.sock"),
             Path.Combine(instanceDirectory, ".socket2.sock"));
     }
-    
+
     private static T? Deserialize<T>(string? json, JsonTypeInfo<T> typeInfo)
     {
         return string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize(json, typeInfo);

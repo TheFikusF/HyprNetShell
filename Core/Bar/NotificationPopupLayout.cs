@@ -26,8 +26,7 @@ internal static class NotificationPopupLayout
                 .Take(MAXIMUM_VISIBLE)
                 .ToArray();
 
-        return new BoxNode(height: screenHeight)
-        {
+        return new BoxNode(height: screenHeight) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.End,
             VerticalAlignment = ItemsAlignment.Start,
@@ -57,7 +56,7 @@ internal static class NotificationPopupLayout
             CardStates[notification.Id] = state;
         }
 
-        return NotificationCard.Draw(notification, service,state);
+        return NotificationCard.Draw(notification, service, state);
     }
 
     private static void RemoveExpiredCardStates(IReadOnlyList<NotificationSnapshot> notifications)

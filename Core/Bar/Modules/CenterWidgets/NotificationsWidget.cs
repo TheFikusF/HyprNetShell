@@ -12,7 +12,7 @@ namespace HyprNetShell.Core.Bar.Modules.CenterWidgets;
 
 internal sealed class NotificationsWidget(NotificationService service)
 {
-    private const int VisibleNotificationCount = 5;
+    private const int VISIBLE_NOTIFICATION_COUNT = 5;
 
     private readonly Ref<float> _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
     private readonly Dictionary<uint, NotificationCard.State> _cardStates = new();
@@ -32,10 +32,9 @@ internal sealed class NotificationsWidget(NotificationService service)
         BoundedListUi.NormalizeViewport(
             ref _firstNotificationIndex,
             filteredItems.Length,
-            VisibleNotificationCount);
+            VISIBLE_NOTIFICATION_COUNT);
 
-        return new BoxNode(CenterModule.WIDTH + (28 + 12) * 2)
-        {
+        return new BoxNode(CenterModule.WIDTH + (28 + 12) * 2) {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Stretch,
@@ -68,8 +67,7 @@ internal sealed class NotificationsWidget(NotificationService service)
         };
     }
 
-    private BoxNode BuildDoNotDisturbToggle(bool enabled) => new(height: 48)
-    {
+    private BoxNode BuildDoNotDisturbToggle(bool enabled) => new(height: 48) {
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         OnClick = service.ToggleDoNotDisturb,
@@ -90,8 +88,7 @@ internal sealed class NotificationsWidget(NotificationService service)
     {
         if (notifications.Count == 0)
         {
-            yield return new BoxNode(height: 64)
-            {
+            yield return new BoxNode(height: 64) {
                 HorizontalAlignment = ItemsAlignment.Center,
                 VerticalAlignment = ItemsAlignment.Center,
                 Children = [new TextNode("No notifications", ThemeManager.Current.Text.HeaderSize, ThemeManager.Current.Text.MutedColor)]
@@ -99,13 +96,12 @@ internal sealed class NotificationsWidget(NotificationService service)
             yield break;
         }
 
-        var content = new BoxNode
-        {
+        var content = new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = notifications
-                .VisibleItems(_firstNotificationIndex, VisibleNotificationCount)
+                .VisibleItems(_firstNotificationIndex, VISIBLE_NOTIFICATION_COUNT)
                 .Select(item => BuildNotificationCard(item.Item))
                 .ToArray(),
         };
@@ -114,7 +110,7 @@ internal sealed class NotificationsWidget(NotificationService service)
             content,
             _firstNotificationIndex,
             notifications.Count,
-            VisibleNotificationCount, delta => ScrollNotifications(delta, notifications.Count));
+            VISIBLE_NOTIFICATION_COUNT, delta => ScrollNotifications(delta, notifications.Count));
     }
 
     private Node BuildNotificationCard(NotificationSnapshot notification)
@@ -133,7 +129,7 @@ internal sealed class NotificationsWidget(NotificationService service)
             ref _firstNotificationIndex,
             delta > 0.0f ? 1 : -1,
             notificationCount,
-            VisibleNotificationCount);
+            VISIBLE_NOTIFICATION_COUNT);
 
     private DropdownNode BuildDateDropdown()
     {
@@ -147,8 +143,7 @@ internal sealed class NotificationsWidget(NotificationService service)
             {
                 _dateRange = (HistoryDateRange)selected;
                 _firstNotificationIndex = 0;
-            })
-        {
+            }) {
             FontSize = ThemeManager.Current.Text,
             BackgroundColor = ThemeManager.Current.Panel,
             HoverColor = Color.Lighten(ThemeManager.Current.Panel, 0.18f),
@@ -180,14 +175,12 @@ internal sealed class NotificationsWidget(NotificationService service)
         }
         _clearButtonState.UpdateColor(ThemeManager.Current.Panel);
 
-        return new BoxNode
-        {
+        return new BoxNode {
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = count > 0 ? service.Clear : null,
             IsHovered = count > 0 ? _clearButtonState.Hovered : null,
             Opacity = count > 0 ? 1 : 0.45f,
-            Style = new Style
-            {
+            Style = new Style {
                 BackgroundColor = _clearButtonState.Background,
                 BorderRadius = 8,
                 Padding = new Insets(8, 6),

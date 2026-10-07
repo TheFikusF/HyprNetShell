@@ -5,7 +5,9 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <poll.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,34 @@
 #include "ext-image-capture-source-v1-client-protocol.h"
 #include "ext-image-copy-capture-v1-client-protocol.h"
 #include "ext-data-control-v1-client-protocol.h"
+#include "ext-foreign-toplevel-list-v1-client-protocol.h"
+#include "hyprland-toplevel-mapping-v1-client-protocol.h"
+
+struct thumbnail_window {
+    struct hypr_layer* layer;
+    struct thumbnail_window* next;
+    struct ext_foreign_toplevel_handle_v1* handle;
+    struct hyprland_toplevel_window_mapping_handle_v1* address_mapping;
+    char address[19];
+    uint64_t id, revision;
+    char *title, *app_id, *identifier;
+    char *pending_title, *pending_app_id, *pending_identifier;
+    int listed, visible, blocked;
+    char error[256];
+    struct ext_image_capture_source_v1* source;
+    struct ext_image_copy_capture_session_v1* session;
+    struct ext_image_copy_capture_frame_v1* frame;
+    struct wl_buffer* buffer;
+    void* mapping;
+    size_t mapping_size;
+    unsigned char* rgba;
+    int rgba_width, rgba_height;
+    uint32_t width, height, format;
+    uint32_t pending_width, pending_height, pending_format;
+    uint32_t buffer_width, buffer_height, buffer_format, transform;
+    int constraints_done, constraints_pending, pending_has_format, has_format;
+    int64_t retry_at;
+};
 
 struct hypr_bar {
     struct hypr_layer* layer;
@@ -86,6 +116,15 @@ struct hypr_layer {
     uint32_t layer_shell_version;
     struct ext_output_image_capture_source_manager_v1* output_capture_manager;
     struct ext_image_copy_capture_manager_v1* image_capture_manager;
+    struct ext_foreign_toplevel_list_v1* toplevel_list;
+    struct ext_foreign_toplevel_image_capture_source_manager_v1* toplevel_capture_manager;
+    uint32_t toplevel_list_name, toplevel_capture_name, image_capture_name, shm_name;
+    struct hyprland_toplevel_mapping_manager_v1* mapping_manager;
+    uint32_t mapping_manager_name;
+    struct thumbnail_window* windows;
+    uint64_t next_window_id, window_serial, thumbnail_last_started_id;
+    int thumbnails_enabled;
+    char thumbnail_error[256];
     struct ext_data_control_manager_v1* data_control_manager;
     struct ext_data_control_device_v1* data_control_device;
     struct ext_data_control_offer_v1* incoming_offer;
@@ -128,6 +167,13 @@ static int create_screenshot_surface(struct hypr_bar* bar);
 static void destroy_screenshot_surface(struct hypr_bar* bar);
 static void ensure_data_control_device(struct hypr_layer* layer);
 static const struct wl_seat_listener seat_listener;
+static const struct ext_foreign_toplevel_list_v1_listener thumbnail_list_listener;
+static void thumbnail_stop(struct thumbnail_window* window);
+static void thumbnail_destroy(struct thumbnail_window* window);
+static void thumbnail_pump(struct hypr_layer* layer);
+static void thumbnail_backend_lost(struct hypr_layer* layer, const char* message);
+static void thumbnail_request_address(struct thumbnail_window* window);
+static void thumbnail_clear_address(struct thumbnail_window* window);
 
 static int64_t monotonic_milliseconds(void) {
     struct timespec value;
@@ -880,6 +926,29 @@ static void registry_global(
         }
     } else if (strcmp(interface, wl_shm_interface.name) == 0 && layer->shm == NULL) {
         layer->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+        layer->shm_name = name;
+    } else if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) == 0 &&
+               layer->toplevel_list == NULL) {
+        layer->toplevel_list = wl_registry_bind(registry, name, &ext_foreign_toplevel_list_v1_interface, 1);
+        layer->toplevel_list_name = name;
+        if (layer->toplevel_list == NULL ||
+            ext_foreign_toplevel_list_v1_add_listener(layer->toplevel_list, &thumbnail_list_listener, layer) < 0)
+            fail_fatal(layer, "failed to initialize ext-foreign-toplevel-list-v1");
+    } else if (strcmp(interface, hyprland_toplevel_mapping_manager_v1_interface.name) == 0 &&
+               layer->mapping_manager == NULL) {
+        layer->mapping_manager = wl_registry_bind(registry, name, &hyprland_toplevel_mapping_manager_v1_interface, 1);
+        if (layer->mapping_manager == NULL) {
+            fail("failed to bind optional hyprland-toplevel-mapping-v1; exact window addresses unavailable");
+        } else {
+            layer->mapping_manager_name = name;
+            for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+                thumbnail_request_address(w);
+        }
+    } else if (strcmp(interface, ext_foreign_toplevel_image_capture_source_manager_v1_interface.name) == 0 &&
+               layer->toplevel_capture_manager == NULL) {
+        layer->toplevel_capture_manager = wl_registry_bind(registry, name,
+            &ext_foreign_toplevel_image_capture_source_manager_v1_interface, 1);
+        layer->toplevel_capture_name = name;
     } else if (strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name) == 0 &&
                layer->output_capture_manager == NULL) {
         layer->output_capture_manager = wl_registry_bind(
@@ -888,6 +957,7 @@ static void registry_global(
                layer->image_capture_manager == NULL) {
         layer->image_capture_manager = wl_registry_bind(
             registry, name, &ext_image_copy_capture_manager_v1_interface, 1);
+        layer->image_capture_name = name;
     } else if (strcmp(interface, ext_data_control_manager_v1_interface.name) == 0 &&
                layer->data_control_manager == NULL) {
         layer->data_control_manager = wl_registry_bind(
@@ -934,6 +1004,44 @@ static void registry_global(
 static void registry_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
     (void)registry;
     struct hypr_layer* layer = data;
+    if (layer->mapping_manager != NULL && name == layer->mapping_manager_name) {
+        fail("hyprland-toplevel-mapping-v1 global removed; exact window addresses cleared");
+        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+            thumbnail_clear_address(w);
+        hyprland_toplevel_mapping_manager_v1_destroy(layer->mapping_manager);
+        layer->mapping_manager = NULL;
+        layer->mapping_manager_name = 0;
+    }
+    if (name == layer->toplevel_list_name || name == layer->toplevel_capture_name ||
+        name == layer->image_capture_name || name == layer->shm_name) {
+        thumbnail_backend_lost(layer, "thumbnail protocol global removed; re-enable after compositor support returns");
+        if (name == layer->toplevel_list_name && layer->toplevel_list != NULL) {
+            while (layer->windows != NULL) {
+                struct thumbnail_window* window = layer->windows;
+                layer->windows = window->next;
+                thumbnail_destroy(window);
+            }
+            ext_foreign_toplevel_list_v1_destroy(layer->toplevel_list);
+            layer->toplevel_list = NULL;
+            layer->toplevel_list_name = 0;
+            layer->window_serial++;
+        }
+        if (name == layer->toplevel_capture_name && layer->toplevel_capture_manager != NULL) {
+            ext_foreign_toplevel_image_capture_source_manager_v1_destroy(layer->toplevel_capture_manager);
+            layer->toplevel_capture_manager = NULL;
+            layer->toplevel_capture_name = 0;
+        }
+        if (name == layer->image_capture_name && layer->image_capture_manager != NULL) {
+            ext_image_copy_capture_manager_v1_destroy(layer->image_capture_manager);
+            layer->image_capture_manager = NULL;
+            layer->image_capture_name = 0;
+        }
+        if (name == layer->shm_name && layer->shm != NULL) {
+            wl_shm_destroy(layer->shm);
+            layer->shm = NULL;
+            layer->shm_name = 0;
+        }
+    }
     if (layer->seat != NULL && layer->seat_registry_name == name) {
         release_seat(layer);
         return;
@@ -1436,6 +1544,613 @@ hypr_layer* hypr_layer_create(int reserved_height) {
     return layer;
 }
 
+static struct thumbnail_window* thumbnail_find(const hypr_layer* layer, uint64_t id) {
+    if (layer == NULL || id == 0) return NULL;
+    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+        if (w->id == id && w->listed) return w;
+    return NULL;
+}
+
+static void thumbnail_buffer_destroy(struct thumbnail_window* w) {
+    if (w->frame != NULL) ext_image_copy_capture_frame_v1_destroy(w->frame);
+    w->frame = NULL;
+    if (w->buffer != NULL) wl_buffer_destroy(w->buffer);
+    w->buffer = NULL;
+    /* The server retains its own mmap/fd; cancelling an in-flight frame never
+     * reuses or writes the old storage, even before it processes destruction. */
+    if (w->mapping != NULL) munmap(w->mapping, w->mapping_size);
+    w->mapping = NULL;
+    w->mapping_size = 0;
+}
+
+static void thumbnail_stop(struct thumbnail_window* w) {
+    thumbnail_buffer_destroy(w);
+    if (w->session != NULL) ext_image_copy_capture_session_v1_destroy(w->session);
+    if (w->source != NULL) ext_image_capture_source_v1_destroy(w->source);
+    w->session = NULL;
+    w->source = NULL;
+    w->constraints_done = w->constraints_pending = w->has_format = 0;
+    w->pending_has_format = 0;
+    free(w->rgba);
+    w->rgba = NULL;
+    w->rgba_width = w->rgba_height = 0;
+    w->retry_at = 0;
+}
+
+static void thumbnail_error(struct thumbnail_window* w, const char* message, int terminal) {
+    if (strcmp(w->error, message) != 0)
+        fprintf(stderr, "hypr_layer: thumbnail window %llu: %s\n", (unsigned long long)w->id, message);
+    snprintf(w->error, sizeof(w->error), "%s", message);
+    if (terminal) {
+        thumbnail_stop(w);
+        w->blocked = 1;
+    }
+}
+
+static void thumbnail_backend_lost(struct hypr_layer* layer, const char* message) {
+    snprintf(layer->thumbnail_error, sizeof(layer->thumbnail_error), "%s", message);
+    fail(message);
+    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+        thumbnail_error(w, message, 1);
+}
+
+static void thumbnail_clear_address(struct thumbnail_window* w) {
+    if (w->address_mapping != NULL)
+        hyprland_toplevel_window_mapping_handle_v1_destroy(w->address_mapping);
+    w->address_mapping = NULL;
+    if (w->address[0] != '\0') {
+        w->address[0] = '\0';
+        if (w->listed) w->layer->window_serial++;
+    }
+}
+
+static void thumbnail_window_address(void* data,
+    struct hyprland_toplevel_window_mapping_handle_v1* mapping, uint32_t hi, uint32_t lo) {
+    (void)mapping;
+    struct thumbnail_window* w = data;
+    char address[sizeof(w->address)];
+    uint64_t value = ((uint64_t)hi << 32) | lo;
+    snprintf(address, sizeof(address), "0x%" PRIx64, value);
+    if (strcmp(w->address, address) != 0) {
+        memcpy(w->address, address, strlen(address) + 1);
+        if (w->listed) w->layer->window_serial++;
+    }
+}
+
+static void thumbnail_address_failed(void* data,
+    struct hyprland_toplevel_window_mapping_handle_v1* mapping) {
+    (void)mapping;
+    struct thumbnail_window* w = data;
+    fprintf(stderr, "hypr_layer: exact address mapping failed for window %llu; "
+        "the compositor could not resolve its ext toplevel handle (window may have closed)\n",
+        (unsigned long long)w->id);
+    thumbnail_clear_address(w);
+}
+
+static const struct hyprland_toplevel_window_mapping_handle_v1_listener thumbnail_address_listener = {
+    .window_address = thumbnail_window_address,
+    .failed = thumbnail_address_failed,
+};
+
+static void thumbnail_request_address(struct thumbnail_window* w) {
+    if (w->layer->mapping_manager == NULL || w->address_mapping != NULL) return;
+    w->address_mapping = hyprland_toplevel_mapping_manager_v1_get_window_for_toplevel(
+        w->layer->mapping_manager, w->handle);
+    if (w->address_mapping == NULL ||
+        hyprland_toplevel_window_mapping_handle_v1_add_listener(
+            w->address_mapping, &thumbnail_address_listener, w) < 0) {
+        thumbnail_clear_address(w);
+        fprintf(stderr, "hypr_layer: cannot create exact address mapping for window %llu; "
+            "check Wayland connection and memory availability\n", (unsigned long long)w->id);
+    }
+}
+
+static void thumbnail_destroy(struct thumbnail_window* w) {
+    thumbnail_stop(w);
+    thumbnail_clear_address(w);
+    if (w->handle != NULL) ext_foreign_toplevel_handle_v1_destroy(w->handle);
+    free(w->title); free(w->app_id); free(w->identifier);
+    free(w->pending_title); free(w->pending_app_id); free(w->pending_identifier);
+    free(w);
+}
+
+static void thumbnail_closed(void* data, struct ext_foreign_toplevel_handle_v1* handle) {
+    (void)handle;
+    struct thumbnail_window* w = data;
+    struct hypr_layer* layer = w->layer;
+    struct thumbnail_window** link = &layer->windows;
+    while (*link != NULL && *link != w) link = &(*link)->next;
+    if (*link == w) *link = w->next;
+    if (w->listed) layer->window_serial++;
+    thumbnail_destroy(w);
+}
+
+static void thumbnail_metadata(void* data, char** pending, const char* value) {
+    struct thumbnail_window* w = data;
+    if (!replace_string(pending, value))
+        thumbnail_error(w, "out of memory copying toplevel metadata", 1);
+}
+
+static void thumbnail_title(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+    (void)handle;
+    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_title, value);
+}
+static void thumbnail_app_id(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+    (void)handle;
+    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_app_id, value);
+}
+static void thumbnail_identifier(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+    (void)handle;
+    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_identifier, value);
+}
+static void thumbnail_commit(char** current, char** pending) {
+    if (*pending != NULL) {
+        free(*current);
+        *current = *pending;
+        *pending = NULL;
+    }
+}
+static void thumbnail_metadata_done(void* data, struct ext_foreign_toplevel_handle_v1* handle) {
+    (void)handle;
+    struct thumbnail_window* w = data;
+    thumbnail_commit(&w->title, &w->pending_title);
+    thumbnail_commit(&w->app_id, &w->pending_app_id);
+    thumbnail_commit(&w->identifier, &w->pending_identifier);
+    w->listed = 1;
+    w->layer->window_serial++;
+}
+static const struct ext_foreign_toplevel_handle_v1_listener thumbnail_handle_listener = {
+    .closed = thumbnail_closed, .done = thumbnail_metadata_done,
+    .title = thumbnail_title, .app_id = thumbnail_app_id, .identifier = thumbnail_identifier,
+};
+static void thumbnail_toplevel(void* data, struct ext_foreign_toplevel_list_v1* list,
+    struct ext_foreign_toplevel_handle_v1* handle) {
+    (void)list;
+    struct hypr_layer* layer = data;
+    struct thumbnail_window* w = calloc(1, sizeof(*w));
+    if (w == NULL || layer->next_window_id == UINT64_MAX) {
+        free(w);
+        ext_foreign_toplevel_handle_v1_destroy(handle);
+        thumbnail_backend_lost(layer, "cannot allocate a toplevel thumbnail record");
+        return;
+    }
+    w->layer = layer;
+    w->id = ++layer->next_window_id;
+    w->handle = handle;
+    if (ext_foreign_toplevel_handle_v1_add_listener(handle, &thumbnail_handle_listener, w) < 0) {
+        thumbnail_destroy(w);
+        thumbnail_backend_lost(layer, "cannot attach the foreign toplevel listener");
+        return;
+    }
+    w->next = layer->windows;
+    layer->windows = w;
+    thumbnail_request_address(w);
+}
+static void thumbnail_list_finished(void* data, struct ext_foreign_toplevel_list_v1* list) {
+    struct hypr_layer* layer = data;
+    thumbnail_backend_lost(layer, "ext-foreign-toplevel-list-v1 finished; compositor denied or ended window enumeration");
+    while (layer->windows != NULL) {
+        struct thumbnail_window* w = layer->windows;
+        layer->windows = w->next;
+        thumbnail_destroy(w);
+    }
+    ext_foreign_toplevel_list_v1_destroy(list);
+    layer->toplevel_list = NULL;
+    layer->toplevel_list_name = 0;
+    layer->window_serial++;
+}
+static const struct ext_foreign_toplevel_list_v1_listener thumbnail_list_listener = {
+    .toplevel = thumbnail_toplevel, .finished = thumbnail_list_finished,
+};
+
+static void thumbnail_constraints_begin(struct thumbnail_window* w) {
+    if (!w->constraints_pending) {
+        w->constraints_pending = 1;
+        w->pending_has_format = 0;
+        w->pending_width = w->pending_height = 0;
+    }
+}
+static void thumbnail_size(void* data, struct ext_image_copy_capture_session_v1* session,
+    uint32_t width, uint32_t height) {
+    (void)session;
+    struct thumbnail_window* w = data;
+    thumbnail_constraints_begin(w);
+    w->pending_width = width; w->pending_height = height;
+}
+static void thumbnail_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format) {
+    (void)session;
+    struct thumbnail_window* w = data;
+    thumbnail_constraints_begin(w);
+    if (!w->pending_has_format && (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888)) {
+        w->pending_has_format = 1;
+        w->pending_format = format;
+    }
+}
+static void thumbnail_dmabuf_device(void* data, struct ext_image_copy_capture_session_v1* session,
+    struct wl_array* device) {
+    (void)session; (void)device;
+    thumbnail_constraints_begin(data);
+}
+static void thumbnail_dmabuf_format(void* data, struct ext_image_copy_capture_session_v1* session,
+    uint32_t format, struct wl_array* modifiers) {
+    (void)session; (void)format; (void)modifiers;
+    thumbnail_constraints_begin(data);
+}
+static void thumbnail_constraints_done(void* data, struct ext_image_copy_capture_session_v1* session) {
+    (void)session;
+    struct thumbnail_window* w = data;
+    thumbnail_buffer_destroy(w);
+    w->width = w->pending_width; w->height = w->pending_height;
+    w->format = w->pending_format; w->has_format = w->pending_has_format;
+    w->constraints_pending = 0;
+    w->constraints_done = 1;
+    if (!w->has_format) {
+        thumbnail_error(w, "session offers no ARGB8888/XRGB8888 wl_shm format; no DMA-BUF fallback", 1);
+    } else if (w->width == 0 || w->height == 0 || w->width > INT32_MAX / 4 ||
+        w->height > (uint32_t)(INT32_MAX / ((uint64_t)w->width * 4))) {
+        thumbnail_error(w, "invalid or oversized capture dimensions (wl_shm pool must fit INT32_MAX)", 1);
+    }
+}
+static void thumbnail_stopped(void* data, struct ext_image_copy_capture_session_v1* session) {
+    (void)session;
+    thumbnail_error(data, "capture session stopped; source unavailable or permission revoked; toggle visibility to retry", 1);
+}
+static const struct ext_image_copy_capture_session_v1_listener thumbnail_session_listener = {
+    .buffer_size = thumbnail_size, .shm_format = thumbnail_format,
+    .dmabuf_device = thumbnail_dmabuf_device, .dmabuf_format = thumbnail_dmabuf_format,
+    .done = thumbnail_constraints_done, .stopped = thumbnail_stopped,
+};
+static void thumbnail_transform(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t transform) {
+    (void)frame;
+    ((struct thumbnail_window*)data)->transform = transform;
+}
+static void thumbnail_damage(void* data, struct ext_image_copy_capture_frame_v1* frame,
+    int32_t x, int32_t y, int32_t width, int32_t height) {
+    (void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
+}
+static void thumbnail_presentation(void* data, struct ext_image_copy_capture_frame_v1* frame,
+    uint32_t hi, uint32_t lo, uint32_t ns) {
+    (void)data; (void)frame; (void)hi; (void)lo; (void)ns;
+}
+enum { THUMBNAIL_MAX_WIDTH = 640, THUMBNAIL_MAX_HEIGHT = 360 };
+
+static void thumbnail_dimensions(int source_width, int source_height, int* width, int* height) {
+    *width = source_width;
+    *height = source_height;
+    if (source_width <= THUMBNAIL_MAX_WIDTH && source_height <= THUMBNAIL_MAX_HEIGHT) return;
+    if ((int64_t)source_width * THUMBNAIL_MAX_HEIGHT >= (int64_t)source_height * THUMBNAIL_MAX_WIDTH) {
+        *width = THUMBNAIL_MAX_WIDTH;
+        *height = (int)(((int64_t)source_height * *width + source_width / 2) / source_width);
+    } else {
+        *height = THUMBNAIL_MAX_HEIGHT;
+        *width = (int)(((int64_t)source_width * *height + source_height / 2) / source_height);
+    }
+    if (*width < 1) *width = 1;
+    if (*height < 1) *height = 1;
+}
+
+
+/* Capture-ready runs on the poll thread. Optimize only this bounded scalar
+ * kernel even in debug builds; keep protocol/lifetime code at the build's flags. */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("O2")
+#endif
+
+static unsigned char thumbnail_byte(double value) {
+    return value >= 255.0 ? 255 : (unsigned char)(value + 0.5);
+}
+
+static double thumbnail_channel(uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3,
+    int shift, double w0, double w1, double w2, double w3) {
+    return ((p0 >> shift) & 255) * w0 + ((p1 >> shift) & 255) * w1 +
+        ((p2 >> shift) & 255) * w2 + ((p3 >> shift) & 255) * w3;
+}
+
+static void thumbnail_resample(const struct thumbnail_window* w, unsigned char* rgba, int width, int height) {
+    int bw = (int)w->buffer_width, bh = (int)w->buffer_height;
+    int source_width = (w->transform & 1) ? bh : bw;
+    int source_height = (w->transform & 1) ? bw : bh;
+    ptrdiff_t origin = 0, x_step = 1, y_step = bw;
+    /* Upright coordinates map to origin + x*x_step + y*y_step. Resolve the
+     * transform once, not four times per output pixel, including mirrored axes. */
+    switch (w->transform) {
+        case WL_OUTPUT_TRANSFORM_90: origin = (ptrdiff_t)(bh - 1) * bw; x_step = -bw; y_step = 1; break;
+        case WL_OUTPUT_TRANSFORM_180: origin = (ptrdiff_t)bh * bw - 1; x_step = -1; y_step = -bw; break;
+        case WL_OUTPUT_TRANSFORM_270: origin = bw - 1; x_step = bw; y_step = -1; break;
+        case WL_OUTPUT_TRANSFORM_FLIPPED: origin = bw - 1; x_step = -1; break;
+        case WL_OUTPUT_TRANSFORM_FLIPPED_90: x_step = bw; y_step = 1; break;
+        case WL_OUTPUT_TRANSFORM_FLIPPED_180: origin = (ptrdiff_t)(bh - 1) * bw; y_step = -bw; break;
+        case WL_OUTPUT_TRANSFORM_FLIPPED_270: origin = (ptrdiff_t)bh * bw - 1; x_step = -bw; y_step = -1; break;
+        default: break;
+    }
+    const uint32_t* pixels = (const uint32_t*)w->mapping + origin;
+    struct { ptrdiff_t offset0, offset1; double tx; } columns[THUMBNAIL_MAX_WIDTH];
+    for (int x = 0; x < width; x++) {
+        double fx = (x + 0.5) * source_width / width - 0.5;
+        if (fx < 0) fx = 0;
+        int x0 = (int)fx, x1 = x0 + 1 < source_width ? x0 + 1 : x0;
+        columns[x].offset0 = x0 * x_step;
+        columns[x].offset1 = x1 * x_step;
+        columns[x].tx = fx - x0;
+    }
+    struct { const uint32_t *row0, *row1; double ty; } rows[THUMBNAIL_MAX_HEIGHT];
+    for (int y = 0; y < height; y++) {
+        double fy = (y + 0.5) * source_height / height - 0.5;
+        if (fy < 0) fy = 0;
+        int y0 = (int)fy, y1 = y0 + 1 < source_height ? y0 + 1 : y0;
+        rows[y].row0 = pixels + y0 * y_step;
+        rows[y].row1 = pixels + y1 * y_step;
+        rows[y].ty = fy - y0;
+    }
+    int opaque = w->buffer_format == WL_SHM_FORMAT_XRGB8888;
+    /* Rotated rows jump across SHM pages. Narrow output stripes reuse nearby
+     * input cache lines/pages without making output writes a full-image transpose. */
+    int stripe_width = (w->transform & 1) ? 16 : width;
+    for (int start_x = 0; start_x < width; start_x += stripe_width) {
+        int end_x = start_x + stripe_width < width ? start_x + stripe_width : width;
+        for (int y = 0; y < height; y++) {
+            double ty = rows[y].ty;
+            const uint32_t* row0 = rows[y].row0;
+            const uint32_t* row1 = rows[y].row1;
+            unsigned char* out = rgba + ((size_t)y * width + start_x) * 4;
+            for (int x = start_x; x < end_x; x++, out += 4) {
+                ptrdiff_t offset0 = columns[x].offset0, offset1 = columns[x].offset1;
+                uint32_t p0 = row0[offset0], p1 = row0[offset1], p2 = row1[offset0], p3 = row1[offset1];
+                double tx = columns[x].tx;
+                double w0 = (1 - tx) * (1 - ty), w1 = tx * (1 - ty), w2 = (1 - tx) * ty, w3 = tx * ty;
+                double alpha = opaque ? 255 * w0 + 255 * w1 + 255 * w2 + 255 * w3 :
+                    thumbnail_channel(p0, p1, p2, p3, 24, w0, w1, w2, w3);
+                out[3] = thumbnail_byte(alpha);
+                /* Preserve premultiplied filtering and summation order, then
+                 * unpremultiply only the bounded output for the renderer. */
+                double scale = out[3] == 0 ? 0 : 255.0 / alpha;
+                out[0] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 16, w0, w1, w2, w3) * scale);
+                out[1] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 8, w0, w1, w2, w3) * scale);
+                out[2] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 0, w0, w1, w2, w3) * scale);
+            }
+        }
+    }
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
+
+static void thumbnail_ready(void* data, struct ext_image_copy_capture_frame_v1* frame) {
+    struct thumbnail_window* w = data;
+    ext_image_copy_capture_frame_v1_destroy(frame);
+    w->frame = NULL;
+    if (w->transform > WL_OUTPUT_TRANSFORM_FLIPPED_270) {
+        thumbnail_error(w, "compositor returned an invalid wl_output transform", 1);
+        return;
+    }
+    int bw = (int)w->buffer_width, bh = (int)w->buffer_height;
+    int width, height;
+    thumbnail_dimensions((w->transform & 1) ? bh : bw, (w->transform & 1) ? bw : bh, &width, &height);
+    if (w->rgba == NULL || (size_t)w->rgba_width * w->rgba_height != (size_t)width * height) {
+        unsigned char* rgba = realloc(w->rgba, (size_t)width * height * 4);
+        if (rgba == NULL) {
+            thumbnail_error(w, "out of memory publishing bounded RGBA thumbnail", 1);
+            return;
+        }
+        w->rgba = rgba;
+    }
+    /* Single-threaded publication: native storage may be reused, whereas each
+     * managed revision is copied into its own immutable frame buffer. */
+    thumbnail_resample(w, w->rgba, width, height);
+    w->rgba_width = width; w->rgba_height = height;
+    w->revision++;
+    w->error[0] = '\0';
+    /* Limit full-window SHM copies and texture uploads, not just Overview drawing.
+     * The normal bar/input loop continues at its own refresh rate. */
+    w->retry_at = monotonic_milliseconds() + 67;
+}
+static void thumbnail_failed(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t reason) {
+    struct thumbnail_window* w = data;
+    ext_image_copy_capture_frame_v1_destroy(frame);
+    w->frame = NULL;
+    if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_STOPPED) {
+        thumbnail_error(w, "capture frame stopped; toggle visibility to retry", 1);
+    } else if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS) {
+        thumbnail_error(w, "capture buffer constraints changed; waiting for updated session constraints", 0);
+        thumbnail_buffer_destroy(w);
+        /* Constraint events are ordered before/after failed. If a new batch
+         * is in progress, the pump waits for done; otherwise retry the latest. */
+        w->retry_at = monotonic_milliseconds() + 250;
+    } else {
+        char error[256];
+        snprintf(error, sizeof(error), "capture frame failed (reason %u); retrying after 250ms; check compositor capture permissions/logs", reason);
+        thumbnail_error(w, error, 0);
+        w->retry_at = monotonic_milliseconds() + 250;
+    }
+}
+static const struct ext_image_copy_capture_frame_v1_listener thumbnail_frame_listener = {
+    .transform = thumbnail_transform, .damage = thumbnail_damage,
+    .presentation_time = thumbnail_presentation, .ready = thumbnail_ready, .failed = thumbnail_failed,
+};
+
+int hypr_layer_thumbnails_available(const hypr_layer* layer) {
+    return layer != NULL && layer->toplevel_list != NULL && layer->toplevel_capture_manager != NULL &&
+        layer->image_capture_manager != NULL && layer->shm != NULL;
+}
+static const char* thumbnail_availability_error(const hypr_layer* layer) {
+    if (layer == NULL) return "invalid layer";
+    if (layer->thumbnail_error[0]) return layer->thumbnail_error;
+    if (layer->toplevel_list == NULL) return "compositor does not advertise ext-foreign-toplevel-list-v1";
+    if (layer->toplevel_capture_manager == NULL)
+        return "compositor does not advertise ext-foreign-toplevel-image-capture-source-manager-v1";
+    if (layer->image_capture_manager == NULL) return "compositor does not advertise ext-image-copy-capture-manager-v1";
+    if (layer->shm == NULL) return "compositor does not advertise wl_shm";
+    return "";
+}
+static int thumbnail_allocate(struct thumbnail_window* w) {
+    size_t size = (size_t)w->width * 4 * w->height;
+    int fd = memfd_create("hyprnetshell-thumbnail", MFD_CLOEXEC);
+    if (fd < 0 || ftruncate(fd, (off_t)size) < 0) {
+        char error[256];
+        snprintf(error, sizeof(error), "cannot allocate thumbnail memfd: %s", strerror(errno));
+        if (fd >= 0) close(fd);
+        thumbnail_error(w, error, 1);
+        return 0;
+    }
+    void* mapping = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED) {
+        char error[256];
+        snprintf(error, sizeof(error), "cannot mmap thumbnail SHM: %s", strerror(errno));
+        close(fd);
+        thumbnail_error(w, error, 1);
+        return 0;
+    }
+    w->mapping = mapping; w->mapping_size = size;
+    struct wl_shm_pool* pool = wl_shm_create_pool(w->layer->shm, fd, (int)size);
+    close(fd);
+    if (pool != NULL) {
+        w->buffer = wl_shm_pool_create_buffer(pool, 0, (int)w->width, (int)w->height,
+            (int)w->width * 4, w->format);
+        wl_shm_pool_destroy(pool);
+    }
+    if (w->buffer == NULL) {
+        thumbnail_error(w, "cannot create wl_shm thumbnail pool/buffer", 1);
+        return 0;
+    }
+    w->buffer_width = w->width; w->buffer_height = w->height; w->buffer_format = w->format;
+    return 1;
+}
+static void thumbnail_pump(struct hypr_layer* layer) {
+    if (!layer->thumbnails_enabled || !hypr_layer_thumbnails_available(layer)) return;
+    int64_t now = monotonic_milliseconds();
+    for (int starts = 0; starts < 2; starts++) {
+        struct thumbnail_window *first = NULL, *after = NULL;
+        /* IDs never repeat. Choose by ID rather than list position or a pointer
+         * cursor, so insertion/removal cannot starve a tail or leave a dangling cursor. */
+        for (struct thumbnail_window* candidate = layer->windows; candidate != NULL; candidate = candidate->next) {
+            if (!candidate->listed || !candidate->visible || candidate->blocked ||
+                candidate->frame != NULL || now < candidate->retry_at ||
+                (candidate->session != NULL && (!candidate->constraints_done || candidate->constraints_pending))) continue;
+            if (first == NULL || candidate->id < first->id) first = candidate;
+            if (candidate->id > layer->thumbnail_last_started_id && (after == NULL || candidate->id < after->id))
+                after = candidate;
+        }
+        struct thumbnail_window* w = after != NULL ? after : first;
+        if (w == NULL) break;
+        layer->thumbnail_last_started_id = w->id;
+        if (w->session == NULL) {
+            w->source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+                layer->toplevel_capture_manager, w->handle);
+            if (w->source != NULL)
+                w->session = ext_image_copy_capture_manager_v1_create_session(layer->image_capture_manager, w->source, 0);
+            if (w->session == NULL ||
+                ext_image_copy_capture_session_v1_add_listener(w->session, &thumbnail_session_listener, w) < 0)
+                thumbnail_error(w, "cannot create thumbnail capture source/session", 1);
+            continue;
+        }
+        if (!w->constraints_done || w->constraints_pending) continue;
+        if (w->buffer == NULL && !thumbnail_allocate(w)) continue;
+        w->frame = ext_image_copy_capture_session_v1_create_frame(w->session);
+        if (w->frame == NULL ||
+            ext_image_copy_capture_frame_v1_add_listener(w->frame, &thumbnail_frame_listener, w) < 0) {
+            thumbnail_error(w, "cannot create thumbnail capture frame", 1);
+            continue;
+        }
+        w->transform = WL_OUTPUT_TRANSFORM_NORMAL;
+        ext_image_copy_capture_frame_v1_attach_buffer(w->frame, w->buffer);
+        ext_image_copy_capture_frame_v1_damage_buffer(w->frame, 0, 0, (int)w->buffer_width, (int)w->buffer_height);
+        ext_image_copy_capture_frame_v1_capture(w->frame);
+    }
+}
+uint64_t hypr_layer_get_window_serial(const hypr_layer* layer) { return layer != NULL ? layer->window_serial : 0; }
+int hypr_layer_get_window_count(const hypr_layer* layer) {
+    int count = 0;
+    if (layer != NULL)
+        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next) if (w->listed) count++;
+    return count;
+}
+uint64_t hypr_layer_get_window_id(const hypr_layer* layer, int index) {
+    if (layer == NULL || index < 0) return 0;
+    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+        if (w->listed && index-- == 0) return w->id;
+    return 0;
+}
+static int thumbnail_string(const char* text, char* buffer, int buffer_size) {
+    if (text == NULL) text = "";
+    size_t size = strlen(text) + 1;
+    if (size > INT32_MAX) return 0;
+    if (buffer != NULL && buffer_size >= (int)size) memcpy(buffer, text, size);
+    return (int)size;
+}
+int hypr_layer_get_window_title(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    return w != NULL ? thumbnail_string(w->title, buffer, size) : 0;
+}
+int hypr_layer_get_window_app_id(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    return w != NULL ? thumbnail_string(w->app_id, buffer, size) : 0;
+}
+int hypr_layer_get_window_identifier(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    return w != NULL ? thumbnail_string(w->identifier, buffer, size) : 0;
+}
+int hypr_layer_get_window_address(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    return w != NULL ? thumbnail_string(w->address, buffer, size) : 0;
+}
+int hypr_layer_get_thumbnail_error(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
+    if (id == 0) return thumbnail_string(thumbnail_availability_error(layer), buffer, size);
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    return w != NULL ? thumbnail_string(w->error[0] ? w->error : thumbnail_availability_error(layer), buffer, size) : 0;
+}
+int hypr_layer_set_thumbnails_enabled(hypr_layer* layer, int enabled) {
+    if (layer == NULL) return 0;
+    enabled = !!enabled;
+    if (layer->thumbnails_enabled != enabled) {
+        layer->thumbnails_enabled = enabled;
+        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next) {
+            thumbnail_stop(w);
+            w->blocked = 0;
+            w->error[0] = '\0';
+        }
+    }
+    if (!enabled) return 1;
+    if (hypr_layer_thumbnails_available(layer)) {
+        layer->thumbnail_error[0] = '\0';
+        return 1;
+    }
+    fail(thumbnail_availability_error(layer));
+    return 0;
+}
+int hypr_layer_set_window_thumbnail_visible(hypr_layer* layer, uint64_t id, int visible) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    if (w == NULL) return 0;
+    visible = !!visible;
+    if (w->visible != visible) {
+        thumbnail_stop(w);
+        w->visible = visible;
+        w->blocked = 0;
+        w->error[0] = '\0';
+    }
+    return 1;
+}
+int hypr_layer_get_window_thumbnail_info(const hypr_layer* layer, uint64_t id,
+    uint64_t* revision, int* width, int* height, int* stride) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    if (revision != NULL) *revision = w != NULL ? w->revision : 0;
+    if (width != NULL) *width = w != NULL ? w->rgba_width : 0;
+    if (height != NULL) *height = w != NULL ? w->rgba_height : 0;
+    if (stride != NULL) *stride = w != NULL ? w->rgba_width * 4 : 0;
+    return w != NULL && w->rgba != NULL;
+}
+int hypr_layer_copy_window_thumbnail(const hypr_layer* layer, uint64_t id,
+    uint64_t expected_revision, unsigned char* buffer, int buffer_size) {
+    struct thumbnail_window* w = thumbnail_find(layer, id);
+    if (w == NULL || w->rgba == NULL || buffer == NULL || buffer_size < 0 ||
+        (expected_revision != 0 && expected_revision != w->revision)) return 0;
+    size_t size = (size_t)w->rgba_width * 4 * w->rgba_height;
+    if (size > (size_t)buffer_size) return 0;
+    memcpy(buffer, w->rgba, size);
+    return (int)size;
+}
+
 struct capture_state {
     uint32_t width;
     uint32_t height;
@@ -1679,6 +2394,17 @@ void hypr_layer_destroy(hypr_layer* layer) {
         return;
     }
 
+    while (layer->windows != NULL) {
+        struct thumbnail_window* window = layer->windows;
+        layer->windows = window->next;
+        thumbnail_destroy(window);
+    }
+    if (layer->mapping_manager != NULL)
+        hyprland_toplevel_mapping_manager_v1_destroy(layer->mapping_manager);
+    if (layer->toplevel_list != NULL)
+        ext_foreign_toplevel_list_v1_destroy(layer->toplevel_list);
+    if (layer->toplevel_capture_manager != NULL)
+        ext_foreign_toplevel_image_capture_source_manager_v1_destroy(layer->toplevel_capture_manager);
     if (layer->capture_data != NULL) {
         munmap(layer->capture_data, layer->capture_size);
         layer->capture_data = NULL;
@@ -1756,6 +2482,7 @@ int hypr_layer_poll_events(hypr_layer* layer) {
         fail_fatal(layer, "wl_display_dispatch_pending failed");
         return 0;
     }
+    thumbnail_pump(layer);
     while (wl_display_prepare_read(layer->display) != 0) {
         if (wl_display_dispatch_pending(layer->display) < 0) {
             fail_fatal(layer, "wl_display_dispatch_pending failed while preparing a read");

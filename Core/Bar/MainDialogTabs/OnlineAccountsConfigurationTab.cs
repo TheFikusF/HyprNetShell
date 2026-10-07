@@ -35,8 +35,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
         accounts.EnsureInitialized();
         var snapshots = accounts.Snapshot.Where(snapshot => snapshot.Configured).ToArray();
         var connectedCount = snapshots.Count(snapshot => snapshot.Connected);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 12 },
@@ -74,12 +73,10 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             ? snapshot.AccountName ?? "Connected"
             : "Not connected");
 
-        return new BoxNode(height: 104)
-        {
+        return new BoxNode(height: 104) {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with
-            {
+            Style = ModulesCommon.ModuleStyle(ThemeManager.Current.Panel) with {
                 Padding = new Insets(16, 10),
                 BorderRadius = 8,
                 BorderWidth = snapshot.Connected ? ThemeManager.Current.Border.Width : 0,
@@ -137,15 +134,13 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             state.Hovered.Value = false;
         }
 
-        return new BoxNode
-        {
+        return new BoxNode {
             OnClick = action,
             IsHovered = action is null ? null : state.Hovered,
             Opacity = action is null ? 0.55f : 1.0f,
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(12, 7),
                 BorderRadius = 8,
                 BorderWidth = 0,
@@ -155,8 +150,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
     }
 
 
-    private static SvgAsset ProviderIcon(OnlineAccountProvider provider) => provider switch
-    {
+    private static SvgAsset ProviderIcon(OnlineAccountProvider provider) => provider switch {
         OnlineAccountProvider.Google => Icons.Calendar,
         OnlineAccountProvider.Spotify => Icons.MusicNotes[0],
         OnlineAccountProvider.ChatGpt => Icons.Bot,

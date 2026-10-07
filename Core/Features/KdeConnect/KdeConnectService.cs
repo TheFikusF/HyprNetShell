@@ -14,7 +14,8 @@ namespace HyprNetShell.Core.Features.KdeConnect;
 
 internal sealed class KdeConnectService : IDisposable
 {
-    private const string LogCategory = "KdeConnect";
+    private const string LOG_CATEGORY = "KdeConnect";
+
     private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StableConnectionDuration = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ConnectionWarningInterval = TimeSpan.FromMinutes(5);
@@ -61,8 +62,7 @@ internal sealed class KdeConnectService : IDisposable
             {
                 foreach (var paired in _state.PairedDevices)
                 {
-                    _devices[paired.Id] = new KdeConnectDevice(paired.Id, paired.Name, paired.DeviceType)
-                    {
+                    _devices[paired.Id] = new KdeConnectDevice(paired.Id, paired.Name, paired.DeviceType) {
                         IsPaired = true,
                         PairingState = KdeConnectPairingState.Paired,
                     };
@@ -79,7 +79,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "KDE Connect could not start; the shell will continue without it", exception);
+            AppLogger.Warning(LOG_CATEGORY, "KDE Connect could not start; the shell will continue without it", exception);
             StopNetworking();
         }
     }
@@ -126,7 +126,7 @@ internal sealed class KdeConnectService : IDisposable
         catch (Exception exception)
         {
             ResetPendingPairing(device);
-            AppLogger.Warning(LogCategory, $"Could not request pairing with '{device.Name}'", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not request pairing with '{device.Name}'", exception);
             return KdeConnectOperationResult.Failed("Could not send the pairing request.");
         }
     }
@@ -163,7 +163,7 @@ internal sealed class KdeConnectService : IDisposable
             }
             catch (Exception exception)
             {
-                AppLogger.Warning(LogCategory, $"Could not notify '{device.Name}' that it was unpaired", exception);
+                AppLogger.Warning(LOG_CATEGORY, $"Could not notify '{device.Name}' that it was unpaired", exception);
             }
         }
 
@@ -173,7 +173,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not persist unpairing for '{device.Name}'", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not persist unpairing for '{device.Name}'", exception);
             return KdeConnectOperationResult.Failed("Could not update paired device state.");
         }
 
@@ -223,7 +223,7 @@ internal sealed class KdeConnectService : IDisposable
             }
             catch (Exception exception)
             {
-                AppLogger.Warning(LogCategory, $"Could not send a clipboard entry to '{device.Name}'", exception);
+                AppLogger.Warning(LOG_CATEGORY, $"Could not send a clipboard entry to '{device.Name}'", exception);
             }
         }
 
@@ -272,7 +272,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not send the clipboard to '{device.Name}'", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not send the clipboard to '{device.Name}'", exception);
             return KdeConnectOperationResult.Failed("Could not send the clipboard.");
         }
     }
@@ -325,7 +325,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not {(accept ? "accept" : "reject")} pairing with '{device.Name}'", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not {(accept ? "accept" : "reject")} pairing with '{device.Name}'", exception);
             return KdeConnectOperationResult.Failed($"Could not {(accept ? "accept" : "reject")} the pairing request.");
         }
     }
@@ -353,7 +353,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "The KDE Connect TCP listener stopped", exception);
+            AppLogger.Warning(LOG_CATEGORY, "The KDE Connect TCP listener stopped", exception);
         }
     }
 
@@ -377,7 +377,7 @@ internal sealed class KdeConnectService : IDisposable
         catch (Exception exception)
         {
             client.Dispose();
-            AppLogger.Warning(LogCategory, "Rejected an incoming KDE Connect connection", exception);
+            AppLogger.Warning(LOG_CATEGORY, "Rejected an incoming KDE Connect connection", exception);
         }
         finally
         {
@@ -428,7 +428,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "The KDE Connect discovery listener stopped", exception);
+            AppLogger.Warning(LOG_CATEGORY, "The KDE Connect discovery listener stopped", exception);
         }
     }
 
@@ -512,7 +512,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, "KDE Connect identity broadcasts stopped", exception);
+            AppLogger.Warning(LOG_CATEGORY, "KDE Connect identity broadcasts stopped", exception);
         }
     }
 
@@ -535,7 +535,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not send a KDE Connect identity to {endpoint}", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not send a KDE Connect identity to {endpoint}", exception);
         }
     }
 
@@ -601,7 +601,7 @@ internal sealed class KdeConnectService : IDisposable
                     device.LastConnectionFailure = failure;
                     device.NextConnectionWarningAt = now + ConnectionWarningInterval;
                     var retrySeconds = Math.Max(0, (int)Math.Ceiling((device.NextReconnectAt - now).TotalSeconds));
-                    AppLogger.Warning(LogCategory,
+                    AppLogger.Warning(LOG_CATEGORY,
                         $"Could not connect to KDE Connect device '{device.Name}' ({device.Id}) at {address}:{port}: " +
                         $"{failure}. Next connection attempt allowed in {retrySeconds}s with backoff capped at 60s; " +
                         "unchanged failures are logged at most once every 5 minutes. " +
@@ -702,11 +702,11 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (EndOfStreamException)
         {
-            AppLogger.Info(LogCategory, $"KDE Connect device '{device.Name}' disconnected");
+            AppLogger.Info(LOG_CATEGORY, $"KDE Connect device '{device.Name}' disconnected");
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"KDE Connect connection to '{device.Name}' ended", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"KDE Connect connection to '{device.Name}' ended", exception);
         }
         finally
         {
@@ -783,7 +783,7 @@ internal sealed class KdeConnectService : IDisposable
             }
             catch (Exception exception)
             {
-                AppLogger.Warning(LogCategory, $"Could not persist remote unpairing for '{device.Name}'", exception);
+                AppLogger.Warning(LOG_CATEGORY, $"Could not persist remote unpairing for '{device.Name}'", exception);
             }
             lock (_gate)
             {
@@ -805,7 +805,7 @@ internal sealed class KdeConnectService : IDisposable
             (hasTimestamp && Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - timestampSeconds) > 1800))
         {
             await channel.SendAsync(CreatePairResponsePacket(false), cancellationToken);
-            AppLogger.Warning(LogCategory, $"Rejected invalid or stale pairing request from '{device.Name}'");
+            AppLogger.Warning(LOG_CATEGORY, $"Rejected invalid or stale pairing request from '{device.Name}'");
             return;
         }
 
@@ -897,7 +897,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not expire pairing with '{device.Name}' cleanly", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not expire pairing with '{device.Name}' cleanly", exception);
         }
         finally
         {
@@ -996,7 +996,7 @@ internal sealed class KdeConnectService : IDisposable
         }
         catch (Exception exception)
         {
-            AppLogger.Warning(LogCategory, $"Could not activate KDE Connect plugins for '{device.Name}'", exception);
+            AppLogger.Warning(LOG_CATEGORY, $"Could not activate KDE Connect plugins for '{device.Name}'", exception);
         }
     }
 
@@ -1071,7 +1071,7 @@ internal sealed class KdeConnectService : IDisposable
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                AppLogger.Warning(LogCategory, "Could not synchronize a local clipboard change", exception);
+                AppLogger.Warning(LOG_CATEGORY, "Could not synchronize a local clipboard change", exception);
             }
         }
     }
@@ -1282,7 +1282,7 @@ internal sealed class KdeConnectService : IDisposable
             stopped = stopped || allTasks.Wait(DisposeTimeout);
             if (!stopped)
             {
-                AppLogger.Warning(LogCategory, "KDE Connect background tasks did not stop before shutdown");
+                AppLogger.Warning(LOG_CATEGORY, "KDE Connect background tasks did not stop before shutdown");
             }
         }
         catch (Exception exception)
@@ -1290,7 +1290,7 @@ internal sealed class KdeConnectService : IDisposable
             stopped = allTasks.IsCompleted;
             if (!stopped)
             {
-                AppLogger.Warning(LogCategory, "KDE Connect did not stop cleanly", exception);
+                AppLogger.Warning(LOG_CATEGORY, "KDE Connect did not stop cleanly", exception);
             }
         }
 

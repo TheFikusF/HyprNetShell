@@ -55,8 +55,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
             watcher._ownsName = true;
             watcher._nameOwnerSubscription = await watcher._connection.AddMatchAsync(
-                new MatchRule
-                {
+                new MatchRule {
                     Type = MessageType.Signal,
                     Interface = Dbus.BUS_INTERFACE,
                     Member = "NameOwnerChanged",
@@ -137,8 +136,16 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private async Task<(string BusName, string ObjectPath)> ParseItemServiceAsync(string sender, string service)
     {
-        if (service.StartsWith('/')) return (sender, service);
-        if (service.StartsWith(':')) return (service, DEFAULT_ITEM_PATH);
+        if (service.StartsWith('/'))
+        {
+            return (sender, service);
+        }
+
+        if (service.StartsWith(':'))
+        {
+            return (service, DEFAULT_ITEM_PATH);
+        }
+
         return (await Dbus.GetNameOwnerAsync(_connection, service), DEFAULT_ITEM_PATH);
     }
 
@@ -153,7 +160,10 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         var entry = new SniEntry(busName, objectPath);
         lock (_gate)
         {
-            if (!_items.TryAdd(Key(busName, objectPath), entry)) return false;
+            if (!_items.TryAdd(Key(busName, objectPath), entry))
+            {
+                return false;
+            }
         }
         EmitItemSignal("StatusNotifierItemRegistered", busName + objectPath);
         EmitPropertiesChanged();
@@ -166,7 +176,10 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         var entry = new SniEntry(sender, objectPath);
         lock (_gate)
         {
-            if (!_hosts.TryAdd(Key(sender, objectPath), entry)) return;
+            if (!_hosts.TryAdd(Key(sender, objectPath), entry))
+            {
+                return;
+            }
         }
         EmitPropertiesChanged();
         EmitHostSignal("StatusNotifierHostRegistered");
@@ -188,9 +201,15 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             using var writer = context.CreateReplyWriter("v");
             switch (property)
             {
-                case "RegisteredStatusNotifierItems": writer.WriteVariant(VariantValue.Array(RegisteredItems())); break;
-                case "IsStatusNotifierHostRegistered": writer.WriteVariantBool(true); break;
-                case "ProtocolVersion": writer.WriteVariantInt32(0); break;
+                case "RegisteredStatusNotifierItems":
+                    writer.WriteVariant(VariantValue.Array(RegisteredItems()));
+                    break;
+                case "IsStatusNotifierHostRegistered":
+                    writer.WriteVariantBool(true);
+                    break;
+                case "ProtocolVersion":
+                    writer.WriteVariantInt32(0);
+                    break;
                 default:
                     context.ReplyError("org.freedesktop.DBus.Error.InvalidArgs", "Unknown property");
                     return;
@@ -202,8 +221,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         if (member == "GetAll")
         {
             using var writer = context.CreateReplyWriter("a{sv}");
-            writer.WriteDictionary(new Dictionary<string, VariantValue>
-            {
+            writer.WriteDictionary(new Dictionary<string, VariantValue> {
                 ["RegisteredStatusNotifierItems"] = VariantValue.Array(RegisteredItems()),
                 ["IsStatusNotifierHostRegistered"] = VariantValue.Bool(true),
                 ["ProtocolVersion"] = VariantValue.Int32(0),
@@ -222,13 +240,19 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private string[] RegisteredItems()
     {
-        lock (_gate) return _items.Values.Select(entry => entry.BusName + entry.ObjectPath).ToArray();
+        lock (_gate)
+        {
+            return _items.Values.Select(entry => entry.BusName + entry.ObjectPath).ToArray();
+        }
     }
 
     private async Task DiscoverExistingItemsAsync()
     {
         string[] names;
-        try { names = await _connection.ListServicesAsync(); }
+        try
+        {
+            names = await _connection.ListServicesAsync();
+        }
         catch { return; }
         foreach (var name in names.Where(name => name.StartsWith(':')))
         {
@@ -238,7 +262,11 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private async Task DiscoverBusNameAsync(string busName)
     {
-        if (!busName.StartsWith(':')) return;
+        if (!busName.StartsWith(':'))
+        {
+            return;
+        }
+
         foreach (var objectPath in await DiscoverItemPathsAsync(busName))
         {
             await RegisterItemAsync(busName, objectPath);
@@ -250,9 +278,15 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         var paths = new List<string>();
         foreach (var candidate in new[] { DEFAULT_ITEM_PATH, "/org/ayatana/NotificationItem" })
         {
-            if (await HasItemInterfaceAsync(busName, candidate)) paths.Add(candidate);
+            if (await HasItemInterfaceAsync(busName, candidate))
+            {
+                paths.Add(candidate);
+            }
         }
-        if (paths.Count > 0) return paths;
+        if (paths.Count > 0)
+        {
+            return paths;
+        }
 
         var queue = new Queue<string>();
         var visited = new HashSet<string>(StringComparer.Ordinal) { "/" };
@@ -261,9 +295,17 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         {
             var current = queue.Dequeue();
             var xml = await TryIntrospectAsync(busName, current);
-            if (xml is null) continue;
+            if (xml is null)
+            {
+                continue;
+            }
+
             XDocument document;
-            try { document = XDocument.Parse(xml); } catch { continue; }
+            try
+            {
+                document = XDocument.Parse(xml);
+            }
+            catch { continue; }
             if (document.Descendants("interface").Any(IsItemInterface))
             {
                 paths.Add(current);
@@ -272,9 +314,16 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             foreach (var node in document.Root?.Elements("node") ?? [])
             {
                 var name = node.Attribute("name")?.Value?.Trim();
-                if (string.IsNullOrEmpty(name)) continue;
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
                 var child = name.StartsWith('/') ? name : current.TrimEnd('/') + "/" + name;
-                if (IsObjectPath(child) && visited.Add(child)) queue.Enqueue(child);
+                if (IsObjectPath(child) && visited.Add(child))
+                {
+                    queue.Enqueue(child);
+                }
             }
         }
         return paths;
@@ -287,7 +336,10 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         {
             try
             {
-                if (XDocument.Parse(xml).Descendants("interface").Any(IsItemInterface)) return true;
+                if (XDocument.Parse(xml).Descendants("interface").Any(IsItemInterface))
+                {
+                    return true;
+                }
             }
             catch { }
         }
@@ -305,7 +357,10 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
                         reader => reader.ReadDictionaryOfStringToVariantValue(),
                         "s", (ref MessageWriter writer) => writer.WriteString(itemInterface)),
                     TimeSpan.FromSeconds(2));
-                if (properties.Count > 0) return true;
+                if (properties.Count > 0)
+                {
+                    return true;
+                }
             }
             catch { }
         }
@@ -330,11 +385,19 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private async Task HandleNameOwnerChangedAsync(string name, string newOwner)
     {
-        if (string.IsNullOrEmpty(newOwner) && name.StartsWith(':')) RemoveBusName(name);
-        else if (!string.IsNullOrEmpty(newOwner) && name.StartsWith(':')) await DiscoverBusNameAsync(name);
+        if (string.IsNullOrEmpty(newOwner) && name.StartsWith(':'))
+        {
+            RemoveBusName(name);
+        }
+        else if (!string.IsNullOrEmpty(newOwner) && name.StartsWith(':'))
+        {
+            await DiscoverBusNameAsync(name);
+        }
         else if (!string.IsNullOrEmpty(newOwner) &&
                  (name.StartsWith("org.kde.StatusNotifierItem") || name.StartsWith("org.ayatana.NotificationItem")))
+        {
             await DiscoverBusNameAsync(newOwner);
+        }
     }
 
     private void RunInBackground(Task task, string failureMessage) =>
@@ -363,16 +426,31 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
         lock (_gate)
         {
             removedItems = _items.Values.Where(entry => entry.BusName == uniqueName).ToList();
-            foreach (var entry in removedItems) _items.Remove(Key(entry.BusName, entry.ObjectPath));
+            foreach (var entry in removedItems)
+            {
+                _items.Remove(Key(entry.BusName, entry.ObjectPath));
+            }
+
             foreach (var entry in _hosts.Values.Where(entry => entry.BusName == uniqueName).ToArray())
             {
                 _hosts.Remove(Key(entry.BusName, entry.ObjectPath));
                 removedHost = true;
             }
         }
-        foreach (var entry in removedItems) EmitItemSignal("StatusNotifierItemUnregistered", entry.BusName + entry.ObjectPath);
-        if (removedHost) EmitHostSignal("StatusNotifierHostUnregistered");
-        if (removedItems.Count > 0 || removedHost) EmitPropertiesChanged();
+        foreach (var entry in removedItems)
+        {
+            EmitItemSignal("StatusNotifierItemUnregistered", entry.BusName + entry.ObjectPath);
+        }
+
+        if (removedHost)
+        {
+            EmitHostSignal("StatusNotifierHostUnregistered");
+        }
+
+        if (removedItems.Count > 0 || removedHost)
+        {
+            EmitPropertiesChanged();
+        }
     }
 
     private void EmitItemSignal(string member, string value) =>
@@ -387,8 +465,7 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
             (ref MessageWriter writer) =>
             {
                 writer.WriteString(WATCHER_INTERFACE);
-                writer.WriteDictionary(new Dictionary<string, VariantValue>
-                {
+                writer.WriteDictionary(new Dictionary<string, VariantValue> {
                     ["RegisteredStatusNotifierItems"] = VariantValue.Array(RegisteredItems()),
                     ["IsStatusNotifierHostRegistered"] = VariantValue.Bool(true),
                 });
@@ -399,7 +476,11 @@ internal sealed class StatusNotifierWatcher : IPathMethodHandler, IDisposable
 
     private void EmitSignal(string member, string signature, MessageBodyWriter? body, string? @interface = null)
     {
-        if (!_ownsName) return;
+        if (!_ownsName)
+        {
+            return;
+        }
+
         var writer = _connection.GetMessageWriter();
         try
         {

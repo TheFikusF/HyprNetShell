@@ -12,8 +12,7 @@ internal sealed class ChatGptUsageService : IBarDataService, IDisposable
 
     private readonly OnlineAccountsService _accounts;
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly HttpClient _httpClient = new()
-    {
+    private readonly HttpClient _httpClient = new() {
         Timeout = Timeout.InfiniteTimeSpan,
         MaxResponseContentBufferSize = 256 * 1024,
     };
@@ -112,8 +111,7 @@ internal sealed class ChatGptUsageService : IBarDataService, IDisposable
             durationProperty.TryGetInt64(out var seconds)
                 ? TimeSpan.FromSeconds(seconds)
                 : (TimeSpan?)null;
-        var label = duration switch
-        {
+        var label = duration switch {
             { TotalDays: >= 6 } => "Weekly limit",
             { TotalHours: >= 1 } value => $"{Math.Round(value.TotalHours):0}-hour limit",
             _ => fallbackLabel,
@@ -130,7 +128,10 @@ internal sealed class ChatGptUsageService : IBarDataService, IDisposable
     private void PublishFailure(string status)
     {
         var current = Snapshot;
-        Volatile.Write(ref _snapshot, current with { Connected = true, Status = status });
+        Volatile.Write(ref _snapshot, current with {
+            Connected = true,
+            Status = status
+        });
     }
 
     private void HandleAccountChanged(OnlineAccountProvider provider)
