@@ -6,8 +6,14 @@ public sealed record SystemInfoSnapshot
 {
     public static SystemInfoSnapshot Empty { get; } = new([], false);
 
-    public IReadOnlyList<SystemInfoEntry> Entries { get; }
-    public bool IsRefreshing { get; }
+    public IReadOnlyList<SystemInfoEntry> Entries
+    {
+        get;
+    }
+    public bool IsRefreshing
+    {
+        get;
+    }
 
     public SystemInfoSnapshot(IEnumerable<SystemInfoEntry> entries, bool isRefreshing)
     {

@@ -4,8 +4,6 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime;
 using System.Security.Cryptography;
-using ImageMagick;
-using SkiaSharp;
 using Silk.NET.OpenGL;
 using Svg.Skia;
 
@@ -15,7 +13,22 @@ public readonly record struct Texture(uint Id);
 
 public sealed unsafe class TextureRepository : IDisposable
 {
-    private const int MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024;
+    private readonly record struct LiveTexture(Texture Texture, int Width, int Height, long Revision, bool UsedThisFrame);
+
+    private readonly record struct PathTextureKey(string Path, int Width, int Height);
+
+    private readonly record struct PathTexture(Texture Texture, DateTime Modified, long LastAccessTimestamp);
+
+    private readonly record struct PendingPathTexture(
+        DateTime Modified,
+        Task<DecodedImage?> Decode,
+        CancellationTokenSource Cancellation,
+        long LastAccessTimestamp);
+
+    private readonly record struct RawTextureKey(int Width, int Height, ulong A, ulong B, ulong C, ulong D);
+
+    private readonly record struct DecodedImage(int Width, int Height, byte[] Pixels);
+
     private static readonly TimeSpan PathTextureIdleTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan PathTextureCleanupInterval = TimeSpan.FromSeconds(1);
 
@@ -36,13 +49,6 @@ public sealed unsafe class TextureRepository : IDisposable
 
     private long _lastPathTextureCleanupTimestamp = Stopwatch.GetTimestamp();
     private bool _disposed;
-
-    static TextureRepository()
-    {
-        ResourceLimits.Area = 1_000_000;
-        ResourceLimits.Memory = 32 * 1024 * 1024;
-        ResourceLimits.MaxMemoryRequest = 16 * 1024 * 1024;
-    }
 
     public TextureRepository(GL gl)
     {
@@ -103,8 +109,10 @@ public sealed unsafe class TextureRepository : IDisposable
             _pathTextures[key] = new PathTexture(texture, modified, Stopwatch.GetTimestamp());
             return texture;
         }
-        catch
+
+        catch (Exception exception)
         {
+            Console.Error.WriteLine($"[Rendering] Failed to load texture: {exception}");
             return null;
         }
     }
@@ -187,7 +195,6 @@ public sealed unsafe class TextureRepository : IDisposable
 
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-        ResourceLimits.TrimMemory();
     }
 
     public Texture GetTexture(ReadOnlySpan<byte> rgbaPixels, int width, int height)
@@ -256,6 +263,7 @@ public sealed unsafe class TextureRepository : IDisposable
                         (uint)image.Width, (uint)image.Height, 0,
                         PixelFormat.Rgba, PixelType.UnsignedByte, data);
                 }
+
                 else
                 {
                     _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
@@ -287,6 +295,7 @@ public sealed unsafe class TextureRepository : IDisposable
                     UsedThisFrame = false
                 };
             }
+
             else
             {
                 _gl.DeleteTexture(texture.Texture.Id);
@@ -305,19 +314,18 @@ public sealed unsafe class TextureRepository : IDisposable
 
         try
         {
-            using var decoded = new MagickImage(image.Bytes.ToArray());
-            var pixels = DecodeMagickImage(decoded);
-            if (pixels is null)
-            {
-                return null;
-            }
+            using var stream = new MemoryStream(image.Bytes.ToArray(), writable: false);
+            var raster = ImageDecoding.Decode(stream);
+            var pixels = new DecodedImage(raster.Width, raster.Height, raster.Pixels.ToArray());
 
-            var texture = UploadTexture(pixels.Value.Pixels, pixels.Value.Width, pixels.Value.Height);
+            var texture = UploadTexture(pixels.Pixels, pixels.Width, pixels.Height);
             _encodedImageTextures[image] = texture;
             return texture;
         }
-        catch (MagickException)
+
+        catch (Exception exception)
         {
+            Console.Error.WriteLine($"[Rendering] Failed to decode encoded image: {exception}");
             return null;
         }
     }
@@ -338,8 +346,10 @@ public sealed unsafe class TextureRepository : IDisposable
             _assetTextures[asset] = texture;
             return texture;
         }
-        catch
+
+        catch (Exception exception)
         {
+            Console.Error.WriteLine($"[Rendering] Failed to load texture: {exception}");
             return null;
         }
     }
@@ -367,8 +377,15 @@ public sealed unsafe class TextureRepository : IDisposable
                 {
                     return pending.Decode.GetAwaiter().GetResult();
                 }
-                catch
+
+                catch (OperationCanceledException)
                 {
+                    return null;
+                }
+
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine($"[Rendering] Failed to complete image decode '{path}': {exception}");
                     return null;
                 }
             }
@@ -456,75 +473,30 @@ public sealed unsafe class TextureRepository : IDisposable
     {
         try
         {
-            return Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
-                   Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase)
-                ? LoadSvg(path)
-                : LoadRasterImage(path, decodeWidth, decodeHeight);
-        }
-        finally
-        {
-            ResourceLimits.TrimMemory();
-        }
-    }
-
-    private static DecodedImage? LoadSvg(string path)
-    {
-        try
-        {
-            using var svg = new SKSvg();
-            var picture = svg.Load(path);
-            if (picture is null || picture.CullRect.Width <= 0 || picture.CullRect.Height <= 0)
+            SvgRaster raster;
+            if (Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetExtension(path).Equals(".svgz", StringComparison.OrdinalIgnoreCase))
             {
-                return null;
+                using var svg = new SKSvg();
+                var picture = svg.Load(path)
+                    ?? throw new InvalidDataException("SVG has no drawable content.");
+                raster = ImageDecoding.Rasterize(picture);
             }
 
-            const float MAX_DIMENSION = 512.0f;
-            var scale = MathF.Min(1.0f, MAX_DIMENSION / MathF.Max(picture.CullRect.Width, picture.CullRect.Height));
-            using var stream = new MemoryStream();
-            using var colorSpace = SKColorSpace.CreateSrgb();
-            picture.ToImage(
-                stream, SKColors.Transparent, SKEncodedImageFormat.Png, 100, scale, scale,
-                SKColorType.Rgba8888, SKAlphaType.Premul, colorSpace);
-            stream.Position = 0;
-            using var image = new MagickImage(stream);
-            return DecodeMagickImage(image);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static DecodedImage? LoadRasterImage(string path, int decodeWidth, int decodeHeight)
-    {
-        try
-        {
-            using var image = new MagickImage(path);
-            if (image.Width > decodeWidth || image.Height > decodeHeight)
+            else
             {
-                image.Resize((uint)decodeWidth, (uint)decodeHeight, FilterType.CubicSpline);
+                using var stream = File.OpenRead(path);
+                raster = ImageDecoding.Decode(stream, decodeWidth, decodeHeight);
             }
 
-            return DecodeMagickImage(image);
-        }
-        catch (MagickException)
-        {
-            return null;
-        }
-    }
-
-    private static DecodedImage? DecodeMagickImage(MagickImage image)
-    {
-        if ((long)image.Width * image.Height * 4 > MAX_DECODED_IMAGE_BYTES)
-        {
-            return null;
+            return new DecodedImage(raster.Width, raster.Height, raster.Pixels.ToArray());
         }
 
-        image.Format = MagickFormat.Rgba;
-        var pixels = image.ToByteArray();
-        return pixels.Length == image.Width * image.Height * 4
-            ? new DecodedImage((int)image.Width, (int)image.Height, pixels)
-            : null;
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"[Rendering] Failed to decode image '{path}': {exception}");
+            return null;
+        }
     }
 
     public void Dispose()
@@ -576,19 +548,4 @@ public sealed unsafe class TextureRepository : IDisposable
         _disposed = true;
     }
 
-    private readonly record struct LiveTexture(Texture Texture, int Width, int Height, long Revision, bool UsedThisFrame);
-
-    private readonly record struct PathTextureKey(string Path, int Width, int Height);
-
-    private readonly record struct PathTexture(Texture Texture, DateTime Modified, long LastAccessTimestamp);
-
-    private readonly record struct PendingPathTexture(
-        DateTime Modified,
-        Task<DecodedImage?> Decode,
-        CancellationTokenSource Cancellation,
-        long LastAccessTimestamp);
-
-    private readonly record struct RawTextureKey(int Width, int Height, ulong A, ulong B, ulong C, ulong D);
-
-    private readonly record struct DecodedImage(int Width, int Height, byte[] Pixels);
 }

@@ -25,12 +25,14 @@ Usage: $(basename "$0") <command> [arguments]
 
 Commands:
   native             Configure and build the native libraries
+  static [args]      Build the static SQLite, SkiaSharp and HarfBuzzSharp libraries
   managed [args]     Build the managed solution
   build [args]       Build the native libraries and managed solution
   run [args]         Build everything and run HyprNetShell
-  publish [args]     Publish NativeAOT
+  publish [args]     Build native and static libraries, then publish NativeAOT
   help               Show this help
 
+Arguments for static are passed to scripts/build-static-libraries.py.
 Arguments for managed and build are passed to dotnet build.
 Arguments for run are passed to HyprNetShell.
 Arguments for publish are passed to dotnet publish.
@@ -46,6 +48,10 @@ build_native() {
     fi
 
     meson compile -C "$NATIVE_BUILD_DIR"
+}
+
+build_static() {
+    python3 "$ROOT_DIR/scripts/build-static-libraries.py" "$@"
 }
 
 build_managed() {
@@ -68,6 +74,8 @@ run() {
 }
 
 publish() {
+    build_native
+    build_static
     exec dotnet publish "$PROJECT" \
         -p:PublishProfile="$PUBLISH_PROFILE" \
         -p:HyprNetShellGoogleClientId="$HYPRNETSHELL_GOOGLE_CLIENT_ID" \
@@ -85,6 +93,9 @@ fi
 case "$command" in
     native)
         build_native
+        ;;
+    static)
+        build_static "$@"
         ;;
     managed)
         build_managed "$@"

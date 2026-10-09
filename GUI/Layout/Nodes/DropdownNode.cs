@@ -12,6 +12,10 @@ public sealed class DropdownNode : Node
     private const int OPTIONS_SPACING = 8;
     private const int POPUP_PADDING = 8;
     private const float ANIMATION_SPEED = 18.0f;
+    private const int MAXIMUM_VISIBLE_OPTIONS = 7;
+    private const int WHEEL_OPTIONS = 1;
+    private const int SCROLLBAR_WIDTH = 8;
+    private const int SCROLLBAR_GAP = 8;
 
     private readonly IReadOnlyList<string> _options;
     private readonly SvgAsset _chevronIcon;
@@ -23,6 +27,8 @@ public sealed class DropdownNode : Node
     private Color _triggerBackground;
     private float _chevronRotation;
     private bool _isOpen;
+    private bool _alignSelectedOption;
+    private int _firstVisibleOption;
 
     public override int Width
     {
@@ -107,19 +113,57 @@ public sealed class DropdownNode : Node
         Rect? optionsRect = null;
         if (wasOpen)
         {
-            var optionsY = y + TRIGGER_HEIGHT + TRIGGER_SPACING;
-            var optionsOverlay = BuildOptionsOverlay();
-            optionsRect = new Rect(x, optionsY, optionsOverlay.Width, optionsOverlay.Height);
-            Layout.RegisterLayerInputRegion(RenderLayer.OptionsSelector, optionsRect.Value);
-            optionsOverlay.Opacity = inheritedOpacity;
-            Layout.DrawOnLayer(RenderLayer.OptionsSelector, topRenderer =>
+            var borderInset = (int)MathF.Ceiling(BorderWidth) * 2;
+            var inset = POPUP_PADDING * 2 + borderInset;
+            var belowY = Math.Clamp(y + TRIGGER_HEIGHT + TRIGGER_SPACING, 0, renderer.Height);
+            var belowHeight = renderer.Height - belowY;
+            var aboveHeight = Math.Clamp(y - TRIGGER_SPACING, 0, renderer.Height);
+            var desiredCount = Math.Min(MAXIMUM_VISIBLE_OPTIONS, _options.Count);
+            var desiredHeight = desiredCount * (OPTION_HEIGHT + OPTIONS_SPACING) - OPTIONS_SPACING + inset;
+            var placeAbove = belowHeight < desiredHeight && aboveHeight > belowHeight;
+            var availableHeight = placeAbove ? aboveHeight : belowHeight;
+            var visibleCount = Math.Min(desiredCount,
+                Math.Max(0, (availableHeight - inset + OPTIONS_SPACING) / (OPTION_HEIGHT + OPTIONS_SPACING)));
+            var popupWidth = Math.Min(Width + inset, renderer.Width);
+            var optionWidth = popupWidth - inset -
+                              (_options.Count > visibleCount ? SCROLLBAR_WIDTH + SCROLLBAR_GAP : 0);
+            if (visibleCount > 0 && optionWidth >= 42)
             {
-                optionsOverlay.Draw(topRenderer, x, optionsY);
-                if (!_isOpen)
+                var popupHeight = visibleCount * (OPTION_HEIGHT + OPTIONS_SPACING) - OPTIONS_SPACING + inset;
+                var optionsX = Math.Clamp(x, 0, renderer.Width - popupWidth);
+                var optionsY = placeAbove ? aboveHeight - popupHeight : belowY;
+                var popupRect = new Rect(optionsX, optionsY, popupWidth, popupHeight);
+                optionsRect = popupRect;
+                var maximumFirstOption = _options.Count - visibleCount;
+                if (_alignSelectedOption)
                 {
-                    Layout.UnregisterNextLayerInputRegion(RenderLayer.OptionsSelector, optionsRect.Value);
+                    _firstVisibleOption = Math.Clamp(SelectedIndex - visibleCount + 1, 0, maximumFirstOption);
+                    _alignSelectedOption = false;
                 }
-            });
+
+                _firstVisibleOption = Math.Clamp(_firstVisibleOption, 0, maximumFirstOption);
+                Layout.RegisterLayerInputRegion(RenderLayer.OptionsSelector, popupRect);
+                Layout.DrawOnLayer(RenderLayer.OptionsSelector, topRenderer =>
+                {
+                    var input = Layout.Input;
+                    if (!Layout.IsLowerLayerClickBlocked && input.Contains(popupRect) &&
+                        float.IsFinite(input.ScrollDelta) && input.ScrollDelta != 0)
+                    {
+                        // Wayland axis values are distances, not a count of wheel detents.
+                        _firstVisibleOption = Math.Clamp(
+                            _firstVisibleOption + Math.Sign(input.ScrollDelta) * WHEEL_OPTIONS,
+                            0, maximumFirstOption);
+                    }
+
+                    var optionsOverlay = BuildOptionsOverlay(popupWidth, popupHeight, optionWidth, visibleCount);
+                    optionsOverlay.Opacity = inheritedOpacity;
+                    optionsOverlay.Draw(topRenderer, optionsX, optionsY);
+                    if (!_isOpen)
+                    {
+                        Layout.UnregisterNextLayerInputRegion(RenderLayer.OptionsSelector, popupRect);
+                    }
+                });
+            }
         }
 
         var triggerRect = new Rect(x, y, Width, TRIGGER_HEIGHT);
@@ -146,7 +190,11 @@ public sealed class DropdownNode : Node
         HorizontalAlignment = ItemsAlignment.Spread,
         VerticalAlignment = ItemsAlignment.Center,
         IsHovered = _triggerHovered,
-        OnClick = () => _isOpen = !_isOpen,
+        OnClick = () =>
+        {
+            _isOpen = !_isOpen;
+            _alignSelectedOption = _isOpen;
+        },
         Style = ButtonStyle(_triggerBackground) with { Padding = new Insets(12, 7) },
         Children =
         [
@@ -163,35 +211,43 @@ public sealed class DropdownNode : Node
         ],
     };
 
-    private Node BuildOptionsOverlay()
+    private Node BuildOptionsOverlay(int width, int height, int optionWidth, int visibleCount)
     {
-        var borderInset = (int)MathF.Ceiling(BorderWidth * 2.0f);
-        var width = Width + POPUP_PADDING * 2 + borderInset;
-        var height = OPTION_HEIGHT * _options.Count +
-                     OPTIONS_SPACING * Math.Max(0, _options.Count - 1) +
-                     POPUP_PADDING * 2 +
-                     borderInset;
-        return new BoxNode(width, height) {
-            IgnoreLayout = true,
+        var contentHeight = visibleCount * (OPTION_HEIGHT + OPTIONS_SPACING) - OPTIONS_SPACING;
+        var content = new BoxNode(optionWidth, contentHeight) {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
+            Style = new Style { Spacing = OPTIONS_SPACING },
+            Children = [.. BuildOptions(optionWidth, visibleCount)],
+        };
+        var children = new List<Node> { content };
+        if (_options.Count > visibleCount)
+        {
+            children.Add(new ScrollbarNode(contentHeight, _firstVisibleOption, _options.Count,
+                visibleCount, ThemeManager.Current.Panel, ThemeManager.Current.Text.MutedColor,
+                SCROLLBAR_WIDTH));
+        }
+
+        return new BoxNode(width, height) {
+            IgnoreLayout = true,
+            VerticalAlignment = ItemsAlignment.Start,
             Style = new Style {
                 BackgroundColor = PopupBackgroundColor,
                 BorderColor = BorderColor,
                 BorderWidth = BorderWidth,
                 BorderRadius = 8,
                 Padding = POPUP_PADDING,
-                Spacing = OPTIONS_SPACING,
+                Spacing = SCROLLBAR_GAP,
                 ShadowColor = Color.Black with { A = 0.65f },
                 ShadowDistance = 8.0f,
             },
-            Children = [.. BuildOptions()],
+            Children = children,
         };
     }
 
-    private IEnumerable<Node> BuildOptions()
+    private IEnumerable<Node> BuildOptions(int width, int visibleCount)
     {
-        for (var index = 0; index < _options.Count; index++)
+        for (var index = _firstVisibleOption; index < _firstVisibleOption + visibleCount; index++)
         {
             var optionIndex = index;
             var target = _optionHovered[index].Value
@@ -199,7 +255,7 @@ public sealed class DropdownNode : Node
                 : index == SelectedIndex ? SelectedColor : BackgroundColor;
             _optionBackgrounds[index] = AnimateColor(_optionBackgrounds[index], target);
 
-            yield return new BoxNode(Width, OPTION_HEIGHT) {
+            yield return new BoxNode(width, OPTION_HEIGHT) {
                 HorizontalAlignment = ItemsAlignment.Spread,
                 VerticalAlignment = ItemsAlignment.Center,
                 IsHovered = _optionHovered[index],
@@ -211,7 +267,7 @@ public sealed class DropdownNode : Node
                         _options[index],
                         FontSize,
                         TextColor,
-                        Width - 42,
+                        width - 42,
                         TextWrapping.Ellipsis),
                     index == SelectedIndex
                         ? new ImageNode(_checkIcon, 16, 16, TextColor)

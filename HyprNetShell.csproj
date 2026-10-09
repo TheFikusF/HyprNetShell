@@ -1,92 +1,130 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    </PropertyGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Native/build/**</DefaultItemExcludes>
+  </PropertyGroup>
 
-    <PropertyGroup Condition="'$(PublishAot)' == 'true'">
-        <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">linux-x64</RuntimeIdentifier>
-        <SelfContained>true</SelfContained>
-        <StripSymbols>true</StripSymbols>
-        <NativeDebugSymbols>false</NativeDebugSymbols>
-        <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
-    </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">linux-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <StripSymbols>true</StripSymbols>
+    <NativeDebugSymbols>false</NativeDebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' == 'true'">
-        <DebugType>none</DebugType>
-        <DebugSymbols>false</DebugSymbols>
-    </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' == 'true'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="Core/**/*.cs" />
+    <Compile Remove="GUI/**/*.cs" />
+    <Compile Remove="Generators/**/*.cs" />
+    <Compile Remove="Rendering/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Core/HyprNetShell.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+    <TrimmerRootAssembly Include="Ical.Net" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
+    <DirectPInvoke Include="hypr_layer" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.a" />
+    <DirectPInvoke Include="hypr_audio" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libe_sqlite3.a" />
+    <DirectPInvoke Include="e_sqlite3" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libSkiaSharp.a" />
+    <DirectPInvoke Include="libSkiaSharp" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libHarfBuzzSharp.a" />
+    <DirectPInvoke Include="libHarfBuzzSharp" />
+    <LinkerArg Include="-lwireplumber-0.5" />
+    <LinkerArg Include="-lgio-2.0" />
+    <LinkerArg Include="-lgobject-2.0" />
+    <LinkerArg Include="-lglib-2.0" />
+    <LinkerArg Include="-lfontconfig" />
+    <LinkerArg Include="-lstdc++" />
+    <LinkerArg Include="-lm" />
+    <LinkerArg Include="-ldl" />
+    <LinkerArg Include="-lpthread" />
+    <LinkerArg Include="-lwayland-client" />
+    <LinkerArg Include="-lwayland-egl" />
+    <LinkerArg Include="-lEGL" />
+    <LinkerArg Include="-lGL" />
+    <LinkerArg Include="-lxkbcommon" />
+    <LinkerArg Include="-lpam" />
+  </ItemGroup>
+
+  <ItemGroup>
+   <AdditionalFiles Include="assets\clock.svg">
+    <Link>assets\svgs\clock.svg</Link>
+   </AdditionalFiles>
+   <AdditionalFiles Include="assets\sun.svg">
+    <Link>assets\svgs\sun.svg</Link>
+   </AdditionalFiles>
+  </ItemGroup>
+
+  <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="ComputeIlcCompileInputs" Condition="'$(PublishAot)' == 'true'">
+    <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot; --reconfigure" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
+    <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot;" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
+    <Exec Command="meson compile -C &quot;$(MSBuildProjectDirectory)/Native/build&quot;" />
+  </Target>
+
+  <Target Name="BuildStaticThirdPartyLibraries" BeforeTargets="ComputeIlcCompileInputs" DependsOnTargets="BuildHyprLayerStaticNativeLibrary" Condition="'$(PublishAot)' == 'true'">
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/scripts/build-static-libraries.py&quot;" />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.a')" Text="NativeAOT requires the native audio backend. Install wireplumber-0.5 development files and rebuild Native." />
+  </Target>
+
+  <Target Name="CopyStaticLibraryLicenses" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
     <ItemGroup>
-        <Compile Remove="Core/**/*.cs" />
-        <Compile Remove="GUI/**/*.cs" />
-        <Compile Remove="Generators/**/*.cs" />
-        <Compile Remove="Rendering/**/*.cs" />
+      <StaticLibraryLicense Include="$(MSBuildProjectDirectory)/Native/build/static-licenses/**/*" />
     </ItemGroup>
+    <Copy SourceFiles="@(StaticLibraryLicense)" DestinationFiles="@(StaticLibraryLicense->'$(PublishDir)licenses/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
+  <Target Name="RemoveStaticallyLinkedNativeLibraries" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
     <ItemGroup>
-        <ProjectReference Include="Core/HyprNetShell.Core.csproj" />
+      <StaticallyLinkedNativeLibrary Include="$(PublishDir)libSkiaSharp.so;$(PublishDir)libHarfBuzzSharp.so;$(PublishDir)libe_sqlite3.so;$(PublishDir)libhypr_audio.so;$(PublishDir)libhypr_layer.so;$(PublishDir)Magick.Native*.so" />
     </ItemGroup>
+    <Delete Files="@(StaticallyLinkedNativeLibrary)" />
+  </Target>
 
-    <ItemGroup Condition="'$(PublishAot)' == 'true'">
-        <TrimmerRootAssembly Include="Ical.Net" />
-        <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
-        <DirectPInvoke Include="hypr_layer" />
-        <LinkerArg Include="-lwayland-client" />
-        <LinkerArg Include="-lwayland-egl" />
-        <LinkerArg Include="-lEGL" />
-        <LinkerArg Include="-lxkbcommon" />
-        <LinkerArg Include="-lpam" />
-    </ItemGroup>
+  <Target Name="CopyOptionalAudioNativeLibrary" AfterTargets="Publish" Condition="'$(PublishAot)' != 'true' and Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
 
+  <Target Name="RemovePublishDebugArtifacts" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>
-      <AdditionalFiles Include="assets\clock.svg">
-        <Link>assets\svgs\clock.svg</Link>
-      </AdditionalFiles>
-      <AdditionalFiles Include="assets\sun.svg">
-        <Link>assets\svgs\sun.svg</Link>
-      </AdditionalFiles>
+      <PublishDebugArtifact Include="$(PublishDir)*.pdb" />
+      <PublishDebugArtifact Include="$(PublishDir)*.dbg" />
     </ItemGroup>
 
-    <Target Name="BuildHyprLayerStaticNativeLibrary" BeforeTargets="ComputeIlcCompileInputs" Condition="'$(PublishAot)' == 'true'">
-        <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot; --reconfigure" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
-        <Exec Command="meson setup &quot;$(MSBuildProjectDirectory)/Native/build&quot; &quot;$(MSBuildProjectDirectory)/Native&quot;" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/build.ninja')" />
-        <Exec Command="meson compile -C &quot;$(MSBuildProjectDirectory)/Native/build&quot;" />
-    </Target>
+    <Delete Files="@(PublishDebugArtifact)" />
+  </Target>
 
-    <Target Name="CopyOptionalAudioNativeLibrary" AfterTargets="Publish" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')">
-        <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
-    </Target>
+  <!-- <Target Name="CreateGentooBinaryArchive"
+      AfterTargets="Publish"
+      DependsOnTargets="CopyOptionalAudioNativeLibrary;RemovePublishDebugArtifacts"
+      Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' == 'linux-x64'">
+    <Exec Command="&quot;$(MSBuildProjectDirectory)/scripts/package-gentoo-bin.sh&quot; &quot;$(Version)&quot; &quot;$(PublishDir)&quot; &quot;$(PublishDir)&quot;" />
+  </Target> -->
 
-    <Target Name="RemovePublishDebugArtifacts" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
-        <ItemGroup>
-            <PublishDebugArtifact Include="$(PublishDir)*.pdb" />
-            <PublishDebugArtifact Include="$(PublishDir)*.dbg" />
-        </ItemGroup>
+  <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
+    <ItemGroup>
+      <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
+      <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')" />
+    </ItemGroup>
 
-        <Delete Files="@(PublishDebugArtifact)" />
-    </Target>
+    <Copy SourceFiles="@(HyprLayerNativeLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
 
-    <!-- <Target Name="CreateGentooBinaryArchive"
-            AfterTargets="Publish"
-            DependsOnTargets="CopyOptionalAudioNativeLibrary;RemovePublishDebugArtifacts"
-            Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' == 'linux-x64'">
-        <Exec Command="&quot;$(MSBuildProjectDirectory)/scripts/package-gentoo-bin.sh&quot; &quot;$(Version)&quot; &quot;$(PublishDir)&quot; &quot;$(PublishDir)&quot;" />
-    </Target> -->
-
-    <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
-        <ItemGroup>
-            <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
-            <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')" />
-        </ItemGroup>
-
-        <Copy SourceFiles="@(HyprLayerNativeLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-
-        <Warning Text="Native/build/libhypr_layer.so was not found. Build it with: cd Native &amp;&amp; meson setup build &amp;&amp; meson compile -C build" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
-    </Target>
+    <Warning Text="Native/build/libhypr_layer.so was not found. Build it with: cd Native &amp;&amp; meson setup build &amp;&amp; meson compile -C build" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
+  </Target>
 
 </Project>

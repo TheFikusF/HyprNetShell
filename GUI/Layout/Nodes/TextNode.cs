@@ -165,7 +165,7 @@ public class TextNode : Node, IWidthBoundNode
         }
     }
 
-    private IReadOnlyList<string> GetLines(IRenderApi renderer)
+    internal IReadOnlyList<string> GetLines(IRenderApi renderer)
     {
         var maxWidth = EffectiveMaxWidth;
         var availableWidth = maxWidth.HasValue

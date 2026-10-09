@@ -1,30 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-        <RootNamespace>HyprNetShell.Rendering</RootNamespace>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <RootNamespace>HyprNetShell.Rendering</RootNamespace>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Magick.NET-Q16-x64" Version="14.16.0" />
-        <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
-        <PackageReference Include="SkiaSharp" Version="4.151.1" />
-        <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
-        <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
-        <PackageReference Include="Svg.Skia" Version="5.2.1" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
+    <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
+    <PackageReference Include="Svg.Skia" Version="5.2.1" />
+  </ItemGroup>
 
-    <ItemGroup>
-        <EmbeddedResource Include="Shaders/*.glsl">
-            <LogicalName>HyprNetShell.Shaders.%(Filename)%(Extension)</LogicalName>
-        </EmbeddedResource>
-        <EmbeddedResource Include="../assets/fonts/0xProto-Regular-NL.ttf" LogicalName="HyprNetShell.Fonts.0xProto-Regular-NL.ttf" />
-        <EmbeddedResource Include="../assets/fonts/LiberationMono-Regular.ttf" LogicalName="HyprNetShell.Fonts.LiberationMono-Regular.ttf" />
-        <EmbeddedResource Include="../assets/fonts/NotoColorEmoji.ttf" LogicalName="HyprNetShell.Fonts.NotoColorEmoji.ttf" />
-    </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Shaders/*.glsl">
+      <LogicalName>HyprNetShell.Shaders.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../assets/fonts/0xProto-Regular-NL.ttf" LogicalName="HyprNetShell.Fonts.0xProto-Regular-NL.ttf" />
+    <EmbeddedResource Include="../assets/fonts/LiberationMono-Regular.ttf" LogicalName="HyprNetShell.Fonts.LiberationMono-Regular.ttf" />
+    <EmbeddedResource Include="../assets/fonts/NotoColorEmoji.ttf" LogicalName="HyprNetShell.Fonts.NotoColorEmoji.ttf" />
+  </ItemGroup>
 
 </Project>

@@ -3,6 +3,7 @@ using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
+using HyprNetShell.Core.Licensing;
 using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
@@ -18,7 +19,12 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
 
     private readonly SystemInfoService _systemInfo = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly ScrollableTextNode _licenseText = new("", width: null, height: 320);
+    private DropdownNode? _licenseDropdown;
+    private Theme? _dropdownTheme;
     private int _selectedPage;
+    private int _selectedLicense;
+    private bool _licenseLoaded;
 
 
     public string Id => "info";
@@ -34,7 +40,7 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
     {
         if (direction is SelectionDirection.Left or SelectionDirection.Right)
         {
-            SelectPage(direction == SelectionDirection.Left ? 0 : 1);
+            SelectPage(Math.Clamp(_selectedPage + (direction == SelectionDirection.Left ? -1 : 1), 0, 2));
         }
 
 
@@ -46,7 +52,7 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
 
     public Node Draw()
     {
-        var groups = BuildGroups();
+        var content = _selectedPage == 2 ? BuildLicenses() : BuildInformation();
         return new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch)
         {
             new BoxNode(245)
@@ -58,6 +64,7 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
                 [
                     BuildPageButton("System", "Hardware and session", 0),
                     BuildPageButton("About", "About HyprNetShell", 1),
+                    BuildPageButton("Licenses", "Project and native notices", 2),
                 ],
             },
             new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch)
@@ -66,13 +73,14 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
                 Children =
                 [
                     MainDialogTabUi.BuildSectionHeader(
-                        _selectedPage == 0 ? "System information" : "HyprNetShell",
+                        _selectedPage switch
+                        {
+                            0 => "System information",
+                            1 => "HyprNetShell",
+                            _ => "Licenses",
+                        },
                         _selectedPage == 0 && _systemInfo.Snapshot.IsRefreshing ? "Refreshing…" : ""),
-                    new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch)
-                    {
-                        Direction = Direction.Vertical,
-                        Children = [.. groups.Where(group => group.Entries.Count > 0).Select(BuildGroup)],
-                    },
+                    content,
                 ],
             },
         };
@@ -81,6 +89,54 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
     public void Dispose()
     {
         _systemInfo.Dispose();
+    }
+
+    private Node BuildInformation() => new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch) {
+        Direction = Direction.Vertical,
+        Children = [.. BuildGroups().Where(group => group.Entries.Count > 0).Select(BuildGroup)],
+    };
+
+    private Node BuildLicenses()
+    {
+        var notices = LicenseResourceCatalog.Notices;
+        if (notices.Count == 0)
+        {
+            return MainDialogTabUi.BuildMessage("No embedded license notices available");
+        }
+
+        if (!_licenseLoaded)
+        {
+            SelectLicense(_selectedLicense);
+        }
+
+        if (_licenseDropdown is null || !ReferenceEquals(_dropdownTheme, ThemeManager.Current))
+        {
+            _dropdownTheme = ThemeManager.Current;
+            _licenseDropdown = new DropdownNode(640, notices.Select(notice => notice.Title).ToArray(),
+                _selectedLicense, Icons.ChevronDown, Icons.Check, SelectLicense);
+        }
+
+        return new BoxNode(new Style { Spacing = 12 }, ItemsAlignment.Stretch) {
+            Direction = Direction.Vertical,
+            Children =
+            [
+                _licenseDropdown,
+                new TextNode(notices[_selectedLicense].Path, color: ThemeManager.Current.Text.MutedColor,
+                    wrapping: TextWrapping.Wrap),
+                _licenseText,
+            ],
+        };
+    }
+
+    private void SelectLicense(int index)
+    {
+        _selectedLicense = index;
+        _licenseText.Text = LicenseResourceCatalog.Read(LicenseResourceCatalog.Notices[index]);
+        _licenseLoaded = true;
+        if (_licenseDropdown is not null)
+        {
+            _licenseDropdown.SelectedIndex = index;
+        }
     }
 
     private void SelectPage(int page)
@@ -98,13 +154,11 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
         var selected = _selectedPage == index;
         var state = _buttonStates.GetState("page-" + index, ThemeManager.Current.Panel)
             .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode
-        {
+        return new BoxNode {
             Direction = Direction.Vertical,
             IsHovered = state.Hovered,
             OnClick = () => SelectPage(index),
-            Style = ModulesCommon.ModuleStyle(state.Background) with
-            {
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = 12,
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
@@ -118,8 +172,7 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
         };
     }
 
-    private Node BuildGroup(InfoGroup group) => new BoxNode
-    {
+    private Node BuildGroup(InfoGroup group) => new BoxNode {
         HorizontalAlignment = ItemsAlignment.Stretch,
         VerticalAlignment = ItemsAlignment.Stretch,
         Style = Style.Spacer,
@@ -160,8 +213,7 @@ internal sealed class InfoConfigurationTab(StatusBarServices services) : IMainDi
         var state = isRepository
             ? _buttonStates.GetState("repository", ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel)
             : null;
-        return new BoxNode
-        {
+        return new BoxNode {
             VerticalAlignment = ItemsAlignment.Start,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = new Style { Spacing = 12 },
