@@ -6,6 +6,7 @@ using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 
 using HyprNetShell.Core.Bar.Common;

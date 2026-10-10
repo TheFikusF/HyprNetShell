@@ -13,7 +13,7 @@ namespace HyprNetShell.Generators;
 [Generator]
 public sealed class SvgAssetGenerator : IIncrementalGenerator
 {
-    private const string AttributeName = "HyprNetShell.Rendering.SvgAssetAttribute";
+    private const string ATTRIBUTE_NAME = "HyprNetShell.Rendering.SvgAssetAttribute";
 
     private static readonly DiagnosticDescriptor MissingAsset = new(
         "HNSVG001",
@@ -34,7 +34,7 @@ public sealed class SvgAssetGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var declarations = context.SyntaxProvider.ForAttributeWithMetadataName(
-                AttributeName,
+                ATTRIBUTE_NAME,
                 static (node, _) => node is PropertyDeclarationSyntax,
                 static (syntaxContext, _) => CreateDeclaration(syntaxContext))
             .Where(static declaration => declaration is not null);

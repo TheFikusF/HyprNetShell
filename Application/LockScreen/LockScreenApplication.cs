@@ -5,6 +5,7 @@ using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.LockScreen;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 
 namespace HyprNetShell.Application.LockScreen;
 

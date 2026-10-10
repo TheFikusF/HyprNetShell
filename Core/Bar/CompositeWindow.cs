@@ -7,6 +7,7 @@ using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar;

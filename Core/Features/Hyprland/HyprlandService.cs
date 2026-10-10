@@ -695,7 +695,7 @@ internal sealed class HyprlandService : IDisposable
         var workspace = current.MonitorWorkspaces
             .SelectMany(monitor => monitor.Workspaces)
             .FirstOrDefault(workspace => workspace.Windows.Any(candidate => AddressEquals(candidate.Address, address)));
-        _focusedAddress = address;
+        _focusedAddress = window.Address;
         _snapshot = current with {
             FocusedTitle = window.Title,
             FocusedClassName = window.ClassName,

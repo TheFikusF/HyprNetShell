@@ -1,15 +1,253 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Numerics;
 using System.Text;
 using HyprNetShell.Rendering.Primitives;
 using Silk.NET.OpenGL;
 using StbTrueTypeSharp;
+using HyprNetShell.Rendering.ShaderModels;
 
 namespace HyprNetShell.Rendering;
 
 internal sealed unsafe partial class FontRenderer : IDisposable
 {
+    private readonly record struct UnicodeRange(int First, int Last)
+    {
+        public int Count => Last - First + 1;
+        public bool Contains(int codepoint) => codepoint >= First && codepoint <= Last;
+    }
+
+    private readonly record struct SymbolGlyph(SymbolAtlas Atlas, int Index);
+
+    private readonly record struct ColorGlyphKey(string Text, int PixelSize);
+
+    private sealed record ColorGlyph(uint Texture, int Width, int Height, float Advance);
+
+    private sealed record SymbolAtlas(UnicodeRange Range, uint Texture, StbTrueType.stbtt_bakedchar[] Chars);
+
+    private static partial class ColorEmojiRenderer
+    {
+        private const int CAIRO_FORMAT_ARGB32 = 0;
+        private const int PANGO_SCALE = 1024;
+        private static readonly Lazy<bool> Available = new(CheckAvailable);
+
+        public static RenderedGlyph? Render(string text, int pixelSize)
+        {
+            if (!Available.Value)
+            {
+                return null;
+            }
+
+            var font = IntPtr.Zero;
+            var measureSurface = IntPtr.Zero;
+            var measureContext = IntPtr.Zero;
+            var measureLayout = IntPtr.Zero;
+            var surface = IntPtr.Zero;
+            var context = IntPtr.Zero;
+            var layout = IntPtr.Zero;
+
+            try
+            {
+                font = pango_font_description_from_string("Noto Color Emoji");
+                pango_font_description_set_absolute_size(font, pixelSize * PANGO_SCALE);
+                measureSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+                measureContext = cairo_create(measureSurface);
+                measureLayout = pango_cairo_create_layout(measureContext);
+                pango_layout_set_font_description(measureLayout, font);
+                SetLayoutText(measureLayout, text);
+                pango_layout_get_pixel_size(measureLayout, out var measuredWidth, out var measuredHeight);
+
+                var width = Math.Clamp(measuredWidth + 4, 1, 256);
+                var height = Math.Clamp(Math.Max(measuredHeight, pixelSize) + 4, 1, 256);
+                surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+                context = cairo_create(surface);
+                layout = pango_cairo_create_layout(context);
+                pango_layout_set_font_description(layout, font);
+                SetLayoutText(layout, text);
+                cairo_move_to(context, 2.0, 1.0);
+                pango_cairo_show_layout(context, layout);
+                cairo_surface_flush(surface);
+
+                var stride = cairo_image_surface_get_stride(surface);
+                var data = cairo_image_surface_get_data(surface);
+                if (data == IntPtr.Zero || stride <= 0)
+                {
+                    return null;
+                }
+
+                var pixels = new byte[height * stride];
+                Marshal.Copy(data, pixels, 0, pixels.Length);
+                return new RenderedGlyph(width, height, pixels, Math.Max(measuredWidth, pixelSize * 0.5f));
+            }
+
+            catch
+            {
+                return null;
+            }
+
+            finally
+            {
+                if (layout != IntPtr.Zero)
+                {
+                    g_object_unref(layout);
+                }
+
+                if (context != IntPtr.Zero)
+                {
+                    cairo_destroy(context);
+                }
+
+                if (surface != IntPtr.Zero)
+                {
+                    cairo_surface_destroy(surface);
+                }
+
+                if (measureLayout != IntPtr.Zero)
+                {
+                    g_object_unref(measureLayout);
+                }
+
+                if (measureContext != IntPtr.Zero)
+                {
+                    cairo_destroy(measureContext);
+                }
+
+                if (measureSurface != IntPtr.Zero)
+                {
+                    cairo_surface_destroy(measureSurface);
+                }
+
+                if (font != IntPtr.Zero)
+                {
+                    pango_font_description_free(font);
+                }
+            }
+        }
+
+        private static void SetLayoutText(IntPtr layout, string text)
+        {
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var terminated = new byte[bytes.Length + 1];
+            bytes.CopyTo(terminated, 0);
+            pango_layout_set_text(layout, terminated, bytes.Length);
+        }
+
+        private static bool CheckAvailable()
+        {
+            return RegisterEmbeddedEmojiFont() || FontconfigHasNotoColorEmoji();
+        }
+
+        private static bool RegisterEmbeddedEmojiFont()
+        {
+            var bytes = ReadEmbeddedFont(EMOJI_FONT_RESOURCE_NAME);
+            if (bytes is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var fontPath = Path.Combine(Path.GetTempPath(), "hyprnetshell-fonts", "NotoColorEmoji.ttf");
+                Directory.CreateDirectory(Path.GetDirectoryName(fontPath)!);
+                if (!File.Exists(fontPath) || new FileInfo(fontPath).Length != bytes.Length)
+                {
+                    File.WriteAllBytes(fontPath, bytes);
+                }
+
+                var pathBytes = Encoding.UTF8.GetBytes(fontPath);
+                var terminatedPath = new byte[pathBytes.Length + 1];
+                pathBytes.CopyTo(terminatedPath, 0);
+                return FcConfigAppFontAddFile(IntPtr.Zero, terminatedPath);
+            }
+
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool FontconfigHasNotoColorEmoji()
+        {
+            try
+            {
+                using var process = Process.Start(new ProcessStartInfo {
+                    FileName = "fc-match",
+                    ArgumentList = { "--format=%{file}", "Noto Color Emoji" },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                });
+
+                process?.WaitForExit(250);
+                return process is { ExitCode: 0 };
+            }
+
+            catch
+            {
+                return false;
+            }
+        }
+
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_image_surface_create(int format, int width, int height);
+
+        [LibraryImport("cairo")]
+        private static partial void cairo_surface_destroy(IntPtr surface);
+
+        [LibraryImport("cairo")]
+        private static partial void cairo_surface_flush(IntPtr surface);
+
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_image_surface_get_data(IntPtr surface);
+
+        [LibraryImport("cairo")]
+        private static partial int cairo_image_surface_get_stride(IntPtr surface);
+
+        [LibraryImport("cairo")]
+        private static partial IntPtr cairo_create(IntPtr surface);
+
+        [LibraryImport("cairo")]
+        private static partial void cairo_destroy(IntPtr context);
+
+        [LibraryImport("cairo")]
+        private static partial void cairo_move_to(IntPtr context, double x, double y);
+
+        [LibraryImport("pango-1.0")]
+        private static partial IntPtr pango_font_description_from_string(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string str);
+
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_font_description_free(IntPtr desc);
+
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_font_description_set_absolute_size(IntPtr desc, double size);
+
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_set_font_description(IntPtr layout, IntPtr desc);
+
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_set_text(IntPtr layout, byte[] text, int length);
+
+        [LibraryImport("pango-1.0")]
+        private static partial void pango_layout_get_pixel_size(IntPtr layout, out int width, out int height);
+
+        [LibraryImport("pangocairo-1.0")]
+        private static partial IntPtr pango_cairo_create_layout(IntPtr context);
+
+        [LibraryImport("pangocairo-1.0")]
+        private static partial void pango_cairo_show_layout(IntPtr context, IntPtr layout);
+
+        [LibraryImport("gobject-2.0")]
+        private static partial void g_object_unref(IntPtr obj);
+
+        [LibraryImport("fontconfig")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool FcConfigAppFontAddFile(IntPtr config, byte[] file);
+    }
+
+    private sealed record RenderedGlyph(int Width, int Height, byte[] Pixels, float Advance);
+
     private const int SYMBOL_ATLAS_WIDTH = 2048;
     private const int SYMBOL_ATLAS_HEIGHT = 2048;
 
@@ -37,14 +275,10 @@ internal sealed unsafe partial class FontRenderer : IDisposable
     private readonly Dictionary<int, SymbolAtlas[]> _symbolAtlases = new();
     private readonly Dictionary<ColorGlyphKey, ColorGlyph> _colorGlyphs = new();
     private readonly List<float> _symbolVertices = new();
-    private readonly uint _program;
-    private readonly uint _colorProgram;
+    private readonly AlphaTextureShader _programShader;
+    private readonly TextureShader _colorProgramShader;
     private readonly uint _vao;
     private readonly uint _vbo;
-    private readonly int _viewportLocation;
-    private readonly int _colorLocation;
-    private readonly int _colorViewportLocation;
-    private readonly int _colorGlyphColorLocation;
     private bool _disposed;
     private int _viewportWidth = 1;
     private int _viewportHeight = 1;
@@ -57,13 +291,8 @@ internal sealed unsafe partial class FontRenderer : IDisposable
             [FALLBACK_FONT_RESOURCE_NAME] = ReadEmbeddedFont(FALLBACK_FONT_RESOURCE_NAME)
         };
 
-        _program = GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.ALPHA_TEXTURE_FRAGMENT, "text");
-        _colorProgram =
-            GlShaders.CreateProgram(_gl, GlShaders.TEXTURED_VERTEX, GlShaders.TEXTURE_FRAGMENT, "color text");
-        _viewportLocation = _gl.GetUniformLocation(_program, "uViewport");
-        _colorLocation = _gl.GetUniformLocation(_program, "uColor");
-        _colorViewportLocation = _gl.GetUniformLocation(_colorProgram, "uViewport");
-        _colorGlyphColorLocation = _gl.GetUniformLocation(_colorProgram, "uColor");
+        _programShader = new AlphaTextureShader(_gl);
+        _colorProgramShader = new TextureShader(_gl);
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -76,10 +305,10 @@ internal sealed unsafe partial class FontRenderer : IDisposable
             (void*)(2 * sizeof(float)));
         _gl.EnableVertexAttribArray(1);
 
-        _gl.UseProgram(_program);
-        _gl.Uniform1(_gl.GetUniformLocation(_program, "uAtlas"), 0);
-        _gl.UseProgram(_colorProgram);
-        _gl.Uniform1(_gl.GetUniformLocation(_colorProgram, "uTexture"), 0);
+        _programShader.Bind();
+        _programShader.Atlas = 0;
+        _colorProgramShader.Bind();
+        _colorProgramShader.Texture = 0;
     }
 
     public void SetViewport(int width, int height)
@@ -187,10 +416,9 @@ internal sealed unsafe partial class FontRenderer : IDisposable
             x, top + glyph.Height, 0.0f, 1.0f,
         ];
 
-        _gl.UseProgram(_colorProgram);
-        _gl.Uniform2(_colorViewportLocation, (float)_viewportWidth, (float)_viewportHeight);
-        _gl.Uniform4(
-            _colorGlyphColorLocation,
+        _colorProgramShader.Bind();
+        _colorProgramShader.Viewport = new Vector2(_viewportWidth, _viewportHeight);
+        _colorProgramShader.Color = new Vector4(
             color.R * color.A,
             color.G * color.A,
             color.B * color.A,
@@ -240,9 +468,9 @@ internal sealed unsafe partial class FontRenderer : IDisposable
         }
 
         // Lazy atlas creation can change bindings while a run is pending.
-        _gl.UseProgram(_program);
-        _gl.Uniform2(_viewportLocation, (float)_viewportWidth, (float)_viewportHeight);
-        _gl.Uniform4(_colorLocation, color.R, color.G, color.B, color.A);
+        _programShader.Bind();
+        _programShader.Viewport = new Vector2(_viewportWidth, _viewportHeight);
+        _programShader.Color = new Vector4(color.R, color.G, color.B, color.A);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, atlasTexture);
         _gl.BindVertexArray(_vao);
@@ -448,240 +676,8 @@ internal sealed unsafe partial class FontRenderer : IDisposable
 
         _gl.DeleteBuffer(_vbo);
         _gl.DeleteVertexArray(_vao);
-        _gl.DeleteProgram(_program);
-        _gl.DeleteProgram(_colorProgram);
+        _programShader.Dispose();
+        _colorProgramShader.Dispose();
         _disposed = true;
     }
-
-    private readonly record struct UnicodeRange(int First, int Last)
-    {
-        public int Count => Last - First + 1;
-        public bool Contains(int codepoint) => codepoint >= First && codepoint <= Last;
-    }
-
-    private readonly record struct SymbolGlyph(SymbolAtlas Atlas, int Index);
-
-    private readonly record struct ColorGlyphKey(string Text, int PixelSize);
-
-    private sealed record ColorGlyph(uint Texture, int Width, int Height, float Advance);
-
-    private sealed record SymbolAtlas(UnicodeRange Range, uint Texture, StbTrueType.stbtt_bakedchar[] Chars);
-
-    private static partial class ColorEmojiRenderer
-    {
-        private const int CAIRO_FORMAT_ARGB32 = 0;
-        private const int PANGO_SCALE = 1024;
-        private static readonly Lazy<bool> Available = new(CheckAvailable);
-
-        public static RenderedGlyph? Render(string text, int pixelSize)
-        {
-            if (!Available.Value)
-            {
-                return null;
-            }
-
-            var font = IntPtr.Zero;
-            var measureSurface = IntPtr.Zero;
-            var measureContext = IntPtr.Zero;
-            var measureLayout = IntPtr.Zero;
-            var surface = IntPtr.Zero;
-            var context = IntPtr.Zero;
-            var layout = IntPtr.Zero;
-
-            try
-            {
-                font = pango_font_description_from_string("Noto Color Emoji");
-                pango_font_description_set_absolute_size(font, pixelSize * PANGO_SCALE);
-                measureSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
-                measureContext = cairo_create(measureSurface);
-                measureLayout = pango_cairo_create_layout(measureContext);
-                pango_layout_set_font_description(measureLayout, font);
-                SetLayoutText(measureLayout, text);
-                pango_layout_get_pixel_size(measureLayout, out var measuredWidth, out var measuredHeight);
-
-                var width = Math.Clamp(measuredWidth + 4, 1, 256);
-                var height = Math.Clamp(Math.Max(measuredHeight, pixelSize) + 4, 1, 256);
-                surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-                context = cairo_create(surface);
-                layout = pango_cairo_create_layout(context);
-                pango_layout_set_font_description(layout, font);
-                SetLayoutText(layout, text);
-                cairo_move_to(context, 2.0, 1.0);
-                pango_cairo_show_layout(context, layout);
-                cairo_surface_flush(surface);
-
-                var stride = cairo_image_surface_get_stride(surface);
-                var data = cairo_image_surface_get_data(surface);
-                if (data == IntPtr.Zero || stride <= 0)
-                {
-                    return null;
-                }
-
-                var pixels = new byte[height * stride];
-                Marshal.Copy(data, pixels, 0, pixels.Length);
-                return new RenderedGlyph(width, height, pixels, Math.Max(measuredWidth, pixelSize * 0.5f));
-            }
-            catch
-            {
-                return null;
-            }
-            finally
-            {
-                if (layout != IntPtr.Zero)
-                {
-                    g_object_unref(layout);
-                }
-
-                if (context != IntPtr.Zero)
-                {
-                    cairo_destroy(context);
-                }
-
-                if (surface != IntPtr.Zero)
-                {
-                    cairo_surface_destroy(surface);
-                }
-
-                if (measureLayout != IntPtr.Zero)
-                {
-                    g_object_unref(measureLayout);
-                }
-
-                if (measureContext != IntPtr.Zero)
-                {
-                    cairo_destroy(measureContext);
-                }
-
-                if (measureSurface != IntPtr.Zero)
-                {
-                    cairo_surface_destroy(measureSurface);
-                }
-
-                if (font != IntPtr.Zero)
-                {
-                    pango_font_description_free(font);
-                }
-            }
-        }
-
-        private static void SetLayoutText(IntPtr layout, string text)
-        {
-            var bytes = Encoding.UTF8.GetBytes(text);
-            var terminated = new byte[bytes.Length + 1];
-            bytes.CopyTo(terminated, 0);
-            pango_layout_set_text(layout, terminated, bytes.Length);
-        }
-
-        private static bool CheckAvailable()
-        {
-            return RegisterEmbeddedEmojiFont() || FontconfigHasNotoColorEmoji();
-        }
-
-        private static bool RegisterEmbeddedEmojiFont()
-        {
-            var bytes = ReadEmbeddedFont(EMOJI_FONT_RESOURCE_NAME);
-            if (bytes is null)
-            {
-                return false;
-            }
-
-            try
-            {
-                var fontPath = Path.Combine(Path.GetTempPath(), "hyprnetshell-fonts", "NotoColorEmoji.ttf");
-                Directory.CreateDirectory(Path.GetDirectoryName(fontPath)!);
-                if (!File.Exists(fontPath) || new FileInfo(fontPath).Length != bytes.Length)
-                {
-                    File.WriteAllBytes(fontPath, bytes);
-                }
-
-                var pathBytes = Encoding.UTF8.GetBytes(fontPath);
-                var terminatedPath = new byte[pathBytes.Length + 1];
-                pathBytes.CopyTo(terminatedPath, 0);
-                return FcConfigAppFontAddFile(IntPtr.Zero, terminatedPath);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool FontconfigHasNotoColorEmoji()
-        {
-            try
-            {
-                using var process = Process.Start(new ProcessStartInfo {
-                    FileName = "fc-match",
-                    ArgumentList = { "--format=%{file}", "Noto Color Emoji" },
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                });
-
-                process?.WaitForExit(250);
-                return process is { ExitCode: 0 };
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        [LibraryImport("cairo")]
-        private static partial IntPtr cairo_image_surface_create(int format, int width, int height);
-
-        [LibraryImport("cairo")]
-        private static partial void cairo_surface_destroy(IntPtr surface);
-
-        [LibraryImport("cairo")]
-        private static partial void cairo_surface_flush(IntPtr surface);
-
-        [LibraryImport("cairo")]
-        private static partial IntPtr cairo_image_surface_get_data(IntPtr surface);
-
-        [LibraryImport("cairo")]
-        private static partial int cairo_image_surface_get_stride(IntPtr surface);
-
-        [LibraryImport("cairo")]
-        private static partial IntPtr cairo_create(IntPtr surface);
-
-        [LibraryImport("cairo")]
-        private static partial void cairo_destroy(IntPtr context);
-
-        [LibraryImport("cairo")]
-        private static partial void cairo_move_to(IntPtr context, double x, double y);
-
-        [LibraryImport("pango-1.0")]
-        private static partial IntPtr pango_font_description_from_string(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string str);
-
-        [LibraryImport("pango-1.0")]
-        private static partial void pango_font_description_free(IntPtr desc);
-
-        [LibraryImport("pango-1.0")]
-        private static partial void pango_font_description_set_absolute_size(IntPtr desc, double size);
-
-        [LibraryImport("pango-1.0")]
-        private static partial void pango_layout_set_font_description(IntPtr layout, IntPtr desc);
-
-        [LibraryImport("pango-1.0")]
-        private static partial void pango_layout_set_text(IntPtr layout, byte[] text, int length);
-
-        [LibraryImport("pango-1.0")]
-        private static partial void pango_layout_get_pixel_size(IntPtr layout, out int width, out int height);
-
-        [LibraryImport("pangocairo-1.0")]
-        private static partial IntPtr pango_cairo_create_layout(IntPtr context);
-
-        [LibraryImport("pangocairo-1.0")]
-        private static partial void pango_cairo_show_layout(IntPtr context, IntPtr layout);
-
-        [LibraryImport("gobject-2.0")]
-        private static partial void g_object_unref(IntPtr obj);
-
-        [LibraryImport("fontconfig")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static partial bool FcConfigAppFontAddFile(IntPtr config, byte[] file);
-    }
-
-    private sealed record RenderedGlyph(int Width, int Height, byte[] Pixels, float Advance);
 }

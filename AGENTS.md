@@ -53,7 +53,7 @@ HyprNetShell/
 │       └── Nodes/                     Boxes, text, images, sliders, switches, scrollbars
 ├── Rendering/
 │   ├── HyprNetShell.Rendering.csproj  Unsafe rendering project and native packages
-│   ├── Renderer.cs                    OpenGL renderer implementation
+│   ├── Renderers/                     Renderer lifecycle and drawing partials
 │   ├── FontRenderer.cs                Embedded-font text atlas and drawing
 │   ├── TextureRepository.cs           Image/SVG texture cache
 │   ├── IRenderApi.cs                  Interface consumed by GUI and Core
@@ -203,7 +203,7 @@ Do not silently swallow runtime failures. Any caught exception or unsuccessful e
 
 - Use braces for every control-flow body, even a single statement. Never write `if (condition) DoSomething();` or a nonempty inline control-flow block.
 - Use Allman braces: opening and closing braces each have their own line, with four-space indentation in C#.
-- Only object declarations/initializers and empty blocks may keep `{ }` on the same line. An empty block such as `catch (OperationCanceledException) { }` is permitted, not required; existing logging and cancellation rules still apply.
+- Object declarations/initializers, empty blocks, and auto-properties with semicolon-only accessors may keep `{ }` on the same line. This includes `get;`, `set;`, `init;`, accessor visibility modifiers, and partial property declarations, for example `public int Count { get; private set; }` or `public partial float Strength { get; set; }`. Properties with accessor bodies still use Allman braces. An empty block such as `catch (OperationCanceledException) { }` is permitted, not required; existing logging and cancellation rules still apply.
 - After a closing brace, leave exactly one empty line before any following code, including `else`, `catch`, and `finally`. Consecutive enclosing closing braces and punctuation belonging to the same expression (such as `};` or `});`) do not need intervening empty lines. Do not insert a trailing empty line when no code follows.
 
 ```csharp

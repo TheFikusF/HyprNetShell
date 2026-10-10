@@ -13,11 +13,17 @@ internal sealed class AppConfiguration
 {
     public WallpaperConfiguration Wallpaper { get; set; } = new();
     public DisplayConfiguration Display { get; set; } = new();
+    public VisualsConfiguration Visuals { get; set; } = new();
     public BatteryConfiguration Battery { get; set; } = new();
     public WorldClocksConfiguration WorldClocks { get; set; } = new();
     public CalendarConfiguration Calendars { get; set; } = new();
     public OnlineAccountsConfiguration OnlineAccounts { get; set; } = new();
     public List<CompositeWindowConfigurationValue> CompositeWindows { get; set; } = [];
+}
+
+internal sealed class VisualsConfiguration
+{
+    public bool CrystalOverview { get; set; } = true;
 }
 
 internal sealed class WallpaperConfiguration

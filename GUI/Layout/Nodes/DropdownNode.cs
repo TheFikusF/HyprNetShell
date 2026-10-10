@@ -1,5 +1,6 @@
 using HyprNetShell.GUI.Helpers;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.GUI.Layout.Nodes;

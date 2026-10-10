@@ -4,6 +4,7 @@ using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Dialogs;
@@ -33,6 +34,7 @@ internal sealed class SettingsDialog : IDialogWindow, IDisposable
         _tabs =
         [
             new Tab(new ConfigurationTab(services.Wallpapers, services.History, _textInputs)),
+            new Tab(new VisualsConfigurationTab()),
             ..(services.OnlineAccounts.HasConfiguredProviders
                 ? new[] { new Tab(new OnlineAccountsConfigurationTab(services.OnlineAccounts)) }
                 : []),

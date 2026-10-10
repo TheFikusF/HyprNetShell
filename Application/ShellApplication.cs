@@ -5,6 +5,7 @@ using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
+using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Application;
@@ -302,10 +303,8 @@ internal sealed class ShellLoop : IDisposable
         if (_services.Overview.RenderOutputId == output.Id)
         {
             Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = _services.Overview.IsVisible ? output.Input : LayoutInput.None);
-            using (var overviewLayout = new Layout(_renderer, output.Width, output.Height, layer: RenderLayer.Dialog))
-            {
-                overviewLayout.AddNode(_services.Overview.Draw(output.Width, output.Height));
-            }
+            Layout.DrawOnLayer(RenderLayer.Dialog,
+                renderer => _services.Overview.Draw(renderer, output.Width, output.Height));
             Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = LayoutInput.None);
         }
 

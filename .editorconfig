@@ -15,7 +15,8 @@ indent_size = 2
 trim_trailing_whitespace = false
 
 [*.cs]
-# Allman blocks; object/collection initializers and empty blocks may stay inline.
+# Allman blocks; initializers, empty blocks, and semicolon-only auto-properties may stay inline.
+# Roslyn cannot preserve only auto-property blocks: manually expand all other nonempty blocks.
 csharp_new_line_before_open_brace = accessors, anonymous_methods, anonymous_types, control_blocks, events, indexers, lambdas, local_functions, methods, properties, types
 csharp_new_line_before_else = true
 csharp_new_line_before_catch = true
@@ -23,7 +24,7 @@ csharp_new_line_before_finally = true
 csharp_new_line_before_members_in_object_initializers = false
 csharp_new_line_before_members_in_anonymous_types = false
 csharp_new_line_between_query_expression_clauses = true
-csharp_preserve_single_line_blocks = false
+csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = false
 csharp_prefer_braces = true:error
 dotnet_diagnostic.IDE0011.severity = error

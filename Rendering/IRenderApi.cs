@@ -8,6 +8,7 @@ public interface IRenderApi
     {
         get;
     }
+
     int Height
     {
         get;
@@ -40,6 +41,10 @@ public interface IRenderApi
         float offsetX = 0, float offsetY = 2);
     void DrawImage(RawImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawRoundedImage(RawImageData image, Rect rect, float radius, Color color);
+    /// <summary>Draws a crystal disc with an outer glow. Time is in seconds; opacity is clamped to 0..1.</summary>
+    void DrawCrystalSphere(Rect sphere, float time, float opacity);
+    /// <summary>Warps the full image from an absolute source-plane rectangle into a square sphere. Null draws a placeholder.</summary>
+    void DrawSphericalImage(RawImageData? image, Rect sourceRect, Rect sphere, Color color, float emphasis, Point rotation = default, float warpStrength = SphereProjection.THUMBNAIL_WARP_STRENGTH);
     void DrawImage(EncodedImageData image, Rect rect, Color multiplicativeColor, float rotationRadians = 0);
     void DrawImage(
         SvgAsset asset,
