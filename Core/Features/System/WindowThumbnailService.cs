@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Services;
@@ -6,28 +7,35 @@ namespace HyprNetShell.Core.Features.System;
 
 public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = null) : IWindowThumbnailService
 {
-    private sealed record Visibility(string OutputName, HashSet<ulong>? Handles);
+    private sealed record Visibility(string OutputName, HashSet<ulong>? Handles, Dictionary<ulong, WindowThumbnailSize>? Sizes);
+    private const int STARTUP_WARMUP_SECONDS = 8;
+
+    private readonly HashSet<ulong> _startupSatisfied = [];
     private readonly Dictionary<object, Visibility> _owners = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ulong, WindowThumbnailSnapshot> _windows = [];
     private readonly HashSet<ulong> _visible = [];
+    private readonly Dictionary<ulong, WindowThumbnailSize> _sizes = [];
     private readonly int _threadId = Environment.CurrentManagedThreadId;
     private IReadOnlyList<WindowThumbnailMetadata>? _metadata;
     private bool _snapshotDirty;
     private bool _enabled;
     private bool _enabledInitialized;
     private bool _disposed;
+    private long? _startupStarted;
+    private bool _startupStopped;
 
     public bool IsAvailable => !_disposed && backend?.IsAvailable == true;
     public IReadOnlyList<WindowThumbnailSnapshot> Snapshot { get; private set; } = [];
     public event Action<WindowThumbnailSnapshot>? WindowAdded;
     public event Action<WindowThumbnailSnapshot>? WindowRemoved;
 
-    public void SetOverviewVisible(object owner, string outputName, bool visible, IReadOnlyCollection<ulong>? handles = null)
+    public void SetOverviewVisible(object owner, string outputName, bool visible, IReadOnlyCollection<ulong>? handles = null,
+        IReadOnlyDictionary<ulong, WindowThumbnailSize>? sizes = null)
     {
         CheckThread();
         if (visible)
         {
-            _owners[owner] = new(outputName, handles is null ? null : new(handles));
+            _owners[owner] = new(outputName, handles is null ? null : new(handles), sizes is null ? null : new(sizes));
         }
         else
         {
@@ -54,9 +62,10 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
             return;
         }
 
+        _startupStarted ??= Stopwatch.GetTimestamp();
+
         try
         {
-
             var polled = backend.PollWindows();
             var removed = Array.Empty<WindowThumbnailSnapshot>();
             var added = new List<WindowThumbnailSnapshot>();
@@ -67,6 +76,8 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
                 foreach (var window in removed)
                 {
                     _windows.Remove(window.Window.Handle);
+                    _sizes.Remove(window.Window.Handle);
+                    _startupSatisfied.Remove(window.Window.Handle);
                 }
 
                 foreach (var window in metadata.Values)
@@ -84,24 +95,14 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
                         added.Add(snapshot);
                     }
                 }
+
                 _metadata = polled;
                 _snapshotDirty = true;
             }
+
             ApplyVisibility();
-            if (_enabled)
-            {
-                foreach (var frame in backend.PollFrames())
-                {
-                    if (_visible.Contains(frame.Handle) && _windows.TryGetValue(frame.Handle, out var window) &&
-                        (window.Frame is null || frame.Revision > window.Frame.Revision))
-                    {
-                        _windows[frame.Handle] = window with {
-                            Frame = frame
-                        };
-                        _snapshotDirty = true;
-                    }
-                }
-            }
+            PollFrames();
+            ApplyVisibility(pollFrames: false);
 
             PublishSnapshot();
             foreach (var window in removed)
@@ -120,7 +121,26 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
         }
     }
 
-    private void ApplyVisibility()
+    private void PollFrames()
+    {
+        if (!_enabled || backend is null)
+        {
+            return;
+        }
+
+        foreach (var frame in backend.PollFrames())
+        {
+            if (_visible.Contains(frame.Handle) && _windows.TryGetValue(frame.Handle, out var window) &&
+                (window.Frame is null || frame.Revision > window.Frame.Revision))
+            {
+                _windows[frame.Handle] = window with { Frame = frame };
+                _startupSatisfied.Add(frame.Handle);
+                _snapshotDirty = true;
+            }
+        }
+    }
+
+    private void ApplyVisibility(bool pollFrames = true)
     {
         if (backend is null)
         {
@@ -129,28 +149,63 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
 
         try
         {
-            var enabled = backend.IsAvailable && _owners.Count > 0;
-            var wanted = enabled
-                ? _windows.Keys.Where(handle => _owners.Values.Any(owner => owner.Handles is null || owner.Handles.Contains(handle))).ToHashSet()
+            // Disabling native capture can discard pending buffers, so drain them first.
+            if (pollFrames)
+            {
+                PollFrames();
+            }
+            var warming = !_startupStopped && _startupStarted is { } started &&
+                Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(STARTUP_WARMUP_SECONDS);
+            var wanted = backend.IsAvailable
+                ? _windows.Keys.Where(handle =>
+                    _owners.Values.Any(owner => owner.Handles is null || owner.Handles.Contains(handle)) ||
+                    (warming && !_startupSatisfied.Contains(handle) && _windows[handle].Frame is null)).ToHashSet()
                 : [];
+            var enabled = wanted.Count > 0;
 
             foreach (var handle in _visible.Except(wanted).ToArray())
             {
                 backend.SetWindowVisible(handle, false);
                 _visible.Remove(handle);
-                if (_windows.TryGetValue(handle, out var window))
-                {
-                    _windows[handle] = window with {
-                        Frame = null
-                    };
-                    _snapshotDirty = true;
-                }
+                _sizes.Remove(handle);
             }
 
-            foreach (var handle in wanted.Except(_visible).ToArray())
+            foreach (var handle in wanted)
             {
-                backend.SetWindowVisible(handle, true);
-                _visible.Add(handle);
+                var width = 0;
+                var height = 0;
+                foreach (var owner in _owners.Values)
+                {
+                    if (owner.Handles is not null && !owner.Handles.Contains(handle))
+                    {
+                        continue;
+                    }
+
+                    var size = owner.Sizes?.GetValueOrDefault(handle) ?? WindowThumbnailSize.Default;
+                    // A default record struct can bypass the positive-dimension constructor.
+                    if (size.Width <= 0 || size.Height <= 0)
+                    {
+                        size = WindowThumbnailSize.Default;
+                    }
+
+                    width = Math.Max(width, size.Width);
+                    height = Math.Max(height, size.Height);
+                }
+
+                var demand = width > 0 && height > 0
+                    ? new WindowThumbnailSize(width, height)
+                    : WindowThumbnailSize.Default;
+                if (!_sizes.TryGetValue(handle, out var previous) || previous != demand)
+                {
+                    backend.SetWindowSize(handle, demand.Width, demand.Height);
+                    _sizes[handle] = demand;
+                }
+
+                if (!_visible.Contains(handle))
+                {
+                    backend.SetWindowVisible(handle, true);
+                    _visible.Add(handle);
+                }
             }
 
             if (!_enabledInitialized || enabled != _enabled)
@@ -159,6 +214,7 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
                 _enabled = enabled;
                 _enabledInitialized = true;
             }
+
             PublishSnapshot();
         }
         catch (Exception exception)
@@ -196,6 +252,7 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
 
         CheckThread();
         _owners.Clear();
+        _startupStopped = true;
         ApplyVisibility();
         _disposed = true;
         try
@@ -208,6 +265,10 @@ public sealed class WindowThumbnailService(IWindowThumbnailBackend? backend = nu
         }
 
         _windows.Clear();
+        _sizes.Clear();
+        _visible.Clear();
+        _startupSatisfied.Clear();
+        _metadata = null;
         Snapshot = [];
         WindowAdded = null;
         WindowRemoved = null;

@@ -20,4 +20,5 @@ public interface IWindowThumbnailBackend : IDisposable
     IReadOnlyList<WindowThumbnailFrame> PollFrames();
     void SetEnabled(bool enabled);
     void SetWindowVisible(ulong handle, bool visible);
+    void SetWindowSize(ulong handle, int width, int height);
 }

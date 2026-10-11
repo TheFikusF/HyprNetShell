@@ -27,6 +27,7 @@
     <Compile Remove="GUI/**/*.cs" />
     <Compile Remove="Generators/**/*.cs" />
     <Compile Remove="Rendering/**/*.cs" />
+    <Compile Remove="scripts/test-thumbnail-cache/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

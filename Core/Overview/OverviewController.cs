@@ -49,6 +49,8 @@ public sealed class OverviewController : IDisposable
     private readonly List<OverviewPreview> _previews = [];
     private readonly AppIconResolver _icons = new();
     private readonly Dictionary<string, int> _thumbnailIndices = new(StringComparer.Ordinal);
+    private readonly Dictionary<ulong, WindowThumbnailSize> _demandSizes = [];
+    private readonly HashSet<string> _frameAspects = [];
 
     private readonly IOverviewDrawer _crystalDrawer = new CrystalOverviewDrawer();
     private readonly IOverviewDrawer _classicDrawer = new ClassicOverviewDrawer();
@@ -66,7 +68,6 @@ public sealed class OverviewController : IDisposable
     private IReadOnlyList<WorkspaceSnapshot>? _workspaceSnapshot;
     private WindowIdentity[] _windows = [];
     private IReadOnlyList<WindowThumbnailSnapshot>? _thumbnailSnapshot;
-    private HashSet<ulong> _nextDemand = [];
     private int _layoutWidth = -1;
     private int _layoutHeight = -1;
     private bool _layoutDirty = true;
@@ -171,6 +172,7 @@ public sealed class OverviewController : IDisposable
             _search.Activate();
             _selected = null;
             _aspects.Clear();
+            _frameAspects.Clear();
             _drawer.Reset();
             _workspaceSnapshot = null;
             _layoutDirty = true;
@@ -278,6 +280,7 @@ public sealed class OverviewController : IDisposable
 #endif
         _search.Deactivate();
         _demand.Clear();
+        _demandSizes.Clear();
         _thumbnails.RemoveOwner(this);
     }
 
@@ -467,24 +470,20 @@ public sealed class OverviewController : IDisposable
         var updateDemand = windowsChanged || metadataChanged || _layoutDirty;
         if (updateDemand || thumbnailsChanged)
         {
-            if (updateDemand)
-            {
-                _nextDemand.Clear();
-            }
-
             foreach (var window in _windows)
             {
                 var thumbnail = GetThumbnail(window.Address);
-                if (updateDemand && thumbnail is not null)
-                {
-                    _nextDemand.Add(thumbnail.Window.Handle);
-                }
-
                 var aspect = window.Width > 0 && window.Height > 0
                     ? (float)window.Width / window.Height
-                    : thumbnail?.Frame is { } frame
+                    : !_frameAspects.Contains(window.Address) && thumbnail?.Frame is { } frame
                         ? (float)frame.Image.Width / Math.Max(1, frame.Image.Height)
-                        : 16f / 9;
+                        : _aspects.GetValueOrDefault(window.Address, 16f / 9);
+                // Requested dimensions round frames to pixels; do not feed that rounding back into layout every frame.
+                if (thumbnail?.Frame is not null)
+                {
+                    _frameAspects.Add(window.Address);
+                }
+
                 if (aspect != _aspects.GetValueOrDefault(window.Address, 16f / 9))
                 {
                     _layoutDirty = true;
@@ -492,18 +491,19 @@ public sealed class OverviewController : IDisposable
 
                 _aspects[window.Address] = aspect;
             }
-
-            if (updateDemand && !_demand.SetEquals(_nextDemand))
-            {
-                (_demand, _nextDemand) = (_nextDemand, _demand);
-                _thumbnails.SetOverviewVisible(this, _outputName, true, _demand);
-            }
         }
 
-        if (windowsChanged || _layoutDirty || width != _layoutWidth || height != _layoutHeight)
+        var layoutChanged = windowsChanged || _layoutDirty || width != _layoutWidth || height != _layoutHeight;
+        if (layoutChanged)
         {
             BuildLayout(width, height);
             thumbnailsChanged = true;
+        }
+
+        // Only steady layout/metadata changes affect capture; hover and close/focus zoom reuse these frames.
+        if (updateDemand || layoutChanged)
+        {
+            UpdateThumbnailDemand(width, height);
         }
 
         if (thumbnailsChanged)
@@ -513,6 +513,38 @@ public sealed class OverviewController : IDisposable
                 preview.Frame = GetThumbnail(preview.Address)?.Frame;
             }
         }
+    }
+
+    private void UpdateThumbnailDemand(int width, int height)
+    {
+        var sizes = new Dictionary<ulong, WindowThumbnailSize>();
+        foreach (var preview in _previews)
+        {
+            var thumbnail = GetThumbnail(preview.Address);
+            if (thumbnail is null)
+            {
+                continue;
+            }
+
+            var aspect = _aspects.GetValueOrDefault(preview.Address, 16f / 9);
+            sizes[thumbnail.Window.Handle] = _drawer.GetThumbnailSize(preview.Bounds, aspect, width, height);
+        }
+
+        if (_demandSizes.Count == sizes.Count && sizes.All(pair =>
+                _demandSizes.TryGetValue(pair.Key, out var previous) && previous == pair.Value))
+        {
+            return;
+        }
+
+        _demand.Clear();
+        _demandSizes.Clear();
+        foreach (var (handle, size) in sizes)
+        {
+            _demand.Add(handle);
+            _demandSizes.Add(handle, size);
+        }
+
+        _thumbnails.SetOverviewVisible(this, _outputName, true, _demand, _demandSizes);
     }
 
     private void BuildLayout(int width, int height)

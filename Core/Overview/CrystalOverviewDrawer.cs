@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Models;
 using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
@@ -15,6 +16,17 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
     private const float SPHERE_SCALE = 1.8f;
     private const int PREVIEW_ROWS = 3;
     private const float SPHERE_TRANSITION_SCALE = 1.4f;
+
+    public override WindowThumbnailSize GetThumbnailSize(Rect bounds, float aspect, int width, int height)
+    {
+        var source = GetThumbnailSource(bounds, aspect, THUMBNAILS_SCALE * THUMBNAIL_HOVER_SCALE);
+        var sphere = GetSurfaceSphere(width, height);
+        var projected = SphereProjection.ProjectBounds(source, sphere);
+        var lifted = SphereProjection.ProjectBounds(source with { Y = source.Y - 7 }, sphere);
+        var scale = Math.Max(1, Math.Max(Math.Max(projected.Width, lifted.Width) / Math.Max(1, source.Width),
+            Math.Max(projected.Height, lifted.Height) / Math.Max(1, source.Height)));
+        return GetCaptureSize(source.Width * scale, source.Height * scale);
+    }
 
     public override string? Draw(IRenderApi renderer, OverviewDrawContext context)
     {

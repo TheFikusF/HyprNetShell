@@ -13,7 +13,7 @@ This is a work in progress, not a polished drop-in desktop. Hyprland is the inte
 You need:
 
 - Linux x86-64 and a running Hyprland session;
-- .NET 10 SDK, a C11 compiler, `pkg-config`, Meson, and Ninja;
+- .NET 10 SDK, Clang, `pkg-config`, Meson, and Ninja;
 - development files for Wayland client/EGL, EGL/OpenGL, xkbcommon, and PAM, plus `wayland-scanner`;
 - GLib/GIO runtime libraries. WirePlumber 0.5 development files are optional for the native audio integration.
 
@@ -28,6 +28,8 @@ From the repository root:
 ```
 
 Run inside your Wayland session. `./build.sh help` lists all commands; `native` and `managed` can build each side separately. A managed-only build still needs the native library built first.
+
+The project native libraries use Clang with Meson's `debugoptimized` configuration (optimization enabled, debug symbols retained). Their Meson build tree lives in `Native/build/clang/`; `build.sh` copies the resulting shared/static libraries to `Native/build/` for managed builds and NativeAOT linking. This keeps existing GCC build metadata and cached publishing dependencies intact while switching compilers. The native build deliberately selects Clang regardless of `CC`.
 
 ### NativeAOT static libraries
 

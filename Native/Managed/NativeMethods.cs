@@ -112,6 +112,9 @@ internal static partial class NativeMethods
     [LibraryImport(HYPR_LAYER_LIBRARY)]
     internal static partial int hypr_layer_set_window_thumbnail_visible(IntPtr layer, ulong id, int visible);
 
+    [LibraryImport(HYPR_LAYER_LIBRARY)]
+    internal static partial int hypr_layer_set_window_thumbnail_size(IntPtr layer, ulong id, int width, int height);
+
     // Full-window, aspect-preserved thumbnails <=640x360, tightly packed RGBA8,
     // top-left origin, transform normalized, straight alpha (transparent RGB is zero).
     // Native storage is reused; copy each revision into a fresh managed frame buffer.

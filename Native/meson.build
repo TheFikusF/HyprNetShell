@@ -84,6 +84,7 @@ endforeach
 
 hypr_layer_sources = [
     'hypr_layer.c',
+    'thumbnail_pool.c',
     'hypr_lock.c',
     layer_shell_header,
     layer_shell_code,
@@ -133,3 +134,12 @@ if wireplumber.found()
         install: false,
     )
 endif
+
+thumbnail_pool_test = executable(
+    'thumbnail_pool_test',
+    ['tests/thumbnail_pool_test.c', 'thumbnail_pool.c'],
+    dependencies: threads,
+    include_directories: hypr_layer_include_directories,
+)
+test('thumbnail-pool', thumbnail_pool_test, timeout: 120)
+benchmark('thumbnail-pool', thumbnail_pool_test, args: ['--benchmark'], timeout: 120)

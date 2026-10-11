@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
 
 #include "hypr_layer.h"
+#include "thumbnail_dimensions.h"
+#include "thumbnail_pool.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -18,31 +20,33 @@
 #include <wayland-egl.h>
 #include <xkbcommon/xkbcommon.h>
 
-#include "wlr-layer-shell-unstable-v1-client-protocol.h"
-#include "ext-image-capture-source-v1-client-protocol.h"
-#include "ext-image-copy-capture-v1-client-protocol.h"
 #include "ext-data-control-v1-client-protocol.h"
 #include "ext-foreign-toplevel-list-v1-client-protocol.h"
+#include "ext-image-capture-source-v1-client-protocol.h"
+#include "ext-image-copy-capture-v1-client-protocol.h"
 #include "hyprland-toplevel-mapping-v1-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
-struct thumbnail_window {
-    struct hypr_layer* layer;
-    struct thumbnail_window* next;
-    struct ext_foreign_toplevel_handle_v1* handle;
-    struct hyprland_toplevel_window_mapping_handle_v1* address_mapping;
+struct thumbnail_window
+{
+    struct hypr_layer *layer;
+    struct thumbnail_window *next;
+    struct ext_foreign_toplevel_handle_v1 *handle;
+    struct hyprland_toplevel_window_mapping_handle_v1 *address_mapping;
     char address[19];
-    uint64_t id, revision;
+    uint64_t id, revision, generation, buffer_generation;
+    int requested_width, requested_height;
     char *title, *app_id, *identifier;
     char *pending_title, *pending_app_id, *pending_identifier;
     int listed, visible, blocked;
     char error[256];
-    struct ext_image_capture_source_v1* source;
-    struct ext_image_copy_capture_session_v1* session;
-    struct ext_image_copy_capture_frame_v1* frame;
-    struct wl_buffer* buffer;
-    void* mapping;
+    struct ext_image_capture_source_v1 *source;
+    struct ext_image_copy_capture_session_v1 *session;
+    struct ext_image_copy_capture_frame_v1 *frame;
+    struct wl_buffer *buffer;
+    void *mapping;
     size_t mapping_size;
-    unsigned char* rgba;
+    unsigned char *rgba;
     int rgba_width, rgba_height;
     uint32_t width, height, format;
     uint32_t pending_width, pending_height, pending_format;
@@ -51,22 +55,23 @@ struct thumbnail_window {
     int64_t retry_at;
 };
 
-struct hypr_bar {
-    struct hypr_layer* layer;
-    struct hypr_bar* next;
+struct hypr_bar
+{
+    struct hypr_layer *layer;
+    struct hypr_bar *next;
     uint32_t registry_name;
     uint32_t output_version;
     uint64_t id;
-    struct wl_output* output;
-    char* output_name;
-    char* output_description;
+    struct wl_output *output;
+    char *output_name;
+    char *output_description;
     char fallback_output_name[32];
     int mode_width;
     int mode_height;
 
-    struct wl_surface* surface;
-    struct zwlr_layer_surface_v1* layer_surface;
-    struct wl_egl_window* egl_window;
+    struct wl_surface *surface;
+    struct zwlr_layer_surface_v1 *layer_surface;
+    struct wl_egl_window *egl_window;
     EGLSurface egl_surface;
     int width;
     int height;
@@ -75,9 +80,9 @@ struct hypr_bar {
     int closed;
     int keyboard_interactive;
 
-    struct wl_surface* screenshot_surface;
-    struct zwlr_layer_surface_v1* screenshot_layer_surface;
-    struct wl_egl_window* screenshot_egl_window;
+    struct wl_surface *screenshot_surface;
+    struct zwlr_layer_surface_v1 *screenshot_layer_surface;
+    struct wl_egl_window *screenshot_egl_window;
     EGLSurface screenshot_egl_surface;
     int screenshot_width;
     int screenshot_height;
@@ -94,60 +99,66 @@ struct hypr_bar {
     int pending_text_length;
 };
 
-struct clipboard_source {
-    struct hypr_layer* layer;
-    struct clipboard_source* next;
-    struct ext_data_control_source_v1* source;
-    unsigned char* data;
+struct clipboard_source
+{
+    struct hypr_layer *layer;
+    struct clipboard_source *next;
+    struct ext_data_control_source_v1 *source;
+    unsigned char *data;
     size_t length;
 };
 
-struct hypr_layer {
-    struct wl_display* display;
-    struct wl_registry* registry;
-    struct wl_compositor* compositor;
-    struct wl_shm* shm;
-    struct wl_seat* seat;
+struct hypr_layer
+{
+    struct wl_display *display;
+    struct wl_registry *registry;
+    struct wl_compositor *compositor;
+    struct wl_shm *shm;
+    struct wl_seat *seat;
     uint32_t seat_registry_name;
     uint32_t seat_version;
-    struct wl_pointer* pointer;
-    struct wl_keyboard* keyboard;
-    struct zwlr_layer_shell_v1* layer_shell;
+    struct wl_pointer *pointer;
+    struct wl_keyboard *keyboard;
+    struct zwlr_layer_shell_v1 *layer_shell;
     uint32_t layer_shell_version;
-    struct ext_output_image_capture_source_manager_v1* output_capture_manager;
-    struct ext_image_copy_capture_manager_v1* image_capture_manager;
-    struct ext_foreign_toplevel_list_v1* toplevel_list;
-    struct ext_foreign_toplevel_image_capture_source_manager_v1* toplevel_capture_manager;
-    uint32_t toplevel_list_name, toplevel_capture_name, image_capture_name, shm_name;
-    struct hyprland_toplevel_mapping_manager_v1* mapping_manager;
+    struct ext_output_image_capture_source_manager_v1 *output_capture_manager;
+    struct ext_image_copy_capture_manager_v1 *image_capture_manager;
+    struct ext_foreign_toplevel_list_v1 *toplevel_list;
+    struct ext_foreign_toplevel_image_capture_source_manager_v1
+        *toplevel_capture_manager;
+    uint32_t toplevel_list_name, toplevel_capture_name, image_capture_name,
+        shm_name;
+    struct hyprland_toplevel_mapping_manager_v1 *mapping_manager;
     uint32_t mapping_manager_name;
-    struct thumbnail_window* windows;
+    struct thumbnail_window *windows;
     uint64_t next_window_id, window_serial, thumbnail_last_started_id;
+    struct thumbnail_pool *thumbnail_pool;
+    struct thumbnail_job *thumbnail_jobs[THUMBNAIL_POOL_CAPACITY];
     int thumbnails_enabled;
     char thumbnail_error[256];
-    struct ext_data_control_manager_v1* data_control_manager;
-    struct ext_data_control_device_v1* data_control_device;
-    struct ext_data_control_offer_v1* incoming_offer;
-    struct clipboard_source* clipboard_sources;
-    void* capture_data;
+    struct ext_data_control_manager_v1 *data_control_manager;
+    struct ext_data_control_device_v1 *data_control_device;
+    struct ext_data_control_offer_v1 *incoming_offer;
+    struct clipboard_source *clipboard_sources;
+    void *capture_data;
     size_t capture_size;
     int capture_width;
     int capture_height;
     int capture_stride;
 
-    struct xkb_context* xkb_context;
-    struct xkb_keymap* xkb_keymap;
-    struct xkb_state* xkb_state;
+    struct xkb_context *xkb_context;
+    struct xkb_keymap *xkb_keymap;
+    struct xkb_state *xkb_state;
 
     EGLDisplay egl_display;
     EGLConfig egl_config;
     EGLContext egl_context;
     EGLSurface fallback_surface;
 
-    struct hypr_bar* bars;
-    struct hypr_bar* pointer_focus;
-    struct hypr_bar* keyboard_focus;
-    struct hypr_bar* repeat_bar;
+    struct hypr_bar *bars;
+    struct hypr_bar *pointer_focus;
+    struct hypr_bar *keyboard_focus;
+    struct hypr_bar *repeat_bar;
     uint64_t keyboard_interactive_id;
     uint64_t next_bar_id;
     uint64_t topology_serial;
@@ -161,169 +172,220 @@ struct hypr_layer {
     int has_error;
 };
 
-static void create_bar_surface(struct hypr_bar* bar);
-static void destroy_bar_surface(struct hypr_bar* bar);
-static int create_screenshot_surface(struct hypr_bar* bar);
-static void destroy_screenshot_surface(struct hypr_bar* bar);
-static void ensure_data_control_device(struct hypr_layer* layer);
+static void create_bar_surface(struct hypr_bar *bar);
+static void destroy_bar_surface(struct hypr_bar *bar);
+static int create_screenshot_surface(struct hypr_bar *bar);
+static void destroy_screenshot_surface(struct hypr_bar *bar);
+static void ensure_data_control_device(struct hypr_layer *layer);
 static const struct wl_seat_listener seat_listener;
-static const struct ext_foreign_toplevel_list_v1_listener thumbnail_list_listener;
-static void thumbnail_stop(struct thumbnail_window* window);
-static void thumbnail_destroy(struct thumbnail_window* window);
-static void thumbnail_pump(struct hypr_layer* layer);
-static void thumbnail_backend_lost(struct hypr_layer* layer, const char* message);
-static void thumbnail_request_address(struct thumbnail_window* window);
-static void thumbnail_clear_address(struct thumbnail_window* window);
+static const struct ext_foreign_toplevel_list_v1_listener
+    thumbnail_list_listener;
+static void thumbnail_stop(struct thumbnail_window *window);
+static void thumbnail_destroy(struct thumbnail_window *window);
+static void thumbnail_pump(struct hypr_layer *layer);
+static void thumbnail_backend_lost(struct hypr_layer *layer,
+                                   const char *message);
+static void thumbnail_request_address(struct thumbnail_window *window);
+static void thumbnail_clear_address(struct thumbnail_window *window);
 
-static int64_t monotonic_milliseconds(void) {
+static int64_t monotonic_milliseconds(void)
+{
     struct timespec value;
     clock_gettime(CLOCK_MONOTONIC, &value);
     return (int64_t)value.tv_sec * 1000 + value.tv_nsec / 1000000;
 }
 
-static void fail(const char* message) {
+static void fail(const char *message)
+{
     fprintf(stderr, "hypr_layer: %s\n", message);
 }
 
-static void fail_fatal(struct hypr_layer* layer, const char* message) {
+static void fail_fatal(struct hypr_layer *layer, const char *message)
+{
     fail(message);
-    if (layer != NULL) {
+    if (layer != NULL)
+    {
         layer->has_error = 1;
         layer->should_close = 1;
     }
 }
 
-static void fail_egl_fatal(struct hypr_layer* layer, const char* message) {
+static void fail_egl_fatal(struct hypr_layer *layer, const char *message)
+{
     EGLint error = eglGetError();
     fprintf(stderr, "hypr_layer: %s (EGL error 0x%04x)\n", message, error);
-    if (layer != NULL) {
+    if (layer != NULL)
+    {
         layer->has_error = 1;
         layer->should_close = 1;
     }
 }
 
-static void fail_bar_egl(const struct hypr_bar* bar, const char* message) {
+static void fail_bar_egl(const struct hypr_bar *bar, const char *message)
+{
     EGLint error = eglGetError();
-    fprintf(
-        stderr,
-        "hypr_layer: output %llu: %s (EGL error 0x%04x)\n",
-        (unsigned long long)(bar != NULL ? bar->id : 0),
-        message,
-        error);
+    fprintf(stderr, "hypr_layer: output %llu: %s (EGL error 0x%04x)\n",
+            (unsigned long long)(bar != NULL ? bar->id : 0), message, error);
 }
 
-static struct hypr_bar* find_bar(const struct hypr_layer* layer, uint64_t id) {
-    if (layer == NULL || id == 0) {
+static struct hypr_bar *find_bar(const struct hypr_layer *layer, uint64_t id)
+{
+    if (layer == NULL || id == 0)
+    {
         return NULL;
     }
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (bar->id == id && bar->active && !bar->closed) {
+
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (bar->id == id && bar->active && !bar->closed)
+        {
             return bar;
         }
     }
+
     return NULL;
 }
 
-static struct hypr_bar* find_bar_by_surface(
-    const struct hypr_layer* layer,
-    const struct wl_surface* surface) {
-    if (layer == NULL || surface == NULL) {
+static struct hypr_bar *find_bar_by_surface(const struct hypr_layer *layer,
+                                            const struct wl_surface *surface)
+{
+    if (layer == NULL || surface == NULL)
+    {
         return NULL;
     }
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if ((bar->surface == surface || bar->screenshot_surface == surface) && !bar->closed) {
+
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if ((bar->surface == surface || bar->screenshot_surface == surface) &&
+            !bar->closed)
+        {
             return bar;
         }
     }
+
     return NULL;
 }
 
-static void clear_bar_focus(struct hypr_bar* bar) {
-    struct hypr_layer* layer = bar->layer;
-    if (layer->pointer_focus == bar) {
+static void clear_bar_focus(struct hypr_bar *bar)
+{
+    struct hypr_layer *layer = bar->layer;
+    if (layer->pointer_focus == bar)
+    {
         layer->pointer_focus = NULL;
     }
-    if (layer->keyboard_focus == bar) {
+
+    if (layer->keyboard_focus == bar)
+    {
         layer->keyboard_focus = NULL;
     }
-    if (layer->repeat_bar == bar) {
+
+    if (layer->repeat_bar == bar)
+    {
         layer->repeat_bar = NULL;
         layer->repeat_active = 0;
     }
-    if (layer->keyboard_interactive_id == bar->id) {
+
+    if (layer->keyboard_interactive_id == bar->id)
+    {
         layer->keyboard_interactive_id = 0;
     }
+
     bar->pointer_inside = 0;
     bar->pointer_button_down = 0;
 }
 
-static void mark_bar_closed(struct hypr_bar* bar) {
-    if (bar == NULL || bar->closed) {
+static void mark_bar_closed(struct hypr_bar *bar)
+{
+    if (bar == NULL || bar->closed)
+    {
         return;
     }
+
     bar->closed = 1;
     clear_bar_focus(bar);
-    if (bar->active) {
+    if (bar->active)
+    {
         bar->active = 0;
         bar->layer->topology_serial++;
     }
 }
 
-static int make_fallback_current(struct hypr_layer* layer) {
+static int make_fallback_current(struct hypr_layer *layer)
+{
     if (layer == NULL || layer->egl_display == EGL_NO_DISPLAY ||
-        layer->egl_context == EGL_NO_CONTEXT || layer->fallback_surface == EGL_NO_SURFACE) {
+        layer->egl_context == EGL_NO_CONTEXT ||
+        layer->fallback_surface == EGL_NO_SURFACE)
+    {
         return 0;
     }
-    if (!eglMakeCurrent(
-            layer->egl_display,
-            layer->fallback_surface,
-            layer->fallback_surface,
-            layer->egl_context)) {
+
+    if (!eglMakeCurrent(layer->egl_display, layer->fallback_surface,
+                        layer->fallback_surface, layer->egl_context))
+    {
         fail_egl_fatal(layer, "eglMakeCurrent failed for the fallback surface");
         return 0;
     }
+
     return 1;
 }
 
-static void destroy_bar_egl_surface(struct hypr_bar* bar) {
-    if (bar == NULL) {
+static void destroy_bar_egl_surface(struct hypr_bar *bar)
+{
+    if (bar == NULL)
+    {
         return;
     }
-    struct hypr_layer* layer = bar->layer;
-    if (bar->egl_surface != EGL_NO_SURFACE && layer->egl_display != EGL_NO_DISPLAY) {
-        if (!make_fallback_current(layer)) {
-            eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-            if (!layer->has_error) {
-                fail_fatal(layer, "fallback EGL surface is unavailable during bar teardown");
+
+    struct hypr_layer *layer = bar->layer;
+    if (bar->egl_surface != EGL_NO_SURFACE &&
+        layer->egl_display != EGL_NO_DISPLAY)
+    {
+        if (!make_fallback_current(layer))
+        {
+            eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                           EGL_NO_CONTEXT);
+            if (!layer->has_error)
+            {
+                fail_fatal(
+                    layer,
+                    "fallback EGL surface is unavailable during bar teardown");
             }
         }
+
         eglDestroySurface(layer->egl_display, bar->egl_surface);
         bar->egl_surface = EGL_NO_SURFACE;
     }
-    if (bar->egl_window != NULL) {
+
+    if (bar->egl_window != NULL)
+    {
         wl_egl_window_destroy(bar->egl_window);
         bar->egl_window = NULL;
     }
 }
 
-static int create_bar_egl_surface(struct hypr_bar* bar) {
-    struct hypr_layer* layer = bar->layer;
-    if (bar->surface == NULL || bar->width <= 0 || bar->height <= 0) {
+static int create_bar_egl_surface(struct hypr_bar *bar)
+{
+    struct hypr_layer *layer = bar->layer;
+    if (bar->surface == NULL || bar->width <= 0 || bar->height <= 0)
+    {
         return 0;
     }
 
-    bar->egl_window = wl_egl_window_create(bar->surface, bar->width, bar->height);
-    if (bar->egl_window == NULL) {
-        fprintf(stderr, "hypr_layer: output %llu: wl_egl_window_create failed\n", (unsigned long long)bar->id);
+    bar->egl_window =
+        wl_egl_window_create(bar->surface, bar->width, bar->height);
+    if (bar->egl_window == NULL)
+    {
+        fprintf(stderr,
+                "hypr_layer: output %llu: wl_egl_window_create failed\n",
+                (unsigned long long)bar->id);
         return 0;
     }
 
-    bar->egl_surface = eglCreateWindowSurface(
-        layer->egl_display,
-        layer->egl_config,
-        (EGLNativeWindowType)bar->egl_window,
-        NULL);
-    if (bar->egl_surface == EGL_NO_SURFACE) {
+    bar->egl_surface =
+        eglCreateWindowSurface(layer->egl_display, layer->egl_config,
+                               (EGLNativeWindowType)bar->egl_window, NULL);
+    if (bar->egl_surface == EGL_NO_SURFACE)
+    {
         fail_bar_egl(bar, "eglCreateWindowSurface failed");
         wl_egl_window_destroy(bar->egl_window);
         bar->egl_window = NULL;
@@ -333,42 +395,44 @@ static int create_bar_egl_surface(struct hypr_bar* bar) {
     return 1;
 }
 
-static void apply_input_regions(
-    struct hypr_bar* bar,
-    const int* rectangles,
-    int rectangle_count) {
-    if (bar == NULL || bar->surface == NULL || bar->layer->compositor == NULL) {
+static void apply_input_regions(struct hypr_bar *bar, const int *rectangles,
+                                int rectangle_count)
+{
+    if (bar == NULL || bar->surface == NULL || bar->layer->compositor == NULL)
+    {
         return;
     }
 
-    struct wl_region* region = wl_compositor_create_region(bar->layer->compositor);
-    if (region == NULL) {
-        fprintf(stderr, "hypr_layer: output %llu: wl_compositor_create_region failed\n", (unsigned long long)bar->id);
+    struct wl_region *region =
+        wl_compositor_create_region(bar->layer->compositor);
+    if (region == NULL)
+    {
+        fprintf(stderr,
+                "hypr_layer: output %llu: wl_compositor_create_region failed\n",
+                (unsigned long long)bar->id);
         mark_bar_closed(bar);
         return;
     }
 
-    for (int i = 0; rectangles != NULL && i < rectangle_count; i++) {
-        const int* rect = rectangles + i * 4;
-        if (rect[2] > 0 && rect[3] > 0) {
+    for (int i = 0; rectangles != NULL && i < rectangle_count; i++)
+    {
+        const int *rect = rectangles + i * 4;
+        if (rect[2] > 0 && rect[3] > 0)
+        {
             wl_region_add(region, rect[0], rect[1], rect[2], rect[3]);
         }
     }
+
     wl_surface_set_input_region(bar->surface, region);
     wl_region_destroy(region);
 }
 
-static void output_geometry(
-    void* data,
-    struct wl_output* output,
-    int32_t x,
-    int32_t y,
-    int32_t physical_width,
-    int32_t physical_height,
-    int32_t subpixel,
-    const char* make,
-    const char* model,
-    int32_t transform) {
+static void output_geometry(void *data, struct wl_output *output, int32_t x,
+                            int32_t y, int32_t physical_width,
+                            int32_t physical_height, int32_t subpixel,
+                            const char *make, const char *model,
+                            int32_t transform)
+{
     (void)data;
     (void)output;
     (void)x;
@@ -381,58 +445,67 @@ static void output_geometry(
     (void)transform;
 }
 
-static void output_mode(
-    void* data,
-    struct wl_output* output,
-    uint32_t flags,
-    int32_t width,
-    int32_t height,
-    int32_t refresh) {
+static void output_mode(void *data, struct wl_output *output, uint32_t flags,
+                        int32_t width, int32_t height, int32_t refresh)
+{
     (void)output;
     (void)refresh;
-    struct hypr_bar* bar = data;
-    if ((flags & WL_OUTPUT_MODE_CURRENT) != 0) {
+    struct hypr_bar *bar = data;
+    if ((flags & WL_OUTPUT_MODE_CURRENT) != 0)
+    {
         bar->mode_width = width;
         bar->mode_height = height;
     }
 }
 
-static void output_done(void* data, struct wl_output* output) {
+static void output_done(void *data, struct wl_output *output)
+{
     (void)data;
     (void)output;
 }
 
-static void output_scale(void* data, struct wl_output* output, int32_t factor) {
+static void output_scale(void *data, struct wl_output *output, int32_t factor)
+{
     (void)data;
     (void)output;
     (void)factor;
 }
 
-static int replace_string(char** destination, const char* value) {
+static int replace_string(char **destination, const char *value)
+{
     if ((*destination == NULL && value == NULL) ||
-        (*destination != NULL && value != NULL && strcmp(*destination, value) == 0)) {
+        (*destination != NULL && value != NULL &&
+         strcmp(*destination, value) == 0))
+    {
         return 0;
     }
-    char* replacement = value != NULL ? strdup(value) : NULL;
-    if (value != NULL && replacement == NULL) {
+
+    char *replacement = value != NULL ? strdup(value) : NULL;
+    if (value != NULL && replacement == NULL)
+    {
         return 0;
     }
+
     free(*destination);
     *destination = replacement;
     return 1;
 }
 
-static void output_name(void* data, struct wl_output* output, const char* name) {
+static void output_name(void *data, struct wl_output *output, const char *name)
+{
     (void)output;
-    struct hypr_bar* bar = data;
-    if (replace_string(&bar->output_name, name) && bar->active) {
+    struct hypr_bar *bar = data;
+    if (replace_string(&bar->output_name, name) && bar->active)
+    {
         bar->layer->topology_serial++;
     }
 }
 
-static void output_description(void* data, struct wl_output* output, const char* description) {
+static void output_description(void *data, struct wl_output *output,
+                               const char *description)
+{
     (void)output;
-    struct hypr_bar* bar = data;
+    struct hypr_bar *bar = data;
     replace_string(&bar->output_description, description);
 }
 
@@ -445,57 +518,87 @@ static const struct wl_output_listener output_listener = {
     .description = output_description,
 };
 
-static void layer_surface_configure(
-    void* data,
-    struct zwlr_layer_surface_v1* layer_surface,
-    uint32_t serial,
-    uint32_t width,
-    uint32_t height) {
-    struct hypr_bar* bar = data;
+static void layer_surface_configure(void *data,
+                                    struct zwlr_layer_surface_v1 *layer_surface,
+                                    uint32_t serial, uint32_t width,
+                                    uint32_t height)
+{
+    struct hypr_bar *bar = data;
     zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
-    if (bar->closed) {
+    if (bar->closed)
+    {
         return;
     }
 
     int previous_width = bar->width;
     int previous_height = bar->height;
-    if (width > 0) {
+    if (width > 0)
+    {
         bar->width = (int)width;
-    } else if (bar->mode_width > 0) {
+    }
+
+    else if (bar->mode_width > 0)
+    {
         bar->width = bar->mode_width;
-    } else if (bar->width <= 0) {
+    }
+
+    else if (bar->width <= 0)
+    {
         bar->width = 1920;
     }
-    if (height > 0) {
+
+    if (height > 0)
+    {
         bar->height = (int)height;
-    } else if (bar->mode_height > 0) {
+    }
+
+    else if (bar->mode_height > 0)
+    {
         bar->height = bar->mode_height;
-    } else if (bar->height <= 0) {
+    }
+
+    else if (bar->height <= 0)
+    {
         bar->height = 1080;
     }
-    if (bar->width <= 0 || bar->height <= 0) {
-        fprintf(stderr, "hypr_layer: output %llu: compositor configured an invalid size\n", (unsigned long long)bar->id);
+
+    if (bar->width <= 0 || bar->height <= 0)
+    {
+        fprintf(
+            stderr,
+            "hypr_layer: output %llu: compositor configured an invalid size\n",
+            (unsigned long long)bar->id);
         mark_bar_closed(bar);
         return;
     }
 
-    if (bar->egl_window != NULL) {
+    if (bar->egl_window != NULL)
+    {
         wl_egl_window_resize(bar->egl_window, bar->width, bar->height, 0, 0);
-    } else if (!create_bar_egl_surface(bar)) {
+    }
+
+    else if (!create_bar_egl_surface(bar))
+    {
         mark_bar_closed(bar);
         return;
     }
 
     bar->configured = 1;
-    if (!bar->active) {
+    if (!bar->active)
+    {
         bar->active = 1;
         bar->layer->topology_serial++;
-    } else if (bar->width != previous_width || bar->height != previous_height) {
+    }
+
+    else if (bar->width != previous_width || bar->height != previous_height)
+    {
         bar->layer->topology_serial++;
     }
 }
 
-static void layer_surface_closed(void* data, struct zwlr_layer_surface_v1* layer_surface) {
+static void layer_surface_closed(void *data,
+                                 struct zwlr_layer_surface_v1 *layer_surface)
+{
     (void)layer_surface;
     mark_bar_closed(data);
 }
@@ -505,305 +608,385 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
     .closed = layer_surface_closed,
 };
 
-static void screenshot_surface_configure(
-    void* data,
-    struct zwlr_layer_surface_v1* layer_surface,
-    uint32_t serial,
-    uint32_t width,
-    uint32_t height) {
-    struct hypr_bar* bar = data;
+static void
+screenshot_surface_configure(void *data,
+                             struct zwlr_layer_surface_v1 *layer_surface,
+                             uint32_t serial, uint32_t width, uint32_t height)
+{
+    struct hypr_bar *bar = data;
     zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
     if (bar->screenshot_surface == NULL || width == 0 || height == 0 ||
-        width > INT32_MAX || height > INT32_MAX) {
+        width > INT32_MAX || height > INT32_MAX)
+    {
         destroy_screenshot_surface(bar);
         return;
     }
 
-    int dimensions_changed = bar->screenshot_width != (int)width || bar->screenshot_height != (int)height;
+    int dimensions_changed = bar->screenshot_width != (int)width ||
+                             bar->screenshot_height != (int)height;
     bar->screenshot_width = (int)width;
     bar->screenshot_height = (int)height;
-    if (bar->screenshot_egl_window == NULL) {
-        bar->screenshot_egl_window = wl_egl_window_create(
-            bar->screenshot_surface,
-            bar->screenshot_width,
-            bar->screenshot_height);
-        if (bar->screenshot_egl_window == NULL) {
+    if (bar->screenshot_egl_window == NULL)
+    {
+        bar->screenshot_egl_window =
+            wl_egl_window_create(bar->screenshot_surface, bar->screenshot_width,
+                                 bar->screenshot_height);
+        if (bar->screenshot_egl_window == NULL)
+        {
             destroy_screenshot_surface(bar);
             return;
         }
+
         bar->screenshot_egl_surface = eglCreateWindowSurface(
-            bar->layer->egl_display,
-            bar->layer->egl_config,
-            (EGLNativeWindowType)bar->screenshot_egl_window,
-            NULL);
-        if (bar->screenshot_egl_surface == EGL_NO_SURFACE) {
-            fail_bar_egl(bar, "failed to create screenshot overlay EGL surface");
+            bar->layer->egl_display, bar->layer->egl_config,
+            (EGLNativeWindowType)bar->screenshot_egl_window, NULL);
+        if (bar->screenshot_egl_surface == EGL_NO_SURFACE)
+        {
+            fail_bar_egl(bar,
+                         "failed to create screenshot overlay EGL surface");
             destroy_screenshot_surface(bar);
             return;
         }
-    } else if (dimensions_changed) {
-        wl_egl_window_resize(
-            bar->screenshot_egl_window,
-            bar->screenshot_width,
-            bar->screenshot_height,
-            0,
-            0);
     }
+
+    else if (dimensions_changed)
+    {
+        wl_egl_window_resize(bar->screenshot_egl_window, bar->screenshot_width,
+                             bar->screenshot_height, 0, 0);
+    }
+
     bar->screenshot_configured = 1;
 }
 
-static void screenshot_surface_closed(
-    void* data,
-    struct zwlr_layer_surface_v1* layer_surface) {
+static void
+screenshot_surface_closed(void *data,
+                          struct zwlr_layer_surface_v1 *layer_surface)
+{
     (void)layer_surface;
     destroy_screenshot_surface(data);
 }
 
-static const struct zwlr_layer_surface_v1_listener screenshot_surface_listener = {
-    .configure = screenshot_surface_configure,
-    .closed = screenshot_surface_closed,
+static const struct zwlr_layer_surface_v1_listener screenshot_surface_listener =
+    {
+        .configure = screenshot_surface_configure,
+        .closed = screenshot_surface_closed,
 };
 
-static void destroy_screenshot_surface(struct hypr_bar* bar) {
-    if (bar == NULL ||
-        (bar->screenshot_surface == NULL &&
-         bar->screenshot_layer_surface == NULL &&
-         bar->screenshot_egl_window == NULL &&
-         bar->screenshot_egl_surface == EGL_NO_SURFACE)) {
+static void destroy_screenshot_surface(struct hypr_bar *bar)
+{
+    if (bar == NULL || (bar->screenshot_surface == NULL &&
+                        bar->screenshot_layer_surface == NULL &&
+                        bar->screenshot_egl_window == NULL &&
+                        bar->screenshot_egl_surface == EGL_NO_SURFACE))
+    {
         return;
     }
-    if (bar->layer->pointer_focus == bar || bar->layer->keyboard_focus == bar) {
+
+    if (bar->layer->pointer_focus == bar || bar->layer->keyboard_focus == bar)
+    {
         clear_bar_focus(bar);
     }
-    if (bar->screenshot_egl_surface != EGL_NO_SURFACE) {
+
+    if (bar->screenshot_egl_surface != EGL_NO_SURFACE)
+    {
         make_fallback_current(bar->layer);
         eglDestroySurface(bar->layer->egl_display, bar->screenshot_egl_surface);
         bar->screenshot_egl_surface = EGL_NO_SURFACE;
     }
-    if (bar->screenshot_egl_window != NULL) {
+
+    if (bar->screenshot_egl_window != NULL)
+    {
         wl_egl_window_destroy(bar->screenshot_egl_window);
         bar->screenshot_egl_window = NULL;
     }
-    if (bar->screenshot_layer_surface != NULL) {
+
+    if (bar->screenshot_layer_surface != NULL)
+    {
         zwlr_layer_surface_v1_destroy(bar->screenshot_layer_surface);
         bar->screenshot_layer_surface = NULL;
     }
-    if (bar->screenshot_surface != NULL) {
+
+    if (bar->screenshot_surface != NULL)
+    {
         wl_surface_destroy(bar->screenshot_surface);
         bar->screenshot_surface = NULL;
     }
+
     bar->screenshot_configured = 0;
     bar->screenshot_width = 0;
     bar->screenshot_height = 0;
 }
 
-static int create_screenshot_surface(struct hypr_bar* bar) {
-    if (bar == NULL || bar->closed || bar->screenshot_surface != NULL) {
+static int create_screenshot_surface(struct hypr_bar *bar)
+{
+    if (bar == NULL || bar->closed || bar->screenshot_surface != NULL)
+    {
         return bar != NULL && bar->screenshot_surface != NULL;
     }
-    struct hypr_layer* layer = bar->layer;
+
+    struct hypr_layer *layer = bar->layer;
     bar->screenshot_surface = wl_compositor_create_surface(layer->compositor);
-    if (bar->screenshot_surface == NULL) {
+    if (bar->screenshot_surface == NULL)
+    {
         return 0;
     }
+
     bar->screenshot_layer_surface = zwlr_layer_shell_v1_get_layer_surface(
-        layer->layer_shell,
-        bar->screenshot_surface,
-        bar->output,
-        ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
-        "hyprnetshell-screenshot");
+        layer->layer_shell, bar->screenshot_surface, bar->output,
+        ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "hyprnetshell-screenshot");
     if (bar->screenshot_layer_surface == NULL ||
-        zwlr_layer_surface_v1_add_listener(
-            bar->screenshot_layer_surface,
-            &screenshot_surface_listener,
-            bar) < 0) {
+        zwlr_layer_surface_v1_add_listener(bar->screenshot_layer_surface,
+                                           &screenshot_surface_listener,
+                                           bar) < 0)
+    {
         destroy_screenshot_surface(bar);
         return 0;
     }
-    zwlr_layer_surface_v1_set_anchor(
-        bar->screenshot_layer_surface,
-        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+
+    zwlr_layer_surface_v1_set_anchor(bar->screenshot_layer_surface,
+                                     ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
     zwlr_layer_surface_v1_set_size(bar->screenshot_layer_surface, 0, 0);
     zwlr_layer_surface_v1_set_exclusive_zone(bar->screenshot_layer_surface, -1);
-    zwlr_layer_surface_v1_set_keyboard_interactivity(bar->screenshot_layer_surface, 1);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(
+        bar->screenshot_layer_surface, 1);
     wl_surface_commit(bar->screenshot_surface);
     return 1;
 }
 
-static void destroy_bar_surface(struct hypr_bar* bar) {
-    if (bar == NULL) {
+static void destroy_bar_surface(struct hypr_bar *bar)
+{
+    if (bar == NULL)
+    {
         return;
     }
+
     destroy_screenshot_surface(bar);
     clear_bar_focus(bar);
     destroy_bar_egl_surface(bar);
-    if (bar->layer_surface != NULL) {
+    if (bar->layer_surface != NULL)
+    {
         zwlr_layer_surface_v1_destroy(bar->layer_surface);
         bar->layer_surface = NULL;
     }
-    if (bar->surface != NULL) {
+
+    if (bar->surface != NULL)
+    {
         wl_surface_destroy(bar->surface);
         bar->surface = NULL;
     }
+
     bar->configured = 0;
     bar->active = 0;
 }
 
-static void create_bar_surface(struct hypr_bar* bar) {
-    struct hypr_layer* layer = bar->layer;
+static void create_bar_surface(struct hypr_bar *bar)
+{
+    struct hypr_layer *layer = bar->layer;
     if (bar->surface != NULL || bar->closed || layer->compositor == NULL ||
-        layer->layer_shell == NULL || layer->egl_context == EGL_NO_CONTEXT) {
+        layer->layer_shell == NULL || layer->egl_context == EGL_NO_CONTEXT)
+    {
         return;
     }
 
     bar->surface = wl_compositor_create_surface(layer->compositor);
-    if (bar->surface == NULL) {
-        fprintf(stderr, "hypr_layer: output %llu: wl_compositor_create_surface failed\n", (unsigned long long)bar->id);
+    if (bar->surface == NULL)
+    {
+        fprintf(
+            stderr,
+            "hypr_layer: output %llu: wl_compositor_create_surface failed\n",
+            (unsigned long long)bar->id);
         mark_bar_closed(bar);
         return;
     }
 
     bar->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
-        layer->layer_shell,
-        bar->surface,
-        bar->output,
-        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
-        "hyprnetshell");
-    if (bar->layer_surface == NULL) {
-        fprintf(stderr, "hypr_layer: output %llu: get_layer_surface failed\n", (unsigned long long)bar->id);
+        layer->layer_shell, bar->surface, bar->output,
+        ZWLR_LAYER_SHELL_V1_LAYER_TOP, "hyprnetshell");
+    if (bar->layer_surface == NULL)
+    {
+        fprintf(stderr, "hypr_layer: output %llu: get_layer_surface failed\n",
+                (unsigned long long)bar->id);
         wl_surface_destroy(bar->surface);
         bar->surface = NULL;
         mark_bar_closed(bar);
         return;
     }
 
-    if (zwlr_layer_surface_v1_add_listener(bar->layer_surface, &layer_surface_listener, bar) < 0) {
-        fprintf(stderr, "hypr_layer: output %llu: layer surface listener registration failed\n", (unsigned long long)bar->id);
+    if (zwlr_layer_surface_v1_add_listener(bar->layer_surface,
+                                           &layer_surface_listener, bar) < 0)
+    {
+        fprintf(stderr,
+                "hypr_layer: output %llu: layer surface listener registration "
+                "failed\n",
+                (unsigned long long)bar->id);
         mark_bar_closed(bar);
         destroy_bar_surface(bar);
         return;
     }
 
-    zwlr_layer_surface_v1_set_anchor(
-        bar->layer_surface,
-        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    zwlr_layer_surface_v1_set_anchor(bar->layer_surface,
+                                     ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
     zwlr_layer_surface_v1_set_size(bar->layer_surface, 0, 0);
-    zwlr_layer_surface_v1_set_exclusive_zone(bar->layer_surface, layer->reserved_height);
-    if (layer->layer_shell_version >= ZWLR_LAYER_SURFACE_V1_SET_EXCLUSIVE_EDGE_SINCE_VERSION) {
+    zwlr_layer_surface_v1_set_exclusive_zone(bar->layer_surface,
+                                             layer->reserved_height);
+    if (layer->layer_shell_version >=
+        ZWLR_LAYER_SURFACE_V1_SET_EXCLUSIVE_EDGE_SINCE_VERSION)
+    {
         zwlr_layer_surface_v1_set_exclusive_edge(
-            bar->layer_surface,
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP);
+            bar->layer_surface, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP);
     }
+
     zwlr_layer_surface_v1_set_keyboard_interactivity(bar->layer_surface, 0);
     apply_input_regions(bar, NULL, 0);
-    if (!bar->closed) {
+    if (!bar->closed)
+    {
         wl_surface_commit(bar->surface);
     }
 }
 
-static void destroy_output(struct hypr_bar* bar) {
-    if (bar == NULL) {
+static void destroy_output(struct hypr_bar *bar)
+{
+    if (bar == NULL)
+    {
         return;
     }
+
     mark_bar_closed(bar);
     destroy_bar_surface(bar);
-    if (bar->output != NULL) {
-        if (bar->output_version >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
+    if (bar->output != NULL)
+    {
+        if (bar->output_version >= WL_OUTPUT_RELEASE_SINCE_VERSION)
+        {
             wl_output_release(bar->output);
-        } else {
+        }
+
+        else
+        {
             wl_output_destroy(bar->output);
         }
     }
+
     free(bar->output_name);
     free(bar->output_description);
     free(bar);
 }
 
-static void release_pointer(struct hypr_layer* layer) {
-    if (layer->pointer == NULL) {
+static void release_pointer(struct hypr_layer *layer)
+{
+    if (layer->pointer == NULL)
+    {
         return;
     }
-    if (layer->seat_version >= WL_POINTER_RELEASE_SINCE_VERSION) {
+
+    if (layer->seat_version >= WL_POINTER_RELEASE_SINCE_VERSION)
+    {
         wl_pointer_release(layer->pointer);
-    } else {
+    }
+
+    else
+    {
         wl_pointer_destroy(layer->pointer);
     }
+
     layer->pointer = NULL;
-    if (layer->pointer_focus != NULL) {
+    if (layer->pointer_focus != NULL)
+    {
         layer->pointer_focus->pointer_inside = 0;
         layer->pointer_focus->pointer_button_down = 0;
         layer->pointer_focus = NULL;
     }
 }
 
-static void release_keyboard(struct hypr_layer* layer) {
-    if (layer->keyboard == NULL) {
+static void release_keyboard(struct hypr_layer *layer)
+{
+    if (layer->keyboard == NULL)
+    {
         return;
     }
-    if (layer->seat_version >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
+
+    if (layer->seat_version >= WL_KEYBOARD_RELEASE_SINCE_VERSION)
+    {
         wl_keyboard_release(layer->keyboard);
-    } else {
+    }
+
+    else
+    {
         wl_keyboard_destroy(layer->keyboard);
     }
+
     layer->keyboard = NULL;
     layer->keyboard_focus = NULL;
     layer->repeat_bar = NULL;
     layer->repeat_active = 0;
 }
 
-static void clipboard_source_send(
-    void* data,
-    struct ext_data_control_source_v1* source,
-    const char* mime_type,
-    int32_t fd) {
+static void clipboard_source_send(void *data,
+                                  struct ext_data_control_source_v1 *source,
+                                  const char *mime_type, int32_t fd)
+{
     (void)source;
     (void)mime_type;
-    struct clipboard_source* clipboard = data;
+    struct clipboard_source *clipboard = data;
     size_t offset = 0;
-    while (offset < clipboard->length) {
-        ssize_t written = write(fd, clipboard->data + offset, clipboard->length - offset);
-        if (written > 0) {
+    while (offset < clipboard->length)
+    {
+        ssize_t written =
+            write(fd, clipboard->data + offset, clipboard->length - offset);
+        if (written > 0)
+        {
             offset += (size_t)written;
-        } else if (written < 0 && errno == EINTR) {
+        }
+
+        else if (written < 0 && errno == EINTR)
+        {
             continue;
-        } else {
+        }
+
+        else
+        {
             break;
         }
     }
+
     close(fd);
 }
 
-static void clipboard_source_cancelled(
-    void* data,
-    struct ext_data_control_source_v1* source) {
-    struct clipboard_source* clipboard = data;
-    struct clipboard_source** link = &clipboard->layer->clipboard_sources;
-    while (*link != NULL && *link != clipboard) {
+static void
+clipboard_source_cancelled(void *data,
+                           struct ext_data_control_source_v1 *source)
+{
+    struct clipboard_source *clipboard = data;
+    struct clipboard_source **link = &clipboard->layer->clipboard_sources;
+    while (*link != NULL && *link != clipboard)
+    {
         link = &(*link)->next;
     }
-    if (*link == clipboard) {
+
+    if (*link == clipboard)
+    {
         *link = clipboard->next;
     }
+
     ext_data_control_source_v1_destroy(source);
     free(clipboard->data);
     free(clipboard);
 }
 
-static const struct ext_data_control_source_v1_listener clipboard_source_listener = {
-    .send = clipboard_source_send,
-    .cancelled = clipboard_source_cancelled,
+static const struct ext_data_control_source_v1_listener
+    clipboard_source_listener = {
+        .send = clipboard_source_send,
+        .cancelled = clipboard_source_cancelled,
 };
 
-static void data_offer_mime(
-    void* data,
-    struct ext_data_control_offer_v1* offer,
-    const char* mime_type) {
+static void data_offer_mime(void *data, struct ext_data_control_offer_v1 *offer,
+                            const char *mime_type)
+{
     (void)data;
     (void)offer;
     (void)mime_type;
@@ -813,48 +996,59 @@ static const struct ext_data_control_offer_v1_listener data_offer_listener = {
     .offer = data_offer_mime,
 };
 
-static void data_device_offer(
-    void* data,
-    struct ext_data_control_device_v1* device,
-    struct ext_data_control_offer_v1* offer) {
+static void data_device_offer(void *data,
+                              struct ext_data_control_device_v1 *device,
+                              struct ext_data_control_offer_v1 *offer)
+{
     (void)device;
-    struct hypr_layer* layer = data;
-    if (layer->incoming_offer != NULL) {
+    struct hypr_layer *layer = data;
+    if (layer->incoming_offer != NULL)
+    {
         ext_data_control_offer_v1_destroy(layer->incoming_offer);
     }
+
     layer->incoming_offer = offer;
     ext_data_control_offer_v1_add_listener(offer, &data_offer_listener, layer);
 }
 
-static void discard_data_offer(struct hypr_layer* layer, struct ext_data_control_offer_v1* offer) {
-    if (offer != NULL) {
+static void discard_data_offer(struct hypr_layer *layer,
+                               struct ext_data_control_offer_v1 *offer)
+{
+    if (offer != NULL)
+    {
         ext_data_control_offer_v1_destroy(offer);
     }
-    if (layer->incoming_offer == offer) {
+
+    if (layer->incoming_offer == offer)
+    {
         layer->incoming_offer = NULL;
     }
 }
 
-static void data_device_selection(
-    void* data,
-    struct ext_data_control_device_v1* device,
-    struct ext_data_control_offer_v1* offer) {
+static void data_device_selection(void *data,
+                                  struct ext_data_control_device_v1 *device,
+                                  struct ext_data_control_offer_v1 *offer)
+{
     (void)device;
     discard_data_offer(data, offer);
 }
 
-static void data_device_finished(void* data, struct ext_data_control_device_v1* device) {
-    struct hypr_layer* layer = data;
-    if (layer->data_control_device == device) {
+static void data_device_finished(void *data,
+                                 struct ext_data_control_device_v1 *device)
+{
+    struct hypr_layer *layer = data;
+    if (layer->data_control_device == device)
+    {
         ext_data_control_device_v1_destroy(device);
         layer->data_control_device = NULL;
     }
 }
 
-static void data_device_primary_selection(
-    void* data,
-    struct ext_data_control_device_v1* device,
-    struct ext_data_control_offer_v1* offer) {
+static void
+data_device_primary_selection(void *data,
+                              struct ext_data_control_device_v1 *device,
+                              struct ext_data_control_offer_v1 *offer)
+{
     (void)device;
     discard_data_offer(data, offer);
 }
@@ -866,117 +1060,194 @@ static const struct ext_data_control_device_v1_listener data_device_listener = {
     .primary_selection = data_device_primary_selection,
 };
 
-static void ensure_data_control_device(struct hypr_layer* layer) {
-    if (layer->data_control_device != NULL || layer->data_control_manager == NULL || layer->seat == NULL) {
+static void ensure_data_control_device(struct hypr_layer *layer)
+{
+    if (layer->data_control_device != NULL ||
+        layer->data_control_manager == NULL || layer->seat == NULL)
+    {
         return;
     }
+
     layer->data_control_device = ext_data_control_manager_v1_get_data_device(
-        layer->data_control_manager,
-        layer->seat);
+        layer->data_control_manager, layer->seat);
     if (layer->data_control_device == NULL ||
-        ext_data_control_device_v1_add_listener(layer->data_control_device, &data_device_listener, layer) < 0) {
+        ext_data_control_device_v1_add_listener(
+            layer->data_control_device, &data_device_listener, layer) < 0)
+    {
         fail_fatal(layer, "failed to initialize native clipboard control");
     }
 }
 
-static void release_seat(struct hypr_layer* layer) {
-    if (layer->seat == NULL) {
+static void release_seat(struct hypr_layer *layer)
+{
+    if (layer->seat == NULL)
+    {
         return;
     }
+
     release_pointer(layer);
     release_keyboard(layer);
-    if (layer->data_control_device != NULL) {
+    if (layer->data_control_device != NULL)
+    {
         ext_data_control_device_v1_destroy(layer->data_control_device);
         layer->data_control_device = NULL;
     }
-    if (layer->seat_version >= WL_SEAT_RELEASE_SINCE_VERSION) {
+
+    if (layer->seat_version >= WL_SEAT_RELEASE_SINCE_VERSION)
+    {
         wl_seat_release(layer->seat);
-    } else {
+    }
+
+    else
+    {
         wl_seat_destroy(layer->seat);
     }
+
     layer->seat = NULL;
     layer->seat_registry_name = 0;
     layer->seat_version = 0;
 }
 
-static void registry_global(
-    void* data,
-    struct wl_registry* registry,
-    uint32_t name,
-    const char* interface,
-    uint32_t version) {
-    struct hypr_layer* layer = data;
-    if (strcmp(interface, wl_compositor_interface.name) == 0 && layer->compositor == NULL) {
+static void registry_global(void *data, struct wl_registry *registry,
+                            uint32_t name, const char *interface,
+                            uint32_t version)
+{
+    struct hypr_layer *layer = data;
+    if (strcmp(interface, wl_compositor_interface.name) == 0 &&
+        layer->compositor == NULL)
+    {
         uint32_t bind_version = version < 4 ? version : 4;
-        layer->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, bind_version);
-    } else if (strcmp(interface, wl_seat_interface.name) == 0 && layer->seat == NULL) {
+        layer->compositor = wl_registry_bind(
+            registry, name, &wl_compositor_interface, bind_version);
+    }
+
+    else if (strcmp(interface, wl_seat_interface.name) == 0 &&
+             layer->seat == NULL)
+    {
         uint32_t bind_version = version < 5 ? version : 5;
-        layer->seat = wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
-        if (layer->seat == NULL) {
+        layer->seat =
+            wl_registry_bind(registry, name, &wl_seat_interface, bind_version);
+        if (layer->seat == NULL)
+        {
             fail_fatal(layer, "failed to bind a Wayland seat");
             return;
         }
+
         layer->seat_registry_name = name;
         layer->seat_version = bind_version;
-        if (wl_seat_add_listener(layer->seat, &seat_listener, layer) < 0) {
+        if (wl_seat_add_listener(layer->seat, &seat_listener, layer) < 0)
+        {
             fail_fatal(layer, "failed to initialize the Wayland seat");
             release_seat(layer);
-        } else {
+        }
+
+        else
+        {
             ensure_data_control_device(layer);
         }
-    } else if (strcmp(interface, wl_shm_interface.name) == 0 && layer->shm == NULL) {
+    }
+
+    else if (strcmp(interface, wl_shm_interface.name) == 0 &&
+             layer->shm == NULL)
+    {
         layer->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
         layer->shm_name = name;
-    } else if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) == 0 &&
-               layer->toplevel_list == NULL) {
-        layer->toplevel_list = wl_registry_bind(registry, name, &ext_foreign_toplevel_list_v1_interface, 1);
+    }
+
+    else if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) ==
+                 0 &&
+             layer->toplevel_list == NULL)
+    {
+        layer->toplevel_list = wl_registry_bind(
+            registry, name, &ext_foreign_toplevel_list_v1_interface, 1);
         layer->toplevel_list_name = name;
         if (layer->toplevel_list == NULL ||
-            ext_foreign_toplevel_list_v1_add_listener(layer->toplevel_list, &thumbnail_list_listener, layer) < 0)
-            fail_fatal(layer, "failed to initialize ext-foreign-toplevel-list-v1");
-    } else if (strcmp(interface, hyprland_toplevel_mapping_manager_v1_interface.name) == 0 &&
-               layer->mapping_manager == NULL) {
-        layer->mapping_manager = wl_registry_bind(registry, name, &hyprland_toplevel_mapping_manager_v1_interface, 1);
-        if (layer->mapping_manager == NULL) {
-            fail("failed to bind optional hyprland-toplevel-mapping-v1; exact window addresses unavailable");
-        } else {
+            ext_foreign_toplevel_list_v1_add_listener(
+                layer->toplevel_list, &thumbnail_list_listener, layer) < 0)
+            fail_fatal(layer,
+                       "failed to initialize ext-foreign-toplevel-list-v1");
+    }
+
+    else if (strcmp(interface,
+                    hyprland_toplevel_mapping_manager_v1_interface.name) == 0 &&
+             layer->mapping_manager == NULL)
+    {
+        layer->mapping_manager = wl_registry_bind(
+            registry, name, &hyprland_toplevel_mapping_manager_v1_interface, 1);
+        if (layer->mapping_manager == NULL)
+        {
+            fail("failed to bind optional hyprland-toplevel-mapping-v1; exact "
+                 "window addresses unavailable");
+        }
+
+        else
+        {
             layer->mapping_manager_name = name;
-            for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+            for (struct thumbnail_window *w = layer->windows; w != NULL;
+                 w = w->next)
                 thumbnail_request_address(w);
         }
-    } else if (strcmp(interface, ext_foreign_toplevel_image_capture_source_manager_v1_interface.name) == 0 &&
-               layer->toplevel_capture_manager == NULL) {
-        layer->toplevel_capture_manager = wl_registry_bind(registry, name,
+    }
+
+    else if (strcmp(
+                 interface,
+                 ext_foreign_toplevel_image_capture_source_manager_v1_interface
+                     .name) == 0 &&
+             layer->toplevel_capture_manager == NULL)
+    {
+        layer->toplevel_capture_manager = wl_registry_bind(
+            registry, name,
             &ext_foreign_toplevel_image_capture_source_manager_v1_interface, 1);
         layer->toplevel_capture_name = name;
-    } else if (strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name) == 0 &&
-               layer->output_capture_manager == NULL) {
+    }
+
+    else if (strcmp(
+                 interface,
+                 ext_output_image_capture_source_manager_v1_interface.name) ==
+                 0 &&
+             layer->output_capture_manager == NULL)
+    {
         layer->output_capture_manager = wl_registry_bind(
-            registry, name, &ext_output_image_capture_source_manager_v1_interface, 1);
-    } else if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) == 0 &&
-               layer->image_capture_manager == NULL) {
+            registry, name,
+            &ext_output_image_capture_source_manager_v1_interface, 1);
+    }
+
+    else if (strcmp(interface,
+                    ext_image_copy_capture_manager_v1_interface.name) == 0 &&
+             layer->image_capture_manager == NULL)
+    {
         layer->image_capture_manager = wl_registry_bind(
             registry, name, &ext_image_copy_capture_manager_v1_interface, 1);
         layer->image_capture_name = name;
-    } else if (strcmp(interface, ext_data_control_manager_v1_interface.name) == 0 &&
-               layer->data_control_manager == NULL) {
+    }
+
+    else if (strcmp(interface, ext_data_control_manager_v1_interface.name) ==
+                 0 &&
+             layer->data_control_manager == NULL)
+    {
         layer->data_control_manager = wl_registry_bind(
             registry, name, &ext_data_control_manager_v1_interface, 1);
         ensure_data_control_device(layer);
-    } else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0 && layer->layer_shell == NULL) {
+    }
+
+    else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0 &&
+             layer->layer_shell == NULL)
+    {
         uint32_t bind_version = version < 5 ? version : 5;
         layer->layer_shell_version = bind_version;
         layer->layer_shell = wl_registry_bind(
-            registry,
-            name,
-            &zwlr_layer_shell_v1_interface,
-            bind_version);
-    } else if (strcmp(interface, wl_output_interface.name) == 0) {
-        struct hypr_bar* bar = calloc(1, sizeof(struct hypr_bar));
-        if (bar == NULL) {
+            registry, name, &zwlr_layer_shell_v1_interface, bind_version);
+    }
+
+    else if (strcmp(interface, wl_output_interface.name) == 0)
+    {
+        struct hypr_bar *bar = calloc(1, sizeof(struct hypr_bar));
+        if (bar == NULL)
+        {
             fail_fatal(layer, "out of memory while tracking an output");
             return;
         }
+
         uint32_t bind_version = version < 4 ? version : 4;
         bar->layer = layer;
         bar->registry_name = name;
@@ -985,75 +1256,111 @@ static void registry_global(
         bar->pending_key = -1;
         bar->egl_surface = EGL_NO_SURFACE;
         bar->screenshot_egl_surface = EGL_NO_SURFACE;
-        snprintf(bar->fallback_output_name, sizeof(bar->fallback_output_name), "wl-output-%u", name);
-        bar->output = wl_registry_bind(registry, name, &wl_output_interface, bind_version);
-        if (bar->output == NULL || wl_output_add_listener(bar->output, &output_listener, bar) < 0) {
+        snprintf(bar->fallback_output_name, sizeof(bar->fallback_output_name),
+                 "wl-output-%u", name);
+        bar->output = wl_registry_bind(registry, name, &wl_output_interface,
+                                       bind_version);
+        if (bar->output == NULL ||
+            wl_output_add_listener(bar->output, &output_listener, bar) < 0)
+        {
             fail_fatal(layer, "failed to bind a wl_output");
-            if (bar->output != NULL) {
+            if (bar->output != NULL)
+            {
                 wl_output_destroy(bar->output);
             }
+
             free(bar);
             return;
         }
+
         bar->next = layer->bars;
         layer->bars = bar;
         create_bar_surface(bar);
     }
 }
 
-static void registry_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
+static void registry_global_remove(void *data, struct wl_registry *registry,
+                                   uint32_t name)
+{
     (void)registry;
-    struct hypr_layer* layer = data;
-    if (layer->mapping_manager != NULL && name == layer->mapping_manager_name) {
-        fail("hyprland-toplevel-mapping-v1 global removed; exact window addresses cleared");
-        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+    struct hypr_layer *layer = data;
+    if (layer->mapping_manager != NULL && name == layer->mapping_manager_name)
+    {
+        fail("hyprland-toplevel-mapping-v1 global removed; exact window "
+             "addresses cleared");
+        for (struct thumbnail_window *w = layer->windows; w != NULL;
+             w = w->next)
             thumbnail_clear_address(w);
         hyprland_toplevel_mapping_manager_v1_destroy(layer->mapping_manager);
         layer->mapping_manager = NULL;
         layer->mapping_manager_name = 0;
     }
-    if (name == layer->toplevel_list_name || name == layer->toplevel_capture_name ||
-        name == layer->image_capture_name || name == layer->shm_name) {
-        thumbnail_backend_lost(layer, "thumbnail protocol global removed; re-enable after compositor support returns");
-        if (name == layer->toplevel_list_name && layer->toplevel_list != NULL) {
-            while (layer->windows != NULL) {
-                struct thumbnail_window* window = layer->windows;
+
+    if (name == layer->toplevel_list_name ||
+        name == layer->toplevel_capture_name ||
+        name == layer->image_capture_name || name == layer->shm_name)
+    {
+        thumbnail_backend_lost(layer,
+                               "thumbnail protocol global removed; re-enable "
+                               "after compositor support returns");
+        if (name == layer->toplevel_list_name && layer->toplevel_list != NULL)
+        {
+            while (layer->windows != NULL)
+            {
+                struct thumbnail_window *window = layer->windows;
                 layer->windows = window->next;
                 thumbnail_destroy(window);
             }
+
             ext_foreign_toplevel_list_v1_destroy(layer->toplevel_list);
             layer->toplevel_list = NULL;
             layer->toplevel_list_name = 0;
             layer->window_serial++;
         }
-        if (name == layer->toplevel_capture_name && layer->toplevel_capture_manager != NULL) {
-            ext_foreign_toplevel_image_capture_source_manager_v1_destroy(layer->toplevel_capture_manager);
+
+        if (name == layer->toplevel_capture_name &&
+            layer->toplevel_capture_manager != NULL)
+        {
+            ext_foreign_toplevel_image_capture_source_manager_v1_destroy(
+                layer->toplevel_capture_manager);
             layer->toplevel_capture_manager = NULL;
             layer->toplevel_capture_name = 0;
         }
-        if (name == layer->image_capture_name && layer->image_capture_manager != NULL) {
-            ext_image_copy_capture_manager_v1_destroy(layer->image_capture_manager);
+
+        if (name == layer->image_capture_name &&
+            layer->image_capture_manager != NULL)
+        {
+            ext_image_copy_capture_manager_v1_destroy(
+                layer->image_capture_manager);
             layer->image_capture_manager = NULL;
             layer->image_capture_name = 0;
         }
-        if (name == layer->shm_name && layer->shm != NULL) {
+
+        if (name == layer->shm_name && layer->shm != NULL)
+        {
             wl_shm_destroy(layer->shm);
             layer->shm = NULL;
             layer->shm_name = 0;
         }
     }
-    if (layer->seat != NULL && layer->seat_registry_name == name) {
+
+    if (layer->seat != NULL && layer->seat_registry_name == name)
+    {
         release_seat(layer);
         return;
     }
-    struct hypr_bar** link = &layer->bars;
-    while (*link != NULL) {
-        struct hypr_bar* bar = *link;
-        if (bar->registry_name == name) {
+
+    struct hypr_bar **link = &layer->bars;
+    while (*link != NULL)
+    {
+        struct hypr_bar *bar = *link;
+        if (bar->registry_name == name)
+        {
             *link = bar->next;
             destroy_output(bar);
             return;
         }
+
         link = &bar->next;
     }
 }
@@ -1063,129 +1370,134 @@ static const struct wl_registry_listener registry_listener = {
     .global_remove = registry_global_remove,
 };
 
-static void pointer_enter(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t serial,
-    struct wl_surface* surface,
-    wl_fixed_t surface_x,
-    wl_fixed_t surface_y) {
+static void pointer_enter(void *data, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface,
+                          wl_fixed_t surface_x, wl_fixed_t surface_y)
+{
     (void)pointer;
     (void)serial;
-    struct hypr_layer* layer = data;
-    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
-    if (layer->pointer_focus != NULL && layer->pointer_focus != bar) {
+    struct hypr_layer *layer = data;
+    struct hypr_bar *bar = find_bar_by_surface(layer, surface);
+    if (layer->pointer_focus != NULL && layer->pointer_focus != bar)
+    {
         layer->pointer_focus->pointer_inside = 0;
         layer->pointer_focus->pointer_button_down = 0;
     }
+
     layer->pointer_focus = bar;
-    if (bar != NULL) {
+    if (bar != NULL)
+    {
         bar->pointer_inside = 1;
         bar->pointer_x = wl_fixed_to_double(surface_x);
         bar->pointer_y = wl_fixed_to_double(surface_y);
     }
 }
 
-static void pointer_leave(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t serial,
-    struct wl_surface* surface) {
+static void pointer_leave(void *data, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface)
+{
     (void)pointer;
     (void)serial;
-    struct hypr_layer* layer = data;
-    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
-    if (bar != NULL) {
+    struct hypr_layer *layer = data;
+    struct hypr_bar *bar = find_bar_by_surface(layer, surface);
+    if (bar != NULL)
+    {
         bar->pointer_inside = 0;
         bar->pointer_button_down = 0;
     }
-    if (layer->pointer_focus == bar) {
+
+    if (layer->pointer_focus == bar)
+    {
         layer->pointer_focus = NULL;
     }
 }
 
-static void pointer_motion(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t time,
-    wl_fixed_t surface_x,
-    wl_fixed_t surface_y) {
+static void pointer_motion(void *data, struct wl_pointer *pointer,
+                           uint32_t time, wl_fixed_t surface_x,
+                           wl_fixed_t surface_y)
+{
     (void)pointer;
     (void)time;
-    struct hypr_layer* layer = data;
-    if (layer->pointer_focus != NULL) {
+    struct hypr_layer *layer = data;
+    if (layer->pointer_focus != NULL)
+    {
         layer->pointer_focus->pointer_x = wl_fixed_to_double(surface_x);
         layer->pointer_focus->pointer_y = wl_fixed_to_double(surface_y);
     }
 }
 
-static void pointer_button(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t serial,
-    uint32_t time,
-    uint32_t button,
-    uint32_t state) {
+static void pointer_button(void *data, struct wl_pointer *pointer,
+                           uint32_t serial, uint32_t time, uint32_t button,
+                           uint32_t state)
+{
     (void)pointer;
     (void)serial;
     (void)time;
-    struct hypr_layer* layer = data;
-    if (button == 0x110 && layer->pointer_focus != NULL) {
-        layer->pointer_focus->pointer_button_down = state == WL_POINTER_BUTTON_STATE_PRESSED;
+    struct hypr_layer *layer = data;
+    if (button == 0x110 && layer->pointer_focus != NULL)
+    {
+        layer->pointer_focus->pointer_button_down =
+            state == WL_POINTER_BUTTON_STATE_PRESSED;
     }
 }
 
-static void pointer_axis(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t time,
-    uint32_t axis,
-    wl_fixed_t value) {
+static void pointer_axis(void *data, struct wl_pointer *pointer, uint32_t time,
+                         uint32_t axis, wl_fixed_t value)
+{
     (void)pointer;
     (void)time;
-    struct hypr_layer* layer = data;
-    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL && layer->pointer_focus != NULL) {
+    struct hypr_layer *layer = data;
+    if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL && layer->pointer_focus != NULL)
+    {
         layer->pointer_focus->pending_scroll += wl_fixed_to_double(value);
     }
 }
 
-static void pointer_frame(void* data, struct wl_pointer* pointer) {
+static void pointer_frame(void *data, struct wl_pointer *pointer)
+{
     (void)data;
     (void)pointer;
 }
 
-static void pointer_axis_source(void* data, struct wl_pointer* pointer, uint32_t axis_source) {
+static void pointer_axis_source(void *data, struct wl_pointer *pointer,
+                                uint32_t axis_source)
+{
     (void)data;
     (void)pointer;
     (void)axis_source;
 }
 
-static void pointer_axis_stop(void* data, struct wl_pointer* pointer, uint32_t time, uint32_t axis) {
+static void pointer_axis_stop(void *data, struct wl_pointer *pointer,
+                              uint32_t time, uint32_t axis)
+{
     (void)data;
     (void)pointer;
     (void)time;
     (void)axis;
 }
 
-static void pointer_axis_discrete(void* data, struct wl_pointer* pointer, uint32_t axis, int32_t discrete) {
+static void pointer_axis_discrete(void *data, struct wl_pointer *pointer,
+                                  uint32_t axis, int32_t discrete)
+{
     (void)data;
     (void)pointer;
     (void)axis;
     (void)discrete;
 }
 
-static void pointer_axis_value120(void* data, struct wl_pointer* pointer, uint32_t axis, int32_t value120) {
+static void pointer_axis_value120(void *data, struct wl_pointer *pointer,
+                                  uint32_t axis, int32_t value120)
+{
     (void)data;
     (void)pointer;
     (void)axis;
     (void)value120;
 }
 
-static void pointer_axis_relative_direction(
-    void* data,
-    struct wl_pointer* pointer,
-    uint32_t axis,
-    uint32_t direction) {
+static void pointer_axis_relative_direction(void *data,
+                                            struct wl_pointer *pointer,
+                                            uint32_t axis, uint32_t direction)
+{
     (void)data;
     (void)pointer;
     (void)axis;
@@ -1206,160 +1518,173 @@ static const struct wl_pointer_listener pointer_listener = {
     .axis_relative_direction = pointer_axis_relative_direction,
 };
 
-static void keyboard_keymap(
-    void* data,
-    struct wl_keyboard* keyboard,
-    uint32_t format,
-    int32_t fd,
-    uint32_t size) {
+static void keyboard_keymap(void *data, struct wl_keyboard *keyboard,
+                            uint32_t format, int32_t fd, uint32_t size)
+{
     (void)keyboard;
-    struct hypr_layer* layer = data;
-    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 || layer->xkb_context == NULL) {
+    struct hypr_layer *layer = data;
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 ||
+        layer->xkb_context == NULL)
+    {
         close(fd);
         return;
     }
 
-    char* keymap_text = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    char *keymap_text = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
-    if (keymap_text == MAP_FAILED) {
+    if (keymap_text == MAP_FAILED)
+    {
         fail("mmap failed for the keyboard keymap");
         return;
     }
-    struct xkb_keymap* keymap = xkb_keymap_new_from_string(
-        layer->xkb_context,
-        keymap_text,
-        XKB_KEYMAP_FORMAT_TEXT_V1,
+
+    struct xkb_keymap *keymap = xkb_keymap_new_from_string(
+        layer->xkb_context, keymap_text, XKB_KEYMAP_FORMAT_TEXT_V1,
         XKB_KEYMAP_COMPILE_NO_FLAGS);
     munmap(keymap_text, size);
-    if (keymap == NULL) {
+    if (keymap == NULL)
+    {
         fail("xkb keymap compilation failed");
         return;
     }
-    struct xkb_state* state = xkb_state_new(keymap);
-    if (state == NULL) {
+
+    struct xkb_state *state = xkb_state_new(keymap);
+    if (state == NULL)
+    {
         xkb_keymap_unref(keymap);
         fail("xkb state creation failed");
         return;
     }
-    if (layer->xkb_state != NULL) {
+
+    if (layer->xkb_state != NULL)
+    {
         xkb_state_unref(layer->xkb_state);
     }
-    if (layer->xkb_keymap != NULL) {
+
+    if (layer->xkb_keymap != NULL)
+    {
         xkb_keymap_unref(layer->xkb_keymap);
     }
+
     layer->xkb_keymap = keymap;
     layer->xkb_state = state;
 }
 
-static void keyboard_enter(
-    void* data,
-    struct wl_keyboard* keyboard,
-    uint32_t serial,
-    struct wl_surface* surface,
-    struct wl_array* keys) {
+static void keyboard_enter(void *data, struct wl_keyboard *keyboard,
+                           uint32_t serial, struct wl_surface *surface,
+                           struct wl_array *keys)
+{
     (void)keyboard;
     (void)serial;
     (void)keys;
-    struct hypr_layer* layer = data;
+    struct hypr_layer *layer = data;
     layer->keyboard_focus = find_bar_by_surface(layer, surface);
 }
 
-static void keyboard_leave(
-    void* data,
-    struct wl_keyboard* keyboard,
-    uint32_t serial,
-    struct wl_surface* surface) {
+static void keyboard_leave(void *data, struct wl_keyboard *keyboard,
+                           uint32_t serial, struct wl_surface *surface)
+{
     (void)keyboard;
     (void)serial;
-    struct hypr_layer* layer = data;
-    struct hypr_bar* bar = find_bar_by_surface(layer, surface);
-    if (layer->keyboard_focus == bar) {
+    struct hypr_layer *layer = data;
+    struct hypr_bar *bar = find_bar_by_surface(layer, surface);
+    if (layer->keyboard_focus == bar)
+    {
         layer->keyboard_focus = NULL;
     }
+
     layer->repeat_bar = NULL;
     layer->repeat_active = 0;
 }
 
-static void queue_keyboard_input(struct hypr_layer* layer, struct hypr_bar* bar, uint32_t key) {
-    if (bar == NULL || bar->closed) {
+static void queue_keyboard_input(struct hypr_layer *layer, struct hypr_bar *bar,
+                                 uint32_t key)
+{
+    if (bar == NULL || bar->closed)
+    {
         return;
     }
+
     bar->pending_key = (int)key;
-    bar->pending_key_control = layer->xkb_state != NULL &&
-        xkb_state_mod_name_is_active(
-            layer->xkb_state,
-            XKB_MOD_NAME_CTRL,
-            XKB_STATE_MODS_EFFECTIVE) > 0;
-    if (layer->xkb_state == NULL) {
+    bar->pending_key_control =
+        layer->xkb_state != NULL &&
+        xkb_state_mod_name_is_active(layer->xkb_state, XKB_MOD_NAME_CTRL,
+                                     XKB_STATE_MODS_EFFECTIVE) > 0;
+    if (layer->xkb_state == NULL)
+    {
         return;
     }
 
     char text[64];
-    int length = xkb_state_key_get_utf8(layer->xkb_state, key + 8, text, sizeof(text));
-    int remaining = (int)sizeof(bar->pending_text) - bar->pending_text_length - 1;
-    if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 && text[0] != 0x7f) {
-        memcpy(bar->pending_text + bar->pending_text_length, text, (size_t)length);
+    int length =
+        xkb_state_key_get_utf8(layer->xkb_state, key + 8, text, sizeof(text));
+    int remaining =
+        (int)sizeof(bar->pending_text) - bar->pending_text_length - 1;
+    if (length > 0 && length <= remaining && (unsigned char)text[0] >= 0x20 &&
+        text[0] != 0x7f)
+    {
+        memcpy(bar->pending_text + bar->pending_text_length, text,
+               (size_t)length);
         bar->pending_text_length += length;
         bar->pending_text[bar->pending_text_length] = '\0';
     }
 }
 
-static void keyboard_key(
-    void* data,
-    struct wl_keyboard* keyboard,
-    uint32_t serial,
-    uint32_t time,
-    uint32_t key,
-    uint32_t state) {
+static void keyboard_key(void *data, struct wl_keyboard *keyboard,
+                         uint32_t serial, uint32_t time, uint32_t key,
+                         uint32_t state)
+{
     (void)keyboard;
     (void)serial;
     (void)time;
-    struct hypr_layer* layer = data;
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        struct hypr_bar* bar = layer->keyboard_focus;
+    struct hypr_layer *layer = data;
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
+    {
+        struct hypr_bar *bar = layer->keyboard_focus;
         queue_keyboard_input(layer, bar, key);
-        if (bar != NULL && layer->repeat_rate > 0 && layer->xkb_keymap != NULL &&
-            xkb_keymap_key_repeats(layer->xkb_keymap, key + 8)) {
+        if (bar != NULL && layer->repeat_rate > 0 &&
+            layer->xkb_keymap != NULL &&
+            xkb_keymap_key_repeats(layer->xkb_keymap, key + 8))
+        {
             layer->repeat_bar = bar;
             layer->repeat_key = key;
             layer->repeat_active = 1;
-            layer->repeat_next_ms = monotonic_milliseconds() + layer->repeat_delay;
+            layer->repeat_next_ms =
+                monotonic_milliseconds() + layer->repeat_delay;
         }
-    } else if (layer->repeat_active && layer->repeat_key == key) {
+    }
+
+    else if (layer->repeat_active && layer->repeat_key == key)
+    {
         layer->repeat_bar = NULL;
         layer->repeat_active = 0;
     }
 }
 
-static void keyboard_modifiers(
-    void* data,
-    struct wl_keyboard* keyboard,
-    uint32_t serial,
-    uint32_t mods_depressed,
-    uint32_t mods_latched,
-    uint32_t mods_locked,
-    uint32_t group) {
+static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
+                               uint32_t serial, uint32_t mods_depressed,
+                               uint32_t mods_latched, uint32_t mods_locked,
+                               uint32_t group)
+{
     (void)keyboard;
     (void)serial;
-    struct hypr_layer* layer = data;
-    if (layer->xkb_state != NULL) {
-        xkb_state_update_mask(
-            layer->xkb_state,
-            mods_depressed,
-            mods_latched,
-            mods_locked,
-            0,
-            0,
-            group);
+    struct hypr_layer *layer = data;
+    if (layer->xkb_state != NULL)
+    {
+        xkb_state_update_mask(layer->xkb_state, mods_depressed, mods_latched,
+                              mods_locked, 0, 0, group);
     }
 }
 
-static void keyboard_repeat_info(void* data, struct wl_keyboard* keyboard, int32_t rate, int32_t delay) {
+static void keyboard_repeat_info(void *data, struct wl_keyboard *keyboard,
+                                 int32_t rate, int32_t delay)
+{
     (void)keyboard;
-    struct hypr_layer* layer = data;
+    struct hypr_layer *layer = data;
     layer->repeat_rate = rate;
     layer->repeat_delay = delay;
-    if (rate <= 0) {
+    if (rate <= 0)
+    {
         layer->repeat_bar = NULL;
         layer->repeat_active = 0;
     }
@@ -1374,31 +1699,48 @@ static const struct wl_keyboard_listener keyboard_listener = {
     .repeat_info = keyboard_repeat_info,
 };
 
-static void seat_capabilities(void* data, struct wl_seat* seat, uint32_t capabilities) {
-    struct hypr_layer* layer = data;
+static void seat_capabilities(void *data, struct wl_seat *seat,
+                              uint32_t capabilities)
+{
+    struct hypr_layer *layer = data;
     int has_pointer = (capabilities & WL_SEAT_CAPABILITY_POINTER) != 0;
     int has_keyboard = (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0;
 
-    if (has_pointer && layer->pointer == NULL) {
+    if (has_pointer && layer->pointer == NULL)
+    {
         layer->pointer = wl_seat_get_pointer(seat);
-        if (layer->pointer == NULL || wl_pointer_add_listener(layer->pointer, &pointer_listener, layer) < 0) {
+        if (layer->pointer == NULL ||
+            wl_pointer_add_listener(layer->pointer, &pointer_listener, layer) <
+                0)
+        {
             fail_fatal(layer, "failed to initialize the Wayland pointer");
         }
-    } else if (!has_pointer && layer->pointer != NULL) {
+    }
+
+    else if (!has_pointer && layer->pointer != NULL)
+    {
         release_pointer(layer);
     }
 
-    if (has_keyboard && layer->keyboard == NULL) {
+    if (has_keyboard && layer->keyboard == NULL)
+    {
         layer->keyboard = wl_seat_get_keyboard(seat);
-        if (layer->keyboard == NULL || wl_keyboard_add_listener(layer->keyboard, &keyboard_listener, layer) < 0) {
+        if (layer->keyboard == NULL ||
+            wl_keyboard_add_listener(layer->keyboard, &keyboard_listener,
+                                     layer) < 0)
+        {
             fail_fatal(layer, "failed to initialize the Wayland keyboard");
         }
-    } else if (!has_keyboard && layer->keyboard != NULL) {
+    }
+
+    else if (!has_keyboard && layer->keyboard != NULL)
+    {
         release_keyboard(layer);
     }
 }
 
-static void seat_name(void* data, struct wl_seat* seat, const char* name) {
+static void seat_name(void *data, struct wl_seat *seat, const char *name)
+{
     (void)data;
     (void)seat;
     (void)name;
@@ -1409,85 +1751,106 @@ static const struct wl_seat_listener seat_listener = {
     .name = seat_name,
 };
 
-static int init_egl(struct hypr_layer* layer) {
+static int init_egl(struct hypr_layer *layer)
+{
     PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display =
-        (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
-    if (get_platform_display != NULL) {
-        layer->egl_display = get_platform_display(EGL_PLATFORM_WAYLAND_EXT, layer->display, NULL);
-    } else {
-        layer->egl_display = eglGetDisplay((EGLNativeDisplayType)layer->display);
+        (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
+            "eglGetPlatformDisplayEXT");
+    if (get_platform_display != NULL)
+    {
+        layer->egl_display = get_platform_display(EGL_PLATFORM_WAYLAND_EXT,
+                                                  layer->display, NULL);
     }
-    if (layer->egl_display == EGL_NO_DISPLAY) {
+
+    else
+    {
+        layer->egl_display =
+            eglGetDisplay((EGLNativeDisplayType)layer->display);
+    }
+
+    if (layer->egl_display == EGL_NO_DISPLAY)
+    {
         fail_egl_fatal(layer, "failed to get an EGL display for Wayland");
         return 0;
     }
-    if (!eglInitialize(layer->egl_display, NULL, NULL)) {
+
+    if (!eglInitialize(layer->egl_display, NULL, NULL))
+    {
         fail_egl_fatal(layer, "eglInitialize failed");
         return 0;
     }
-    if (!eglBindAPI(EGL_OPENGL_API)) {
+
+    if (!eglBindAPI(EGL_OPENGL_API))
+    {
         fail_egl_fatal(layer, "eglBindAPI(EGL_OPENGL_API) failed");
         return 0;
     }
 
     const EGLint config_attribs[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
+        EGL_SURFACE_TYPE,
+        EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE,
+        EGL_OPENGL_BIT,
+        EGL_RED_SIZE,
+        8,
+        EGL_GREEN_SIZE,
+        8,
+        EGL_BLUE_SIZE,
+        8,
+        EGL_ALPHA_SIZE,
+        8,
         EGL_NONE,
     };
     EGLint config_count = 0;
-    if (!eglChooseConfig(layer->egl_display, config_attribs, &layer->egl_config, 1, &config_count) ||
-        config_count == 0) {
-        fail_egl_fatal(layer, "no RGBA OpenGL window/pbuffer EGL config is available");
+    if (!eglChooseConfig(layer->egl_display, config_attribs, &layer->egl_config,
+                         1, &config_count) ||
+        config_count == 0)
+    {
+        fail_egl_fatal(layer,
+                       "no RGBA OpenGL window/pbuffer EGL config is available");
         return 0;
     }
 
     const EGLint context_attribs[] = {
-        EGL_CONTEXT_MAJOR_VERSION, 3,
-        EGL_CONTEXT_MINOR_VERSION, 3,
-        EGL_NONE,
+        EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_NONE,
     };
-    layer->egl_context = eglCreateContext(
-        layer->egl_display,
-        layer->egl_config,
-        EGL_NO_CONTEXT,
-        context_attribs);
-    if (layer->egl_context == EGL_NO_CONTEXT) {
+    layer->egl_context = eglCreateContext(layer->egl_display, layer->egl_config,
+                                          EGL_NO_CONTEXT, context_attribs);
+    if (layer->egl_context == EGL_NO_CONTEXT)
+    {
         fail_egl_fatal(layer, "eglCreateContext failed");
         return 0;
     }
 
     const EGLint pbuffer_attribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE,
+        EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE,
     };
     layer->fallback_surface = eglCreatePbufferSurface(
-        layer->egl_display,
-        layer->egl_config,
-        pbuffer_attribs);
-    if (layer->fallback_surface == EGL_NO_SURFACE) {
+        layer->egl_display, layer->egl_config, pbuffer_attribs);
+    if (layer->fallback_surface == EGL_NO_SURFACE)
+    {
         fail_egl_fatal(layer, "eglCreatePbufferSurface failed");
         return 0;
     }
+
     return make_fallback_current(layer);
 }
 
-hypr_layer* hypr_layer_create(int reserved_height) {
-    if (reserved_height <= 0) {
+hypr_layer *hypr_layer_create(int reserved_height)
+{
+    if (reserved_height <= 0)
+    {
         fail("reserved height must be positive");
         return NULL;
     }
 
-    struct hypr_layer* layer = calloc(1, sizeof(struct hypr_layer));
-    if (layer == NULL) {
+    struct hypr_layer *layer = calloc(1, sizeof(struct hypr_layer));
+    if (layer == NULL)
+    {
         fail("out of memory");
         return NULL;
     }
+
     layer->reserved_height = reserved_height;
     layer->next_bar_id = 1;
     layer->topology_serial = 1;
@@ -1495,78 +1858,132 @@ hypr_layer* hypr_layer_create(int reserved_height) {
     layer->egl_context = EGL_NO_CONTEXT;
     layer->fallback_surface = EGL_NO_SURFACE;
     layer->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (layer->xkb_context == NULL) {
+    if (layer->xkb_context == NULL)
+    {
         fail("xkb_context_new failed");
         hypr_layer_destroy(layer);
         return NULL;
     }
 
     layer->display = wl_display_connect(NULL);
-    if (layer->display == NULL) {
-        fail("wl_display_connect failed. Are WAYLAND_DISPLAY and a compositor available?");
+    if (layer->display == NULL)
+    {
+        fail("wl_display_connect failed. Are WAYLAND_DISPLAY and a compositor "
+             "available?");
         hypr_layer_destroy(layer);
         return NULL;
     }
+
     layer->registry = wl_display_get_registry(layer->display);
-    if (layer->registry == NULL || wl_registry_add_listener(layer->registry, &registry_listener, layer) < 0) {
+    if (layer->registry == NULL ||
+        wl_registry_add_listener(layer->registry, &registry_listener, layer) <
+            0)
+    {
         fail("failed to initialize the Wayland registry");
         hypr_layer_destroy(layer);
         return NULL;
     }
-    if (wl_display_roundtrip(layer->display) < 0) {
+
+    if (wl_display_roundtrip(layer->display) < 0)
+    {
         fail("Wayland registry roundtrip failed");
         hypr_layer_destroy(layer);
         return NULL;
     }
-    if (layer->compositor == NULL) {
+
+    if (layer->compositor == NULL)
+    {
         fail("wl_compositor is not available");
         hypr_layer_destroy(layer);
         return NULL;
     }
-    if (layer->layer_shell == NULL) {
-        fail("zwlr_layer_shell_v1 is not available; run under a layer-shell compositor");
-        hypr_layer_destroy(layer);
-        return NULL;
-    }
-    if (!init_egl(layer)) {
+
+    if (layer->layer_shell == NULL)
+    {
+        fail("zwlr_layer_shell_v1 is not available; run under a layer-shell "
+             "compositor");
         hypr_layer_destroy(layer);
         return NULL;
     }
 
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
+    if (!init_egl(layer))
+    {
+        hypr_layer_destroy(layer);
+        return NULL;
+    }
+
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
         create_bar_surface(bar);
     }
-    if (wl_display_roundtrip(layer->display) < 0) {
+
+    if (wl_display_roundtrip(layer->display) < 0)
+    {
         fail("Wayland roundtrip failed while configuring output bars");
         hypr_layer_destroy(layer);
         return NULL;
     }
+
     return layer;
 }
 
-static struct thumbnail_window* thumbnail_find(const hypr_layer* layer, uint64_t id) {
-    if (layer == NULL || id == 0) return NULL;
-    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
-        if (w->id == id && w->listed) return w;
+static struct thumbnail_window *thumbnail_find(const hypr_layer *layer,
+                                               uint64_t id)
+{
+    if (layer == NULL || id == 0)
+        return NULL;
+    for (struct thumbnail_window *w = layer->windows; w != NULL; w = w->next)
+        if (w->id == id && w->listed)
+            return w;
     return NULL;
 }
 
-static void thumbnail_buffer_destroy(struct thumbnail_window* w) {
-    if (w->frame != NULL) ext_image_copy_capture_frame_v1_destroy(w->frame);
+static void thumbnail_buffer_destroy(struct thumbnail_window *w)
+{
+    if (w->frame != NULL)
+    {
+        ext_image_copy_capture_frame_v1_destroy(w->frame);
+    }
+
     w->frame = NULL;
-    if (w->buffer != NULL) wl_buffer_destroy(w->buffer);
+    if (w->buffer != NULL)
+    {
+        wl_buffer_destroy(w->buffer);
+    }
+
     w->buffer = NULL;
+    w->buffer_generation++;
     /* The server retains its own mmap/fd; cancelling an in-flight frame never
-     * reuses or writes the old storage, even before it processes destruction. */
-    if (w->mapping != NULL) munmap(w->mapping, w->mapping_size);
+     * reuses or writes the old storage, even before it processes destruction.
+     */
+    if (w->mapping != NULL)
+    {
+        munmap(w->mapping, w->mapping_size);
+    }
+
     w->mapping = NULL;
     w->mapping_size = 0;
 }
 
-static void thumbnail_stop(struct thumbnail_window* w) {
+static void thumbnail_stop(struct thumbnail_window *w)
+{
+    w->generation++;
+    if (w->layer->thumbnail_pool != NULL)
+    {
+        thumbnail_pool_cancel(w->layer->thumbnail_pool, w->id);
+    }
+
     thumbnail_buffer_destroy(w);
-    if (w->session != NULL) ext_image_copy_capture_session_v1_destroy(w->session);
-    if (w->source != NULL) ext_image_capture_source_v1_destroy(w->source);
+    if (w->session != NULL)
+    {
+        ext_image_copy_capture_session_v1_destroy(w->session);
+    }
+
+    if (w->source != NULL)
+    {
+        ext_image_capture_source_v1_destroy(w->source);
+    }
+
     w->session = NULL;
     w->source = NULL;
     w->constraints_done = w->constraints_pending = w->has_format = 0;
@@ -1577,581 +1994,996 @@ static void thumbnail_stop(struct thumbnail_window* w) {
     w->retry_at = 0;
 }
 
-static void thumbnail_error(struct thumbnail_window* w, const char* message, int terminal) {
+static void thumbnail_error(struct thumbnail_window *w, const char *message,
+                            int terminal)
+{
     if (strcmp(w->error, message) != 0)
-        fprintf(stderr, "hypr_layer: thumbnail window %llu: %s\n", (unsigned long long)w->id, message);
+    {
+        fprintf(stderr, "hypr_layer: thumbnail window %llu: %s\n",
+                (unsigned long long)w->id, message);
+    }
+
     snprintf(w->error, sizeof(w->error), "%s", message);
-    if (terminal) {
+    if (terminal)
+    {
         thumbnail_stop(w);
         w->blocked = 1;
     }
 }
 
-static void thumbnail_backend_lost(struct hypr_layer* layer, const char* message) {
-    snprintf(layer->thumbnail_error, sizeof(layer->thumbnail_error), "%s", message);
+static void thumbnail_backend_lost(struct hypr_layer *layer,
+                                   const char *message)
+{
+    snprintf(layer->thumbnail_error, sizeof(layer->thumbnail_error), "%s",
+             message);
     fail(message);
-    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
+    for (struct thumbnail_window *w = layer->windows; w != NULL; w = w->next)
         thumbnail_error(w, message, 1);
 }
 
-static void thumbnail_clear_address(struct thumbnail_window* w) {
+static void thumbnail_clear_address(struct thumbnail_window *w)
+{
     if (w->address_mapping != NULL)
         hyprland_toplevel_window_mapping_handle_v1_destroy(w->address_mapping);
     w->address_mapping = NULL;
-    if (w->address[0] != '\0') {
+    if (w->address[0] != '\0')
+    {
         w->address[0] = '\0';
-        if (w->listed) w->layer->window_serial++;
+        if (w->listed)
+            w->layer->window_serial++;
     }
 }
 
-static void thumbnail_window_address(void* data,
-    struct hyprland_toplevel_window_mapping_handle_v1* mapping, uint32_t hi, uint32_t lo) {
+static void thumbnail_window_address(
+    void *data, struct hyprland_toplevel_window_mapping_handle_v1 *mapping,
+    uint32_t hi, uint32_t lo)
+{
     (void)mapping;
-    struct thumbnail_window* w = data;
+    struct thumbnail_window *w = data;
     char address[sizeof(w->address)];
     uint64_t value = ((uint64_t)hi << 32) | lo;
     snprintf(address, sizeof(address), "0x%" PRIx64, value);
-    if (strcmp(w->address, address) != 0) {
+    if (strcmp(w->address, address) != 0)
+    {
         memcpy(w->address, address, strlen(address) + 1);
-        if (w->listed) w->layer->window_serial++;
+        if (w->listed)
+            w->layer->window_serial++;
     }
 }
 
-static void thumbnail_address_failed(void* data,
-    struct hyprland_toplevel_window_mapping_handle_v1* mapping) {
+static void thumbnail_address_failed(
+    void *data, struct hyprland_toplevel_window_mapping_handle_v1 *mapping)
+{
     (void)mapping;
-    struct thumbnail_window* w = data;
-    fprintf(stderr, "hypr_layer: exact address mapping failed for window %llu; "
-        "the compositor could not resolve its ext toplevel handle (window may have closed)\n",
-        (unsigned long long)w->id);
+    struct thumbnail_window *w = data;
+    fprintf(stderr,
+            "hypr_layer: exact address mapping failed for window %llu; "
+            "the compositor could not resolve its ext toplevel handle (window "
+            "may have closed)\n",
+            (unsigned long long)w->id);
     thumbnail_clear_address(w);
 }
 
-static const struct hyprland_toplevel_window_mapping_handle_v1_listener thumbnail_address_listener = {
-    .window_address = thumbnail_window_address,
-    .failed = thumbnail_address_failed,
+static const struct hyprland_toplevel_window_mapping_handle_v1_listener
+    thumbnail_address_listener = {
+        .window_address = thumbnail_window_address,
+        .failed = thumbnail_address_failed,
 };
 
-static void thumbnail_request_address(struct thumbnail_window* w) {
-    if (w->layer->mapping_manager == NULL || w->address_mapping != NULL) return;
-    w->address_mapping = hyprland_toplevel_mapping_manager_v1_get_window_for_toplevel(
-        w->layer->mapping_manager, w->handle);
+static void thumbnail_request_address(struct thumbnail_window *w)
+{
+    if (w->layer->mapping_manager == NULL || w->address_mapping != NULL)
+        return;
+    w->address_mapping =
+        hyprland_toplevel_mapping_manager_v1_get_window_for_toplevel(
+            w->layer->mapping_manager, w->handle);
     if (w->address_mapping == NULL ||
         hyprland_toplevel_window_mapping_handle_v1_add_listener(
-            w->address_mapping, &thumbnail_address_listener, w) < 0) {
+            w->address_mapping, &thumbnail_address_listener, w) < 0)
+    {
         thumbnail_clear_address(w);
-        fprintf(stderr, "hypr_layer: cannot create exact address mapping for window %llu; "
-            "check Wayland connection and memory availability\n", (unsigned long long)w->id);
+        fprintf(
+            stderr,
+            "hypr_layer: cannot create exact address mapping for window %llu; "
+            "check Wayland connection and memory availability\n",
+            (unsigned long long)w->id);
     }
 }
 
-static void thumbnail_destroy(struct thumbnail_window* w) {
+static void thumbnail_destroy(struct thumbnail_window *w)
+{
     thumbnail_stop(w);
     thumbnail_clear_address(w);
-    if (w->handle != NULL) ext_foreign_toplevel_handle_v1_destroy(w->handle);
-    free(w->title); free(w->app_id); free(w->identifier);
-    free(w->pending_title); free(w->pending_app_id); free(w->pending_identifier);
+    if (w->handle != NULL)
+        ext_foreign_toplevel_handle_v1_destroy(w->handle);
+    free(w->title);
+    free(w->app_id);
+    free(w->identifier);
+    free(w->pending_title);
+    free(w->pending_app_id);
+    free(w->pending_identifier);
     free(w);
 }
 
-static void thumbnail_closed(void* data, struct ext_foreign_toplevel_handle_v1* handle) {
+static void thumbnail_closed(void *data,
+                             struct ext_foreign_toplevel_handle_v1 *handle)
+{
     (void)handle;
-    struct thumbnail_window* w = data;
-    struct hypr_layer* layer = w->layer;
-    struct thumbnail_window** link = &layer->windows;
-    while (*link != NULL && *link != w) link = &(*link)->next;
-    if (*link == w) *link = w->next;
-    if (w->listed) layer->window_serial++;
+    struct thumbnail_window *w = data;
+    struct hypr_layer *layer = w->layer;
+    struct thumbnail_window **link = &layer->windows;
+    while (*link != NULL && *link != w)
+        link = &(*link)->next;
+    if (*link == w)
+        *link = w->next;
+    if (w->listed)
+        layer->window_serial++;
     thumbnail_destroy(w);
 }
 
-static void thumbnail_metadata(void* data, char** pending, const char* value) {
-    struct thumbnail_window* w = data;
+static void thumbnail_metadata(void *data, char **pending, const char *value)
+{
+    struct thumbnail_window *w = data;
     if (!replace_string(pending, value))
         thumbnail_error(w, "out of memory copying toplevel metadata", 1);
 }
 
-static void thumbnail_title(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+static void thumbnail_title(void *data,
+                            struct ext_foreign_toplevel_handle_v1 *handle,
+                            const char *value)
+{
     (void)handle;
-    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_title, value);
+    thumbnail_metadata(data, &((struct thumbnail_window *)data)->pending_title,
+                       value);
 }
-static void thumbnail_app_id(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+
+static void thumbnail_app_id(void *data,
+                             struct ext_foreign_toplevel_handle_v1 *handle,
+                             const char *value)
+{
     (void)handle;
-    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_app_id, value);
+    thumbnail_metadata(data, &((struct thumbnail_window *)data)->pending_app_id,
+                       value);
 }
-static void thumbnail_identifier(void* data, struct ext_foreign_toplevel_handle_v1* handle, const char* value) {
+
+static void thumbnail_identifier(void *data,
+                                 struct ext_foreign_toplevel_handle_v1 *handle,
+                                 const char *value)
+{
     (void)handle;
-    thumbnail_metadata(data, &((struct thumbnail_window*)data)->pending_identifier, value);
+    thumbnail_metadata(
+        data, &((struct thumbnail_window *)data)->pending_identifier, value);
 }
-static void thumbnail_commit(char** current, char** pending) {
-    if (*pending != NULL) {
+
+static void thumbnail_commit(char **current, char **pending)
+{
+    if (*pending != NULL)
+    {
         free(*current);
         *current = *pending;
         *pending = NULL;
     }
 }
-static void thumbnail_metadata_done(void* data, struct ext_foreign_toplevel_handle_v1* handle) {
+
+static void
+thumbnail_metadata_done(void *data,
+                        struct ext_foreign_toplevel_handle_v1 *handle)
+{
     (void)handle;
-    struct thumbnail_window* w = data;
+    struct thumbnail_window *w = data;
     thumbnail_commit(&w->title, &w->pending_title);
     thumbnail_commit(&w->app_id, &w->pending_app_id);
     thumbnail_commit(&w->identifier, &w->pending_identifier);
     w->listed = 1;
     w->layer->window_serial++;
 }
-static const struct ext_foreign_toplevel_handle_v1_listener thumbnail_handle_listener = {
-    .closed = thumbnail_closed, .done = thumbnail_metadata_done,
-    .title = thumbnail_title, .app_id = thumbnail_app_id, .identifier = thumbnail_identifier,
+
+static const struct ext_foreign_toplevel_handle_v1_listener
+    thumbnail_handle_listener = {
+        .closed = thumbnail_closed,
+        .done = thumbnail_metadata_done,
+        .title = thumbnail_title,
+        .app_id = thumbnail_app_id,
+        .identifier = thumbnail_identifier,
 };
-static void thumbnail_toplevel(void* data, struct ext_foreign_toplevel_list_v1* list,
-    struct ext_foreign_toplevel_handle_v1* handle) {
+static void thumbnail_toplevel(void *data,
+                               struct ext_foreign_toplevel_list_v1 *list,
+                               struct ext_foreign_toplevel_handle_v1 *handle)
+{
     (void)list;
-    struct hypr_layer* layer = data;
-    struct thumbnail_window* w = calloc(1, sizeof(*w));
-    if (w == NULL || layer->next_window_id == UINT64_MAX) {
+    struct hypr_layer *layer = data;
+    struct thumbnail_window *w = calloc(1, sizeof(*w));
+    if (w == NULL || layer->next_window_id == UINT64_MAX)
+    {
         free(w);
         ext_foreign_toplevel_handle_v1_destroy(handle);
-        thumbnail_backend_lost(layer, "cannot allocate a toplevel thumbnail record");
+        thumbnail_backend_lost(layer,
+                               "cannot allocate a toplevel thumbnail record");
         return;
     }
+
     w->layer = layer;
     w->id = ++layer->next_window_id;
+    w->requested_width = THUMBNAIL_MAX_WIDTH;
+    w->requested_height = THUMBNAIL_MAX_HEIGHT;
     w->handle = handle;
-    if (ext_foreign_toplevel_handle_v1_add_listener(handle, &thumbnail_handle_listener, w) < 0) {
+    if (ext_foreign_toplevel_handle_v1_add_listener(
+            handle, &thumbnail_handle_listener, w) < 0)
+    {
         thumbnail_destroy(w);
-        thumbnail_backend_lost(layer, "cannot attach the foreign toplevel listener");
+        thumbnail_backend_lost(layer,
+                               "cannot attach the foreign toplevel listener");
         return;
     }
+
     w->next = layer->windows;
     layer->windows = w;
     thumbnail_request_address(w);
 }
-static void thumbnail_list_finished(void* data, struct ext_foreign_toplevel_list_v1* list) {
-    struct hypr_layer* layer = data;
-    thumbnail_backend_lost(layer, "ext-foreign-toplevel-list-v1 finished; compositor denied or ended window enumeration");
-    while (layer->windows != NULL) {
-        struct thumbnail_window* w = layer->windows;
+
+static void thumbnail_list_finished(void *data,
+                                    struct ext_foreign_toplevel_list_v1 *list)
+{
+    struct hypr_layer *layer = data;
+    thumbnail_backend_lost(layer,
+                           "ext-foreign-toplevel-list-v1 finished; compositor "
+                           "denied or ended window enumeration");
+    while (layer->windows != NULL)
+    {
+        struct thumbnail_window *w = layer->windows;
         layer->windows = w->next;
         thumbnail_destroy(w);
     }
+
     ext_foreign_toplevel_list_v1_destroy(list);
     layer->toplevel_list = NULL;
     layer->toplevel_list_name = 0;
     layer->window_serial++;
 }
-static const struct ext_foreign_toplevel_list_v1_listener thumbnail_list_listener = {
-    .toplevel = thumbnail_toplevel, .finished = thumbnail_list_finished,
+
+static const struct ext_foreign_toplevel_list_v1_listener
+    thumbnail_list_listener = {
+        .toplevel = thumbnail_toplevel,
+        .finished = thumbnail_list_finished,
 };
 
-static void thumbnail_constraints_begin(struct thumbnail_window* w) {
-    if (!w->constraints_pending) {
+static void thumbnail_constraints_begin(struct thumbnail_window *w)
+{
+    if (!w->constraints_pending)
+    {
+        w->generation++;
+        if (w->layer->thumbnail_pool != NULL)
+        {
+            thumbnail_pool_cancel(w->layer->thumbnail_pool, w->id);
+        }
+
         w->constraints_pending = 1;
         w->pending_has_format = 0;
         w->pending_width = w->pending_height = 0;
     }
 }
-static void thumbnail_size(void* data, struct ext_image_copy_capture_session_v1* session,
-    uint32_t width, uint32_t height) {
+
+static void thumbnail_size(void *data,
+                           struct ext_image_copy_capture_session_v1 *session,
+                           uint32_t width, uint32_t height)
+{
     (void)session;
-    struct thumbnail_window* w = data;
+    struct thumbnail_window *w = data;
     thumbnail_constraints_begin(w);
-    w->pending_width = width; w->pending_height = height;
+    w->pending_width = width;
+    w->pending_height = height;
 }
-static void thumbnail_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format) {
+
+static void thumbnail_format(void *data,
+                             struct ext_image_copy_capture_session_v1 *session,
+                             uint32_t format)
+{
     (void)session;
-    struct thumbnail_window* w = data;
+    struct thumbnail_window *w = data;
     thumbnail_constraints_begin(w);
-    if (!w->pending_has_format && (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888)) {
+    if (!w->pending_has_format &&
+        (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888))
+    {
         w->pending_has_format = 1;
         w->pending_format = format;
     }
 }
-static void thumbnail_dmabuf_device(void* data, struct ext_image_copy_capture_session_v1* session,
-    struct wl_array* device) {
-    (void)session; (void)device;
-    thumbnail_constraints_begin(data);
-}
-static void thumbnail_dmabuf_format(void* data, struct ext_image_copy_capture_session_v1* session,
-    uint32_t format, struct wl_array* modifiers) {
-    (void)session; (void)format; (void)modifiers;
-    thumbnail_constraints_begin(data);
-}
-static void thumbnail_constraints_done(void* data, struct ext_image_copy_capture_session_v1* session) {
+
+static void
+thumbnail_dmabuf_device(void *data,
+                        struct ext_image_copy_capture_session_v1 *session,
+                        struct wl_array *device)
+{
     (void)session;
-    struct thumbnail_window* w = data;
+    (void)device;
+    thumbnail_constraints_begin(data);
+}
+
+static void
+thumbnail_dmabuf_format(void *data,
+                        struct ext_image_copy_capture_session_v1 *session,
+                        uint32_t format, struct wl_array *modifiers)
+{
+    (void)session;
+    (void)format;
+    (void)modifiers;
+    thumbnail_constraints_begin(data);
+}
+
+static void
+thumbnail_constraints_done(void *data,
+                           struct ext_image_copy_capture_session_v1 *session)
+{
+    (void)session;
+    struct thumbnail_window *w = data;
     thumbnail_buffer_destroy(w);
-    w->width = w->pending_width; w->height = w->pending_height;
-    w->format = w->pending_format; w->has_format = w->pending_has_format;
+    w->width = w->pending_width;
+    w->height = w->pending_height;
+    w->format = w->pending_format;
+    w->has_format = w->pending_has_format;
     w->constraints_pending = 0;
     w->constraints_done = 1;
-    if (!w->has_format) {
-        thumbnail_error(w, "session offers no ARGB8888/XRGB8888 wl_shm format; no DMA-BUF fallback", 1);
-    } else if (w->width == 0 || w->height == 0 || w->width > INT32_MAX / 4 ||
-        w->height > (uint32_t)(INT32_MAX / ((uint64_t)w->width * 4))) {
-        thumbnail_error(w, "invalid or oversized capture dimensions (wl_shm pool must fit INT32_MAX)", 1);
+    if (!w->has_format)
+    {
+        thumbnail_error(w,
+                        "session offers no ARGB8888/XRGB8888 wl_shm format; no "
+                        "DMA-BUF fallback",
+                        1);
+    }
+
+    else if (w->width == 0 || w->height == 0 || w->width > INT32_MAX / 4 ||
+             w->height > (uint32_t)(INT32_MAX / ((uint64_t)w->width * 4)))
+    {
+        thumbnail_error(w,
+                        "invalid or oversized capture dimensions (wl_shm pool "
+                        "must fit INT32_MAX)",
+                        1);
     }
 }
-static void thumbnail_stopped(void* data, struct ext_image_copy_capture_session_v1* session) {
+
+static void thumbnail_stopped(void *data,
+                              struct ext_image_copy_capture_session_v1 *session)
+{
     (void)session;
-    thumbnail_error(data, "capture session stopped; source unavailable or permission revoked; toggle visibility to retry", 1);
+    thumbnail_error(data,
+                    "capture session stopped; source unavailable or permission "
+                    "revoked; toggle visibility to retry",
+                    1);
 }
-static const struct ext_image_copy_capture_session_v1_listener thumbnail_session_listener = {
-    .buffer_size = thumbnail_size, .shm_format = thumbnail_format,
-    .dmabuf_device = thumbnail_dmabuf_device, .dmabuf_format = thumbnail_dmabuf_format,
-    .done = thumbnail_constraints_done, .stopped = thumbnail_stopped,
+
+static const struct ext_image_copy_capture_session_v1_listener
+    thumbnail_session_listener = {
+        .buffer_size = thumbnail_size,
+        .shm_format = thumbnail_format,
+        .dmabuf_device = thumbnail_dmabuf_device,
+        .dmabuf_format = thumbnail_dmabuf_format,
+        .done = thumbnail_constraints_done,
+        .stopped = thumbnail_stopped,
 };
-static void thumbnail_transform(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t transform) {
+static void thumbnail_transform(void *data,
+                                struct ext_image_copy_capture_frame_v1 *frame,
+                                uint32_t transform)
+{
     (void)frame;
-    ((struct thumbnail_window*)data)->transform = transform;
+    ((struct thumbnail_window *)data)->transform = transform;
 }
-static void thumbnail_damage(void* data, struct ext_image_copy_capture_frame_v1* frame,
-    int32_t x, int32_t y, int32_t width, int32_t height) {
-    (void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
-}
-static void thumbnail_presentation(void* data, struct ext_image_copy_capture_frame_v1* frame,
-    uint32_t hi, uint32_t lo, uint32_t ns) {
-    (void)data; (void)frame; (void)hi; (void)lo; (void)ns;
-}
-enum { THUMBNAIL_MAX_WIDTH = 640, THUMBNAIL_MAX_HEIGHT = 360 };
 
-static void thumbnail_dimensions(int source_width, int source_height, int* width, int* height) {
-    *width = source_width;
-    *height = source_height;
-    if (source_width <= THUMBNAIL_MAX_WIDTH && source_height <= THUMBNAIL_MAX_HEIGHT) return;
-    if ((int64_t)source_width * THUMBNAIL_MAX_HEIGHT >= (int64_t)source_height * THUMBNAIL_MAX_WIDTH) {
-        *width = THUMBNAIL_MAX_WIDTH;
-        *height = (int)(((int64_t)source_height * *width + source_width / 2) / source_width);
-    } else {
-        *height = THUMBNAIL_MAX_HEIGHT;
-        *width = (int)(((int64_t)source_width * *height + source_height / 2) / source_height);
+static void thumbnail_damage(void *data,
+                             struct ext_image_copy_capture_frame_v1 *frame,
+                             int32_t x, int32_t y, int32_t width,
+                             int32_t height)
+{
+    (void)data;
+    (void)frame;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+}
+
+static void
+thumbnail_presentation(void *data,
+                       struct ext_image_copy_capture_frame_v1 *frame,
+                       uint32_t hi, uint32_t lo, uint32_t ns)
+{
+    (void)data;
+    (void)frame;
+    (void)hi;
+    (void)lo;
+    (void)ns;
+}
+
+static void thumbnail_job_free(struct thumbnail_job *job)
+{
+    if (job->source != NULL)
+    {
+        munmap((void *)job->source, job->mapping_size);
     }
-    if (*width < 1) *width = 1;
-    if (*height < 1) *height = 1;
+
+    free(job->rgba);
+    free(job);
 }
 
-
-/* Capture-ready runs on the poll thread. Optimize only this bounded scalar
- * kernel even in debug builds; keep protocol/lifetime code at the build's flags. */
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC push_options
-#pragma GCC optimize("O2")
-#endif
-
-static unsigned char thumbnail_byte(double value) {
-    return value >= 255.0 ? 255 : (unsigned char)(value + 0.5);
-}
-
-static double thumbnail_channel(uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3,
-    int shift, double w0, double w1, double w2, double w3) {
-    return ((p0 >> shift) & 255) * w0 + ((p1 >> shift) & 255) * w1 +
-        ((p2 >> shift) & 255) * w2 + ((p3 >> shift) & 255) * w3;
-}
-
-static void thumbnail_resample(const struct thumbnail_window* w, unsigned char* rgba, int width, int height) {
-    int bw = (int)w->buffer_width, bh = (int)w->buffer_height;
-    int source_width = (w->transform & 1) ? bh : bw;
-    int source_height = (w->transform & 1) ? bw : bh;
-    ptrdiff_t origin = 0, x_step = 1, y_step = bw;
-    /* Upright coordinates map to origin + x*x_step + y*y_step. Resolve the
-     * transform once, not four times per output pixel, including mirrored axes. */
-    switch (w->transform) {
-        case WL_OUTPUT_TRANSFORM_90: origin = (ptrdiff_t)(bh - 1) * bw; x_step = -bw; y_step = 1; break;
-        case WL_OUTPUT_TRANSFORM_180: origin = (ptrdiff_t)bh * bw - 1; x_step = -1; y_step = -bw; break;
-        case WL_OUTPUT_TRANSFORM_270: origin = bw - 1; x_step = bw; y_step = -1; break;
-        case WL_OUTPUT_TRANSFORM_FLIPPED: origin = bw - 1; x_step = -1; break;
-        case WL_OUTPUT_TRANSFORM_FLIPPED_90: x_step = bw; y_step = 1; break;
-        case WL_OUTPUT_TRANSFORM_FLIPPED_180: origin = (ptrdiff_t)(bh - 1) * bw; y_step = -bw; break;
-        case WL_OUTPUT_TRANSFORM_FLIPPED_270: origin = (ptrdiff_t)bh * bw - 1; x_step = -bw; y_step = -1; break;
-        default: break;
-    }
-    const uint32_t* pixels = (const uint32_t*)w->mapping + origin;
-    struct { ptrdiff_t offset0, offset1; double tx; } columns[THUMBNAIL_MAX_WIDTH];
-    for (int x = 0; x < width; x++) {
-        double fx = (x + 0.5) * source_width / width - 0.5;
-        if (fx < 0) fx = 0;
-        int x0 = (int)fx, x1 = x0 + 1 < source_width ? x0 + 1 : x0;
-        columns[x].offset0 = x0 * x_step;
-        columns[x].offset1 = x1 * x_step;
-        columns[x].tx = fx - x0;
-    }
-    struct { const uint32_t *row0, *row1; double ty; } rows[THUMBNAIL_MAX_HEIGHT];
-    for (int y = 0; y < height; y++) {
-        double fy = (y + 0.5) * source_height / height - 0.5;
-        if (fy < 0) fy = 0;
-        int y0 = (int)fy, y1 = y0 + 1 < source_height ? y0 + 1 : y0;
-        rows[y].row0 = pixels + y0 * y_step;
-        rows[y].row1 = pixels + y1 * y_step;
-        rows[y].ty = fy - y0;
-    }
-    int opaque = w->buffer_format == WL_SHM_FORMAT_XRGB8888;
-    /* Rotated rows jump across SHM pages. Narrow output stripes reuse nearby
-     * input cache lines/pages without making output writes a full-image transpose. */
-    int stripe_width = (w->transform & 1) ? 16 : width;
-    for (int start_x = 0; start_x < width; start_x += stripe_width) {
-        int end_x = start_x + stripe_width < width ? start_x + stripe_width : width;
-        for (int y = 0; y < height; y++) {
-            double ty = rows[y].ty;
-            const uint32_t* row0 = rows[y].row0;
-            const uint32_t* row1 = rows[y].row1;
-            unsigned char* out = rgba + ((size_t)y * width + start_x) * 4;
-            for (int x = start_x; x < end_x; x++, out += 4) {
-                ptrdiff_t offset0 = columns[x].offset0, offset1 = columns[x].offset1;
-                uint32_t p0 = row0[offset0], p1 = row0[offset1], p2 = row1[offset0], p3 = row1[offset1];
-                double tx = columns[x].tx;
-                double w0 = (1 - tx) * (1 - ty), w1 = tx * (1 - ty), w2 = (1 - tx) * ty, w3 = tx * ty;
-                double alpha = opaque ? 255 * w0 + 255 * w1 + 255 * w2 + 255 * w3 :
-                    thumbnail_channel(p0, p1, p2, p3, 24, w0, w1, w2, w3);
-                out[3] = thumbnail_byte(alpha);
-                /* Preserve premultiplied filtering and summation order, then
-                 * unpremultiply only the bounded output for the renderer. */
-                double scale = out[3] == 0 ? 0 : 255.0 / alpha;
-                out[0] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 16, w0, w1, w2, w3) * scale);
-                out[1] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 8, w0, w1, w2, w3) * scale);
-                out[2] = thumbnail_byte(thumbnail_channel(p0, p1, p2, p3, 0, w0, w1, w2, w3) * scale);
+static void thumbnail_harvest(struct hypr_layer *layer)
+{
+    struct thumbnail_job *job;
+    while ((job = thumbnail_pool_take(layer->thumbnail_pool)) != NULL)
+    {
+        for (unsigned i = 0; i < THUMBNAIL_POOL_CAPACITY; i++)
+        {
+            if (layer->thumbnail_jobs[i] == job)
+            {
+                layer->thumbnail_jobs[i] = NULL;
             }
         }
+
+        struct thumbnail_window *w = thumbnail_find(layer, job->id);
+        /* Output invalidation does not invalidate the compositor buffer.
+         * Restore only the exact surviving buffer's storage, even for cancelled
+         * jobs. */
+        if (w != NULL && w->buffer != NULL && w->mapping == NULL &&
+            w->buffer_generation == job->buffer_generation)
+        {
+            w->mapping = (void *)job->source;
+            w->mapping_size = job->mapping_size;
+            job->source = NULL;
+        }
+
+        if (w != NULL && w->generation == job->generation && w->visible &&
+            !w->blocked && layer->thumbnails_enabled &&
+            !w->constraints_pending && w->buffer != NULL)
+        {
+            free(w->rgba);
+            w->rgba = job->rgba;
+            job->rgba = NULL;
+            w->rgba_width = job->width;
+            w->rgba_height = job->height;
+            w->revision++;
+            w->error[0] = '\0';
+            w->retry_at = monotonic_milliseconds() + 67;
+        }
+
+        thumbnail_job_free(job);
     }
 }
 
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC pop_options
-#endif
-
-static void thumbnail_ready(void* data, struct ext_image_copy_capture_frame_v1* frame) {
-    struct thumbnail_window* w = data;
+static void thumbnail_ready(void *data,
+                            struct ext_image_copy_capture_frame_v1 *frame)
+{
+    struct thumbnail_window *w = data;
     ext_image_copy_capture_frame_v1_destroy(frame);
     w->frame = NULL;
-    if (w->transform > WL_OUTPUT_TRANSFORM_FLIPPED_270) {
-        thumbnail_error(w, "compositor returned an invalid wl_output transform", 1);
+    if (w->transform > WL_OUTPUT_TRANSFORM_FLIPPED_270)
+    {
+        thumbnail_error(w, "compositor returned an invalid wl_output transform",
+                        1);
         return;
     }
+
     int bw = (int)w->buffer_width, bh = (int)w->buffer_height;
     int width, height;
-    thumbnail_dimensions((w->transform & 1) ? bh : bw, (w->transform & 1) ? bw : bh, &width, &height);
-    if (w->rgba == NULL || (size_t)w->rgba_width * w->rgba_height != (size_t)width * height) {
-        unsigned char* rgba = realloc(w->rgba, (size_t)width * height * 4);
-        if (rgba == NULL) {
-            thumbnail_error(w, "out of memory publishing bounded RGBA thumbnail", 1);
-            return;
-        }
-        w->rgba = rgba;
+    thumbnail_dimensions((w->transform & 1) ? bh : bw,
+                         (w->transform & 1) ? bw : bh, w->requested_width,
+                         w->requested_height, &width, &height);
+    struct thumbnail_job *job = calloc(1, sizeof(*job));
+    if (job == NULL)
+    {
+        thumbnail_error(w, "out of memory allocating thumbnail job", 1);
+        return;
     }
-    /* Single-threaded publication: native storage may be reused, whereas each
-     * managed revision is copied into its own immutable frame buffer. */
-    thumbnail_resample(w, w->rgba, width, height);
-    w->rgba_width = width; w->rgba_height = height;
-    w->revision++;
-    w->error[0] = '\0';
-    /* Limit full-window SHM copies and texture uploads, not just Overview drawing.
-     * The normal bar/input loop continues at its own refresh rate. */
-    w->retry_at = monotonic_milliseconds() + 67;
+
+    *job = (struct thumbnail_job){.id = w->id,
+                                  .generation = w->generation,
+                                  .buffer_generation = w->buffer_generation,
+                                  .source = w->mapping,
+                                  .mapping_size = w->mapping_size,
+                                  .source_width = bw,
+                                  .source_height = bh,
+                                  .transform = w->transform,
+                                  .opaque = w->buffer_format ==
+                                            WL_SHM_FORMAT_XRGB8888,
+                                  .width = width,
+                                  .height = height};
+    job->rgba = malloc((size_t)width * height * 4);
+    if (job->rgba == NULL)
+    {
+        free(job);
+        thumbnail_error(w, "out of memory allocating thumbnail output", 1);
+        return;
+    }
+
+    if (!thumbnail_pool_submit(w->layer->thumbnail_pool, job))
+    {
+        free(job->rgba);
+        free(job);
+        thumbnail_error(
+            w,
+            "thumbnail worker submission unexpectedly rejected despite "
+            "reserved capture capacity; "
+            "frame dropped, retrying after 67ms; check pool/window scheduling",
+            0);
+        w->retry_at = monotonic_milliseconds() + 67;
+        return;
+    }
+
+    for (unsigned i = 0; i < THUMBNAIL_POOL_CAPACITY; i++)
+    {
+        if (w->layer->thumbnail_jobs[i] == NULL)
+        {
+            w->layer->thumbnail_jobs[i] = job;
+            break;
+        }
+    }
+
+    /* ready ends compositor writes. Keep the main-thread-owned buffer proxy,
+     * but transfer its mmap until harvest. The pump's contains(id) check
+     * prevents reattachment while the worker reads; buffer identity governs
+     * mmap recovery. */
+    w->mapping = NULL;
+    w->mapping_size = 0;
 }
-static void thumbnail_failed(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t reason) {
-    struct thumbnail_window* w = data;
+
+static void thumbnail_failed(void *data,
+                             struct ext_image_copy_capture_frame_v1 *frame,
+                             uint32_t reason)
+{
+    struct thumbnail_window *w = data;
     ext_image_copy_capture_frame_v1_destroy(frame);
     w->frame = NULL;
-    if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_STOPPED) {
-        thumbnail_error(w, "capture frame stopped; toggle visibility to retry", 1);
-    } else if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS) {
-        thumbnail_error(w, "capture buffer constraints changed; waiting for updated session constraints", 0);
+    if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_STOPPED)
+    {
+        thumbnail_error(w, "capture frame stopped; toggle visibility to retry",
+                        1);
+    }
+
+    else if (reason ==
+             EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS)
+    {
+        thumbnail_error(w,
+                        "capture buffer constraints changed; waiting for "
+                        "updated session constraints",
+                        0);
         thumbnail_buffer_destroy(w);
         /* Constraint events are ordered before/after failed. If a new batch
-         * is in progress, the pump waits for done; otherwise retry the latest. */
+         * is in progress, the pump waits for done; otherwise retry the latest.
+         */
         w->retry_at = monotonic_milliseconds() + 250;
-    } else {
+    }
+
+    else
+    {
         char error[256];
-        snprintf(error, sizeof(error), "capture frame failed (reason %u); retrying after 250ms; check compositor capture permissions/logs", reason);
+        snprintf(error, sizeof(error),
+                 "capture frame failed (reason %u); retrying after 250ms; "
+                 "check compositor capture permissions/logs",
+                 reason);
         thumbnail_error(w, error, 0);
         w->retry_at = monotonic_milliseconds() + 250;
     }
 }
-static const struct ext_image_copy_capture_frame_v1_listener thumbnail_frame_listener = {
-    .transform = thumbnail_transform, .damage = thumbnail_damage,
-    .presentation_time = thumbnail_presentation, .ready = thumbnail_ready, .failed = thumbnail_failed,
+
+static const struct ext_image_copy_capture_frame_v1_listener
+    thumbnail_frame_listener = {
+        .transform = thumbnail_transform,
+        .damage = thumbnail_damage,
+        .presentation_time = thumbnail_presentation,
+        .ready = thumbnail_ready,
+        .failed = thumbnail_failed,
 };
 
-int hypr_layer_thumbnails_available(const hypr_layer* layer) {
-    return layer != NULL && layer->toplevel_list != NULL && layer->toplevel_capture_manager != NULL &&
-        layer->image_capture_manager != NULL && layer->shm != NULL;
+int hypr_layer_thumbnails_available(const hypr_layer *layer)
+{
+    return layer != NULL && layer->toplevel_list != NULL &&
+           layer->toplevel_capture_manager != NULL &&
+           layer->image_capture_manager != NULL && layer->shm != NULL;
 }
-static const char* thumbnail_availability_error(const hypr_layer* layer) {
-    if (layer == NULL) return "invalid layer";
-    if (layer->thumbnail_error[0]) return layer->thumbnail_error;
-    if (layer->toplevel_list == NULL) return "compositor does not advertise ext-foreign-toplevel-list-v1";
+
+static const char *thumbnail_availability_error(const hypr_layer *layer)
+{
+    if (layer == NULL)
+    {
+        return "invalid layer";
+    }
+
+    if (layer->thumbnail_error[0])
+    {
+        return layer->thumbnail_error;
+    }
+
+    if (layer->toplevel_list == NULL)
+    {
+        return "compositor does not advertise ext-foreign-toplevel-list-v1";
+    }
+
     if (layer->toplevel_capture_manager == NULL)
-        return "compositor does not advertise ext-foreign-toplevel-image-capture-source-manager-v1";
-    if (layer->image_capture_manager == NULL) return "compositor does not advertise ext-image-copy-capture-manager-v1";
-    if (layer->shm == NULL) return "compositor does not advertise wl_shm";
+    {
+        return "compositor does not advertise "
+               "ext-foreign-toplevel-image-capture-source-manager-v1";
+    }
+
+    if (layer->image_capture_manager == NULL)
+    {
+        return "compositor does not advertise "
+               "ext-image-copy-capture-manager-v1";
+    }
+
+    if (layer->shm == NULL)
+    {
+        return "compositor does not advertise wl_shm";
+    }
+
     return "";
 }
-static int thumbnail_allocate(struct thumbnail_window* w) {
+
+static int thumbnail_allocate(struct thumbnail_window *w)
+{
     size_t size = (size_t)w->width * 4 * w->height;
     int fd = memfd_create("hyprnetshell-thumbnail", MFD_CLOEXEC);
-    if (fd < 0 || ftruncate(fd, (off_t)size) < 0) {
+    if (fd < 0 || ftruncate(fd, (off_t)size) < 0)
+    {
         char error[256];
-        snprintf(error, sizeof(error), "cannot allocate thumbnail memfd: %s", strerror(errno));
-        if (fd >= 0) close(fd);
+        snprintf(error, sizeof(error), "cannot allocate thumbnail memfd: %s",
+                 strerror(errno));
+        if (fd >= 0)
+        {
+            close(fd);
+        }
+
         thumbnail_error(w, error, 1);
         return 0;
     }
-    void* mapping = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapping == MAP_FAILED) {
+
+    void *mapping = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED)
+    {
         char error[256];
-        snprintf(error, sizeof(error), "cannot mmap thumbnail SHM: %s", strerror(errno));
+        snprintf(error, sizeof(error), "cannot mmap thumbnail SHM: %s",
+                 strerror(errno));
         close(fd);
         thumbnail_error(w, error, 1);
         return 0;
     }
-    w->mapping = mapping; w->mapping_size = size;
-    struct wl_shm_pool* pool = wl_shm_create_pool(w->layer->shm, fd, (int)size);
+
+    w->mapping = mapping;
+    w->mapping_size = size;
+    struct wl_shm_pool *pool = wl_shm_create_pool(w->layer->shm, fd, (int)size);
     close(fd);
-    if (pool != NULL) {
-        w->buffer = wl_shm_pool_create_buffer(pool, 0, (int)w->width, (int)w->height,
-            (int)w->width * 4, w->format);
+    if (pool != NULL)
+    {
+        w->buffer =
+            wl_shm_pool_create_buffer(pool, 0, (int)w->width, (int)w->height,
+                                      (int)w->width * 4, w->format);
         wl_shm_pool_destroy(pool);
     }
-    if (w->buffer == NULL) {
+
+    if (w->buffer == NULL)
+    {
         thumbnail_error(w, "cannot create wl_shm thumbnail pool/buffer", 1);
         return 0;
     }
-    w->buffer_width = w->width; w->buffer_height = w->height; w->buffer_format = w->format;
+
+    w->buffer_width = w->width;
+    w->buffer_height = w->height;
+    w->buffer_format = w->format;
     return 1;
 }
-static void thumbnail_pump(struct hypr_layer* layer) {
-    if (!layer->thumbnails_enabled || !hypr_layer_thumbnails_available(layer)) return;
+
+static void thumbnail_pump(struct hypr_layer *layer)
+{
+    if (layer->thumbnail_pool != NULL)
+    {
+        thumbnail_harvest(layer);
+    }
+
+    if (!layer->thumbnails_enabled || !hypr_layer_thumbnails_available(layer))
+    {
+        return;
+    }
+
+    if (layer->thumbnail_pool == NULL)
+    {
+        layer->thumbnail_pool = thumbnail_pool_create(0);
+        if (layer->thumbnail_pool == NULL)
+        {
+            thumbnail_backend_lost(layer, "cannot initialize thumbnail worker "
+                                          "pool; check thread/memory limits");
+            layer->thumbnails_enabled = 0;
+            return;
+        }
+    }
+
     int64_t now = monotonic_milliseconds();
-    for (int starts = 0; starts < 2; starts++) {
+    unsigned occupied = thumbnail_pool_count(layer->thumbnail_pool);
+    for (struct thumbnail_window *w = layer->windows; w != NULL; w = w->next)
+    {
+        occupied += w->frame != NULL;
+    }
+
+    for (int starts = 0; starts < 2 && occupied < THUMBNAIL_POOL_CAPACITY;
+         starts++)
+    {
         struct thumbnail_window *first = NULL, *after = NULL;
         /* IDs never repeat. Choose by ID rather than list position or a pointer
-         * cursor, so insertion/removal cannot starve a tail or leave a dangling cursor. */
-        for (struct thumbnail_window* candidate = layer->windows; candidate != NULL; candidate = candidate->next) {
-            if (!candidate->listed || !candidate->visible || candidate->blocked ||
-                candidate->frame != NULL || now < candidate->retry_at ||
-                (candidate->session != NULL && (!candidate->constraints_done || candidate->constraints_pending))) continue;
-            if (first == NULL || candidate->id < first->id) first = candidate;
-            if (candidate->id > layer->thumbnail_last_started_id && (after == NULL || candidate->id < after->id))
+         * cursor, so insertion/removal cannot starve a tail or leave a dangling
+         * cursor. */
+        for (struct thumbnail_window *candidate = layer->windows;
+             candidate != NULL; candidate = candidate->next)
+        {
+            if (!candidate->listed || !candidate->visible ||
+                candidate->blocked || candidate->frame != NULL ||
+                thumbnail_pool_contains(layer->thumbnail_pool, candidate->id) ||
+                now < candidate->retry_at ||
+                (candidate->session != NULL &&
+                 (!candidate->constraints_done ||
+                  candidate->constraints_pending)))
+            {
+                continue;
+            }
+
+            if (first == NULL || candidate->id < first->id)
+            {
+                first = candidate;
+            }
+
+            if (candidate->id > layer->thumbnail_last_started_id &&
+                (after == NULL || candidate->id < after->id))
+            {
                 after = candidate;
+            }
         }
-        struct thumbnail_window* w = after != NULL ? after : first;
-        if (w == NULL) break;
+
+        struct thumbnail_window *w = after != NULL ? after : first;
+        if (w == NULL)
+        {
+            break;
+        }
+
         layer->thumbnail_last_started_id = w->id;
-        if (w->session == NULL) {
-            w->source = ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
-                layer->toplevel_capture_manager, w->handle);
+        if (w->session == NULL)
+        {
+            w->source =
+                ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+                    layer->toplevel_capture_manager, w->handle);
             if (w->source != NULL)
-                w->session = ext_image_copy_capture_manager_v1_create_session(layer->image_capture_manager, w->source, 0);
+            {
+                w->session = ext_image_copy_capture_manager_v1_create_session(
+                    layer->image_capture_manager, w->source, 0);
+            }
+
             if (w->session == NULL ||
-                ext_image_copy_capture_session_v1_add_listener(w->session, &thumbnail_session_listener, w) < 0)
-                thumbnail_error(w, "cannot create thumbnail capture source/session", 1);
+                ext_image_copy_capture_session_v1_add_listener(
+                    w->session, &thumbnail_session_listener, w) < 0)
+            {
+                thumbnail_error(
+                    w, "cannot create thumbnail capture source/session", 1);
+            }
+
             continue;
         }
-        if (!w->constraints_done || w->constraints_pending) continue;
-        if (w->buffer == NULL && !thumbnail_allocate(w)) continue;
+
+        if (!w->constraints_done || w->constraints_pending)
+        {
+            continue;
+        }
+
+        if (w->buffer == NULL && !thumbnail_allocate(w))
+        {
+            continue;
+        }
+
         w->frame = ext_image_copy_capture_session_v1_create_frame(w->session);
-        if (w->frame == NULL ||
-            ext_image_copy_capture_frame_v1_add_listener(w->frame, &thumbnail_frame_listener, w) < 0) {
+        if (w->frame == NULL || ext_image_copy_capture_frame_v1_add_listener(
+                                    w->frame, &thumbnail_frame_listener, w) < 0)
+        {
             thumbnail_error(w, "cannot create thumbnail capture frame", 1);
             continue;
         }
+
         w->transform = WL_OUTPUT_TRANSFORM_NORMAL;
         ext_image_copy_capture_frame_v1_attach_buffer(w->frame, w->buffer);
-        ext_image_copy_capture_frame_v1_damage_buffer(w->frame, 0, 0, (int)w->buffer_width, (int)w->buffer_height);
+        ext_image_copy_capture_frame_v1_damage_buffer(
+            w->frame, 0, 0, (int)w->buffer_width, (int)w->buffer_height);
         ext_image_copy_capture_frame_v1_capture(w->frame);
+        occupied++;
     }
 }
-uint64_t hypr_layer_get_window_serial(const hypr_layer* layer) { return layer != NULL ? layer->window_serial : 0; }
-int hypr_layer_get_window_count(const hypr_layer* layer) {
+
+uint64_t hypr_layer_get_window_serial(const hypr_layer *layer)
+{
+    return layer != NULL ? layer->window_serial : 0;
+}
+
+int hypr_layer_get_window_count(const hypr_layer *layer)
+{
     int count = 0;
     if (layer != NULL)
-        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next) if (w->listed) count++;
+    {
+        for (struct thumbnail_window *w = layer->windows; w != NULL;
+             w = w->next)
+        {
+            if (w->listed)
+            {
+                count++;
+            }
+        }
+    }
+
     return count;
 }
-uint64_t hypr_layer_get_window_id(const hypr_layer* layer, int index) {
-    if (layer == NULL || index < 0) return 0;
-    for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next)
-        if (w->listed && index-- == 0) return w->id;
+
+uint64_t hypr_layer_get_window_id(const hypr_layer *layer, int index)
+{
+    if (layer == NULL || index < 0)
+    {
+        return 0;
+    }
+
+    for (struct thumbnail_window *w = layer->windows; w != NULL; w = w->next)
+        if (w->listed && index-- == 0)
+            return w->id;
     return 0;
 }
-static int thumbnail_string(const char* text, char* buffer, int buffer_size) {
-    if (text == NULL) text = "";
+
+static int thumbnail_string(const char *text, char *buffer, int buffer_size)
+{
+    if (text == NULL)
+        text = "";
     size_t size = strlen(text) + 1;
-    if (size > INT32_MAX) return 0;
-    if (buffer != NULL && buffer_size >= (int)size) memcpy(buffer, text, size);
+    if (size > INT32_MAX)
+        return 0;
+    if (buffer != NULL && buffer_size >= (int)size)
+        memcpy(buffer, text, size);
     return (int)size;
 }
-int hypr_layer_get_window_title(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
+
+int hypr_layer_get_window_title(const hypr_layer *layer, uint64_t id,
+                                char *buffer, int size)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
     return w != NULL ? thumbnail_string(w->title, buffer, size) : 0;
 }
-int hypr_layer_get_window_app_id(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
+
+int hypr_layer_get_window_app_id(const hypr_layer *layer, uint64_t id,
+                                 char *buffer, int size)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
     return w != NULL ? thumbnail_string(w->app_id, buffer, size) : 0;
 }
-int hypr_layer_get_window_identifier(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
+
+int hypr_layer_get_window_identifier(const hypr_layer *layer, uint64_t id,
+                                     char *buffer, int size)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
     return w != NULL ? thumbnail_string(w->identifier, buffer, size) : 0;
 }
-int hypr_layer_get_window_address(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
+
+int hypr_layer_get_window_address(const hypr_layer *layer, uint64_t id,
+                                  char *buffer, int size)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
     return w != NULL ? thumbnail_string(w->address, buffer, size) : 0;
 }
-int hypr_layer_get_thumbnail_error(const hypr_layer* layer, uint64_t id, char* buffer, int size) {
-    if (id == 0) return thumbnail_string(thumbnail_availability_error(layer), buffer, size);
-    struct thumbnail_window* w = thumbnail_find(layer, id);
-    return w != NULL ? thumbnail_string(w->error[0] ? w->error : thumbnail_availability_error(layer), buffer, size) : 0;
+
+int hypr_layer_get_thumbnail_error(const hypr_layer *layer, uint64_t id,
+                                   char *buffer, int size)
+{
+    if (id == 0)
+        return thumbnail_string(thumbnail_availability_error(layer), buffer,
+                                size);
+    struct thumbnail_window *w = thumbnail_find(layer, id);
+    return w != NULL
+               ? thumbnail_string(w->error[0]
+                                      ? w->error
+                                      : thumbnail_availability_error(layer),
+                                  buffer, size)
+               : 0;
 }
-int hypr_layer_set_thumbnails_enabled(hypr_layer* layer, int enabled) {
-    if (layer == NULL) return 0;
+
+int hypr_layer_set_thumbnails_enabled(hypr_layer *layer, int enabled)
+{
+    if (layer == NULL)
+        return 0;
     enabled = !!enabled;
-    if (layer->thumbnails_enabled != enabled) {
+    if (layer->thumbnails_enabled != enabled)
+    {
         layer->thumbnails_enabled = enabled;
-        for (struct thumbnail_window* w = layer->windows; w != NULL; w = w->next) {
+        for (struct thumbnail_window *w = layer->windows; w != NULL;
+             w = w->next)
+        {
             thumbnail_stop(w);
             w->blocked = 0;
             w->error[0] = '\0';
         }
     }
-    if (!enabled) return 1;
-    if (hypr_layer_thumbnails_available(layer)) {
+
+    if (!enabled)
+        return 1;
+    if (hypr_layer_thumbnails_available(layer))
+    {
         layer->thumbnail_error[0] = '\0';
         return 1;
     }
+
     fail(thumbnail_availability_error(layer));
     return 0;
 }
-int hypr_layer_set_window_thumbnail_visible(hypr_layer* layer, uint64_t id, int visible) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
-    if (w == NULL) return 0;
+
+int hypr_layer_set_window_thumbnail_visible(hypr_layer *layer, uint64_t id,
+                                            int visible)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
+    if (w == NULL)
+        return 0;
     visible = !!visible;
-    if (w->visible != visible) {
+    if (w->visible != visible)
+    {
         thumbnail_stop(w);
         w->visible = visible;
         w->blocked = 0;
         w->error[0] = '\0';
     }
+
     return 1;
 }
-int hypr_layer_get_window_thumbnail_info(const hypr_layer* layer, uint64_t id,
-    uint64_t* revision, int* width, int* height, int* stride) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
-    if (revision != NULL) *revision = w != NULL ? w->revision : 0;
-    if (width != NULL) *width = w != NULL ? w->rgba_width : 0;
-    if (height != NULL) *height = w != NULL ? w->rgba_height : 0;
-    if (stride != NULL) *stride = w != NULL ? w->rgba_width * 4 : 0;
+
+int hypr_layer_set_window_thumbnail_size(hypr_layer *layer, uint64_t id,
+                                         int width, int height)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
+    if (w == NULL || width <= 0 || height <= 0)
+    {
+        return 0;
+    }
+
+    width = width > THUMBNAIL_MAX_WIDTH ? THUMBNAIL_MAX_WIDTH : width;
+    height = height > THUMBNAIL_MAX_HEIGHT ? THUMBNAIL_MAX_HEIGHT : height;
+    if (w->requested_width != width || w->requested_height != height)
+    {
+        w->requested_width = width;
+        w->requested_height = height;
+        w->generation++;
+        if (layer->thumbnail_pool != NULL)
+        {
+            thumbnail_pool_cancel(layer->thumbnail_pool, id);
+        }
+    }
+
+    return 1;
+}
+
+int hypr_layer_get_window_thumbnail_info(const hypr_layer *layer, uint64_t id,
+                                         uint64_t *revision, int *width,
+                                         int *height, int *stride)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
+    if (revision != NULL)
+        *revision = w != NULL ? w->revision : 0;
+    if (width != NULL)
+        *width = w != NULL ? w->rgba_width : 0;
+    if (height != NULL)
+        *height = w != NULL ? w->rgba_height : 0;
+    if (stride != NULL)
+        *stride = w != NULL ? w->rgba_width * 4 : 0;
     return w != NULL && w->rgba != NULL;
 }
-int hypr_layer_copy_window_thumbnail(const hypr_layer* layer, uint64_t id,
-    uint64_t expected_revision, unsigned char* buffer, int buffer_size) {
-    struct thumbnail_window* w = thumbnail_find(layer, id);
+
+int hypr_layer_copy_window_thumbnail(const hypr_layer *layer, uint64_t id,
+                                     uint64_t expected_revision,
+                                     unsigned char *buffer, int buffer_size)
+{
+    struct thumbnail_window *w = thumbnail_find(layer, id);
     if (w == NULL || w->rgba == NULL || buffer == NULL || buffer_size < 0 ||
-        (expected_revision != 0 && expected_revision != w->revision)) return 0;
+        (expected_revision != 0 && expected_revision != w->revision))
+        return 0;
     size_t size = (size_t)w->rgba_width * 4 * w->rgba_height;
-    if (size > (size_t)buffer_size) return 0;
+    if (size > (size_t)buffer_size)
+        return 0;
     memcpy(buffer, w->rgba, size);
     return (int)size;
 }
 
-struct capture_state {
+struct capture_state
+{
     uint32_t width;
     uint32_t height;
     uint32_t format;
@@ -2162,110 +2994,185 @@ struct capture_state {
     int frame_ready;
 };
 
-static void capture_buffer_size(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t width, uint32_t height) {
+static void
+capture_buffer_size(void *data,
+                    struct ext_image_copy_capture_session_v1 *session,
+                    uint32_t width, uint32_t height)
+{
     (void)session;
-    struct capture_state* state = data;
+    struct capture_state *state = data;
     state->width = width;
     state->height = height;
 }
 
-static void capture_shm_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format) {
+static void
+capture_shm_format(void *data,
+                   struct ext_image_copy_capture_session_v1 *session,
+                   uint32_t format)
+{
     (void)session;
-    struct capture_state* state = data;
-    if (!state->has_format && (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888)) {
+    struct capture_state *state = data;
+    if (!state->has_format &&
+        (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888))
+    {
         state->format = format;
         state->has_format = 1;
     }
 }
 
-static void capture_dmabuf_device(void* data, struct ext_image_copy_capture_session_v1* session, struct wl_array* device) {
-    (void)data; (void)session; (void)device;
-}
-
-static void capture_dmabuf_format(void* data, struct ext_image_copy_capture_session_v1* session, uint32_t format, struct wl_array* modifiers) {
-    (void)data; (void)session; (void)format; (void)modifiers;
-}
-
-static void capture_constraints_done(void* data, struct ext_image_copy_capture_session_v1* session) {
+static void
+capture_dmabuf_device(void *data,
+                      struct ext_image_copy_capture_session_v1 *session,
+                      struct wl_array *device)
+{
+    (void)data;
     (void)session;
-    ((struct capture_state*)data)->constraints_done = 1;
+    (void)device;
 }
 
-static void capture_stopped(void* data, struct ext_image_copy_capture_session_v1* session) {
+static void
+capture_dmabuf_format(void *data,
+                      struct ext_image_copy_capture_session_v1 *session,
+                      uint32_t format, struct wl_array *modifiers)
+{
+    (void)data;
     (void)session;
-    ((struct capture_state*)data)->stopped = 1;
+    (void)format;
+    (void)modifiers;
 }
 
-static const struct ext_image_copy_capture_session_v1_listener capture_session_listener = {
-    .buffer_size = capture_buffer_size,
-    .shm_format = capture_shm_format,
-    .dmabuf_device = capture_dmabuf_device,
-    .dmabuf_format = capture_dmabuf_format,
-    .done = capture_constraints_done,
-    .stopped = capture_stopped,
+static void
+capture_constraints_done(void *data,
+                         struct ext_image_copy_capture_session_v1 *session)
+{
+    (void)session;
+    ((struct capture_state *)data)->constraints_done = 1;
+}
+
+static void capture_stopped(void *data,
+                            struct ext_image_copy_capture_session_v1 *session)
+{
+    (void)session;
+    ((struct capture_state *)data)->stopped = 1;
+}
+
+static const struct ext_image_copy_capture_session_v1_listener
+    capture_session_listener = {
+        .buffer_size = capture_buffer_size,
+        .shm_format = capture_shm_format,
+        .dmabuf_device = capture_dmabuf_device,
+        .dmabuf_format = capture_dmabuf_format,
+        .done = capture_constraints_done,
+        .stopped = capture_stopped,
 };
 
-static void capture_transform(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t transform) {
-    (void)data; (void)frame; (void)transform;
-}
-static void capture_damage(void* data, struct ext_image_copy_capture_frame_v1* frame, int32_t x, int32_t y, int32_t width, int32_t height) {
-    (void)data; (void)frame; (void)x; (void)y; (void)width; (void)height;
-}
-static void capture_presentation(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t tv_sec_hi, uint32_t tv_sec_lo, uint32_t tv_nsec) {
-    (void)data; (void)frame; (void)tv_sec_hi; (void)tv_sec_lo; (void)tv_nsec;
-}
-static void capture_ready(void* data, struct ext_image_copy_capture_frame_v1* frame) {
+static void capture_transform(void *data,
+                              struct ext_image_copy_capture_frame_v1 *frame,
+                              uint32_t transform)
+{
+    (void)data;
     (void)frame;
-    struct capture_state* state = data;
+    (void)transform;
+}
+
+static void capture_damage(void *data,
+                           struct ext_image_copy_capture_frame_v1 *frame,
+                           int32_t x, int32_t y, int32_t width, int32_t height)
+{
+    (void)data;
+    (void)frame;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+}
+
+static void capture_presentation(void *data,
+                                 struct ext_image_copy_capture_frame_v1 *frame,
+                                 uint32_t tv_sec_hi, uint32_t tv_sec_lo,
+                                 uint32_t tv_nsec)
+{
+    (void)data;
+    (void)frame;
+    (void)tv_sec_hi;
+    (void)tv_sec_lo;
+    (void)tv_nsec;
+}
+
+static void capture_ready(void *data,
+                          struct ext_image_copy_capture_frame_v1 *frame)
+{
+    (void)frame;
+    struct capture_state *state = data;
     state->frame_ready = 1;
     state->frame_done = 1;
 }
-static void capture_failed(void* data, struct ext_image_copy_capture_frame_v1* frame, uint32_t reason) {
-    (void)frame; (void)reason;
-    ((struct capture_state*)data)->frame_done = 1;
+
+static void capture_failed(void *data,
+                           struct ext_image_copy_capture_frame_v1 *frame,
+                           uint32_t reason)
+{
+    (void)frame;
+    (void)reason;
+    ((struct capture_state *)data)->frame_done = 1;
 }
 
-static const struct ext_image_copy_capture_frame_v1_listener capture_frame_listener = {
-    .transform = capture_transform,
-    .damage = capture_damage,
-    .presentation_time = capture_presentation,
-    .ready = capture_ready,
-    .failed = capture_failed,
+static const struct ext_image_copy_capture_frame_v1_listener
+    capture_frame_listener = {
+        .transform = capture_transform,
+        .damage = capture_damage,
+        .presentation_time = capture_presentation,
+        .ready = capture_ready,
+        .failed = capture_failed,
 };
 
-int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL || layer->shm == NULL || layer->output_capture_manager == NULL ||
-        layer->image_capture_manager == NULL) {
+int hypr_layer_capture_output(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL || layer->shm == NULL ||
+        layer->output_capture_manager == NULL ||
+        layer->image_capture_manager == NULL)
+    {
         return 0;
     }
 
-    if (layer->capture_data != NULL) {
+    if (layer->capture_data != NULL)
+    {
         munmap(layer->capture_data, layer->capture_size);
         layer->capture_data = NULL;
         layer->capture_size = 0;
     }
 
     struct capture_state state = {0};
-    struct ext_image_capture_source_v1* source =
-        ext_output_image_capture_source_manager_v1_create_source(layer->output_capture_manager, bar->output);
-    struct ext_image_copy_capture_session_v1* session = source != NULL
-        ? ext_image_copy_capture_manager_v1_create_session(layer->image_capture_manager, source, 0)
-        : NULL;
-    if (session == NULL ||
-        ext_image_copy_capture_session_v1_add_listener(session, &capture_session_listener, &state) < 0) {
-        if (session != NULL) ext_image_copy_capture_session_v1_destroy(session);
-        if (source != NULL) ext_image_capture_source_v1_destroy(source);
+    struct ext_image_capture_source_v1 *source =
+        ext_output_image_capture_source_manager_v1_create_source(
+            layer->output_capture_manager, bar->output);
+    struct ext_image_copy_capture_session_v1 *session =
+        source != NULL ? ext_image_copy_capture_manager_v1_create_session(
+                             layer->image_capture_manager, source, 0)
+                       : NULL;
+    if (session == NULL || ext_image_copy_capture_session_v1_add_listener(
+                               session, &capture_session_listener, &state) < 0)
+    {
+        if (session != NULL)
+            ext_image_copy_capture_session_v1_destroy(session);
+        if (source != NULL)
+            ext_image_capture_source_v1_destroy(source);
         return 0;
     }
 
-    while (!state.constraints_done && !state.stopped) {
-        if (wl_display_roundtrip(layer->display) < 0) {
+    while (!state.constraints_done && !state.stopped)
+    {
+        if (wl_display_roundtrip(layer->display) < 0)
+        {
             state.stopped = 1;
         }
     }
-    if (state.stopped || !state.has_format || state.width == 0 || state.height == 0 ||
-        state.width > INT32_MAX / 4 || state.height > SIZE_MAX / ((size_t)state.width * 4)) {
+
+    if (state.stopped || !state.has_format || state.width == 0 ||
+        state.height == 0 || state.width > INT32_MAX / 4 ||
+        state.height > SIZE_MAX / ((size_t)state.width * 4))
+    {
         ext_image_copy_capture_session_v1_destroy(session);
         ext_image_capture_source_v1_destroy(source);
         return 0;
@@ -2273,32 +3180,46 @@ int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
 
     int stride = (int)state.width * 4;
     size_t size = (size_t)stride * state.height;
-    if (size > INT32_MAX) {
+    if (size > INT32_MAX)
+    {
         ext_image_copy_capture_session_v1_destroy(session);
         ext_image_capture_source_v1_destroy(source);
         return 0;
     }
+
     int fd = memfd_create("hyprnetshell-capture", MFD_CLOEXEC);
-    if (fd < 0 || ftruncate(fd, (off_t)size) < 0) {
-        if (fd >= 0) close(fd);
+    if (fd < 0 || ftruncate(fd, (off_t)size) < 0)
+    {
+        if (fd >= 0)
+            close(fd);
         ext_image_copy_capture_session_v1_destroy(session);
         ext_image_capture_source_v1_destroy(source);
         return 0;
     }
-    void* pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    struct wl_shm_pool* pool = pixels != MAP_FAILED ? wl_shm_create_pool(layer->shm, fd, (int)size) : NULL;
-    struct wl_buffer* buffer = pool != NULL
-        ? wl_shm_pool_create_buffer(pool, 0, (int)state.width, (int)state.height, stride, state.format)
-        : NULL;
-    struct ext_image_copy_capture_frame_v1* frame = buffer != NULL
-        ? ext_image_copy_capture_session_v1_create_frame(session)
-        : NULL;
-    if (frame == NULL ||
-        ext_image_copy_capture_frame_v1_add_listener(frame, &capture_frame_listener, &state) < 0) {
-        if (frame != NULL) ext_image_copy_capture_frame_v1_destroy(frame);
-        if (buffer != NULL) wl_buffer_destroy(buffer);
-        if (pool != NULL) wl_shm_pool_destroy(pool);
-        if (pixels != MAP_FAILED) munmap(pixels, size);
+
+    void *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    struct wl_shm_pool *pool =
+        pixels != MAP_FAILED ? wl_shm_create_pool(layer->shm, fd, (int)size)
+                             : NULL;
+    struct wl_buffer *buffer =
+        pool != NULL
+            ? wl_shm_pool_create_buffer(pool, 0, (int)state.width,
+                                        (int)state.height, stride, state.format)
+            : NULL;
+    struct ext_image_copy_capture_frame_v1 *frame =
+        buffer != NULL ? ext_image_copy_capture_session_v1_create_frame(session)
+                       : NULL;
+    if (frame == NULL || ext_image_copy_capture_frame_v1_add_listener(
+                             frame, &capture_frame_listener, &state) < 0)
+    {
+        if (frame != NULL)
+            ext_image_copy_capture_frame_v1_destroy(frame);
+        if (buffer != NULL)
+            wl_buffer_destroy(buffer);
+        if (pool != NULL)
+            wl_shm_pool_destroy(pool);
+        if (pixels != MAP_FAILED)
+            munmap(pixels, size);
         close(fd);
         ext_image_copy_capture_session_v1_destroy(session);
         ext_image_capture_source_v1_destroy(source);
@@ -2306,10 +3227,13 @@ int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
     }
 
     ext_image_copy_capture_frame_v1_attach_buffer(frame, buffer);
-    ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, (int)state.width, (int)state.height);
+    ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, (int)state.width,
+                                                  (int)state.height);
     ext_image_copy_capture_frame_v1_capture(frame);
-    while (!state.frame_done && !state.stopped) {
-        if (wl_display_roundtrip(layer->display) < 0) {
+    while (!state.frame_done && !state.stopped)
+    {
+        if (wl_display_roundtrip(layer->display) < 0)
+        {
             state.stopped = 1;
         }
     }
@@ -2320,7 +3244,8 @@ int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
     close(fd);
     ext_image_copy_capture_session_v1_destroy(session);
     ext_image_capture_source_v1_destroy(source);
-    if (!state.frame_ready) {
+    if (!state.frame_ready)
+    {
         munmap(pixels, size);
         return 0;
     }
@@ -2333,515 +3258,734 @@ int hypr_layer_capture_output(hypr_layer* layer, uint64_t id) {
     return 1;
 }
 
-int hypr_layer_get_capture_width(const hypr_layer* layer) {
+int hypr_layer_get_capture_width(const hypr_layer *layer)
+{
     return layer != NULL ? layer->capture_width : 0;
 }
 
-int hypr_layer_get_capture_height(const hypr_layer* layer) {
+int hypr_layer_get_capture_height(const hypr_layer *layer)
+{
     return layer != NULL ? layer->capture_height : 0;
 }
 
-int hypr_layer_get_capture_stride(const hypr_layer* layer) {
+int hypr_layer_get_capture_stride(const hypr_layer *layer)
+{
     return layer != NULL ? layer->capture_stride : 0;
 }
 
-int hypr_layer_copy_capture(const hypr_layer* layer, unsigned char* buffer, int buffer_size) {
-    if (layer == NULL || layer->capture_data == NULL || buffer == NULL || buffer_size < 0 ||
-        (size_t)buffer_size < layer->capture_size || layer->capture_size > INT32_MAX) {
+int hypr_layer_copy_capture(const hypr_layer *layer, unsigned char *buffer,
+                            int buffer_size)
+{
+    if (layer == NULL || layer->capture_data == NULL || buffer == NULL ||
+        buffer_size < 0 || (size_t)buffer_size < layer->capture_size ||
+        layer->capture_size > INT32_MAX)
+    {
         return 0;
     }
+
     memcpy(buffer, layer->capture_data, layer->capture_size);
     return (int)layer->capture_size;
 }
 
-int hypr_layer_set_clipboard(
-    hypr_layer* layer,
-    const unsigned char* data,
-    int data_length,
-    const char* mime_type) {
-    if (layer == NULL || data == NULL || data_length <= 0 || mime_type == NULL || mime_type[0] == '\0' ||
-        layer->data_control_manager == NULL || layer->data_control_device == NULL) {
+int hypr_layer_set_clipboard(hypr_layer *layer, const unsigned char *data,
+                             int data_length, const char *mime_type)
+{
+    if (layer == NULL || data == NULL || data_length <= 0 ||
+        mime_type == NULL || mime_type[0] == '\0' ||
+        layer->data_control_manager == NULL ||
+        layer->data_control_device == NULL)
+    {
         return 0;
     }
-    struct clipboard_source* clipboard = calloc(1, sizeof(struct clipboard_source));
-    if (clipboard == NULL) {
+
+    struct clipboard_source *clipboard =
+        calloc(1, sizeof(struct clipboard_source));
+    if (clipboard == NULL)
+    {
         return 0;
     }
+
     clipboard->data = malloc((size_t)data_length);
-    clipboard->source = ext_data_control_manager_v1_create_data_source(layer->data_control_manager);
+    clipboard->source = ext_data_control_manager_v1_create_data_source(
+        layer->data_control_manager);
     if (clipboard->data == NULL || clipboard->source == NULL ||
-        ext_data_control_source_v1_add_listener(clipboard->source, &clipboard_source_listener, clipboard) < 0) {
-        if (clipboard->source != NULL) ext_data_control_source_v1_destroy(clipboard->source);
+        ext_data_control_source_v1_add_listener(
+            clipboard->source, &clipboard_source_listener, clipboard) < 0)
+    {
+        if (clipboard->source != NULL)
+            ext_data_control_source_v1_destroy(clipboard->source);
         free(clipboard->data);
         free(clipboard);
         return 0;
     }
+
     memcpy(clipboard->data, data, (size_t)data_length);
     clipboard->length = (size_t)data_length;
     clipboard->layer = layer;
     clipboard->next = layer->clipboard_sources;
     layer->clipboard_sources = clipboard;
     ext_data_control_source_v1_offer(clipboard->source, mime_type);
-    ext_data_control_device_v1_set_selection(layer->data_control_device, clipboard->source);
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+    ext_data_control_device_v1_set_selection(layer->data_control_device,
+                                             clipboard->source);
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
         return 0;
     }
+
     return 1;
 }
 
-void hypr_layer_destroy(hypr_layer* layer) {
-    if (layer == NULL) {
+void hypr_layer_destroy(hypr_layer *layer)
+{
+    if (layer == NULL)
+    {
         return;
     }
 
-    while (layer->windows != NULL) {
-        struct thumbnail_window* window = layer->windows;
+    thumbnail_pool_destroy(layer->thumbnail_pool);
+    layer->thumbnail_pool = NULL;
+    for (unsigned i = 0; i < THUMBNAIL_POOL_CAPACITY; i++)
+    {
+        if (layer->thumbnail_jobs[i] != NULL)
+        {
+            thumbnail_job_free(layer->thumbnail_jobs[i]);
+        }
+    }
+
+    while (layer->windows != NULL)
+    {
+        struct thumbnail_window *window = layer->windows;
         layer->windows = window->next;
         thumbnail_destroy(window);
     }
+
     if (layer->mapping_manager != NULL)
+    {
         hyprland_toplevel_mapping_manager_v1_destroy(layer->mapping_manager);
+    }
+
     if (layer->toplevel_list != NULL)
+    {
         ext_foreign_toplevel_list_v1_destroy(layer->toplevel_list);
+    }
+
     if (layer->toplevel_capture_manager != NULL)
-        ext_foreign_toplevel_image_capture_source_manager_v1_destroy(layer->toplevel_capture_manager);
-    if (layer->capture_data != NULL) {
+    {
+        ext_foreign_toplevel_image_capture_source_manager_v1_destroy(
+            layer->toplevel_capture_manager);
+    }
+
+    if (layer->capture_data != NULL)
+    {
         munmap(layer->capture_data, layer->capture_size);
         layer->capture_data = NULL;
     }
-    if (layer->egl_display != EGL_NO_DISPLAY) {
+
+    if (layer->egl_display != EGL_NO_DISPLAY)
+    {
         make_fallback_current(layer);
     }
-    while (layer->bars != NULL) {
-        struct hypr_bar* bar = layer->bars;
+
+    while (layer->bars != NULL)
+    {
+        struct hypr_bar *bar = layer->bars;
         layer->bars = bar->next;
         destroy_output(bar);
     }
 
-    if (layer->egl_display != EGL_NO_DISPLAY) {
-        eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (layer->fallback_surface != EGL_NO_SURFACE) {
+    if (layer->egl_display != EGL_NO_DISPLAY)
+    {
+        eglMakeCurrent(layer->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                       EGL_NO_CONTEXT);
+        if (layer->fallback_surface != EGL_NO_SURFACE)
+        {
             eglDestroySurface(layer->egl_display, layer->fallback_surface);
         }
-        if (layer->egl_context != EGL_NO_CONTEXT) {
+
+        if (layer->egl_context != EGL_NO_CONTEXT)
+        {
             eglDestroyContext(layer->egl_display, layer->egl_context);
         }
+
         eglTerminate(layer->egl_display);
     }
+
     release_seat(layer);
-    while (layer->clipboard_sources != NULL) {
-        struct clipboard_source* clipboard = layer->clipboard_sources;
+    while (layer->clipboard_sources != NULL)
+    {
+        struct clipboard_source *clipboard = layer->clipboard_sources;
         layer->clipboard_sources = clipboard->next;
-        if (clipboard->source != NULL) {
+        if (clipboard->source != NULL)
+        {
             ext_data_control_source_v1_destroy(clipboard->source);
         }
+
         free(clipboard->data);
         free(clipboard);
     }
-    if (layer->data_control_manager != NULL) {
+
+    if (layer->data_control_manager != NULL)
+    {
         ext_data_control_manager_v1_destroy(layer->data_control_manager);
     }
-    if (layer->image_capture_manager != NULL) {
+
+    if (layer->image_capture_manager != NULL)
+    {
         ext_image_copy_capture_manager_v1_destroy(layer->image_capture_manager);
     }
-    if (layer->output_capture_manager != NULL) {
-        ext_output_image_capture_source_manager_v1_destroy(layer->output_capture_manager);
+
+    if (layer->output_capture_manager != NULL)
+    {
+        ext_output_image_capture_source_manager_v1_destroy(
+            layer->output_capture_manager);
     }
-    if (layer->shm != NULL) {
+
+    if (layer->shm != NULL)
+    {
         wl_shm_destroy(layer->shm);
     }
-    if (layer->layer_shell != NULL) {
+
+    if (layer->layer_shell != NULL)
+    {
         zwlr_layer_shell_v1_destroy(layer->layer_shell);
     }
-    if (layer->xkb_state != NULL) {
+
+    if (layer->xkb_state != NULL)
+    {
         xkb_state_unref(layer->xkb_state);
     }
-    if (layer->xkb_keymap != NULL) {
+
+    if (layer->xkb_keymap != NULL)
+    {
         xkb_keymap_unref(layer->xkb_keymap);
     }
-    if (layer->xkb_context != NULL) {
+
+    if (layer->xkb_context != NULL)
+    {
         xkb_context_unref(layer->xkb_context);
     }
-    if (layer->compositor != NULL) {
+
+    if (layer->compositor != NULL)
+    {
         wl_compositor_destroy(layer->compositor);
     }
-    if (layer->registry != NULL) {
+
+    if (layer->registry != NULL)
+    {
         wl_registry_destroy(layer->registry);
     }
-    if (layer->display != NULL) {
+
+    if (layer->display != NULL)
+    {
         wl_display_disconnect(layer->display);
     }
+
     free(layer);
 }
 
-int hypr_layer_poll_events(hypr_layer* layer) {
-    if (layer == NULL || layer->display == NULL || layer->should_close) {
+int hypr_layer_poll_events(hypr_layer *layer)
+{
+    if (layer == NULL || layer->display == NULL || layer->should_close)
+    {
         return 0;
     }
-    if (wl_display_dispatch_pending(layer->display) < 0) {
+
+    if (wl_display_dispatch_pending(layer->display) < 0)
+    {
         fail_fatal(layer, "wl_display_dispatch_pending failed");
         return 0;
     }
+
     thumbnail_pump(layer);
-    while (wl_display_prepare_read(layer->display) != 0) {
-        if (wl_display_dispatch_pending(layer->display) < 0) {
-            fail_fatal(layer, "wl_display_dispatch_pending failed while preparing a read");
+    while (wl_display_prepare_read(layer->display) != 0)
+    {
+        if (wl_display_dispatch_pending(layer->display) < 0)
+        {
+            fail_fatal(
+                layer,
+                "wl_display_dispatch_pending failed while preparing a read");
             return 0;
         }
     }
 
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
         wl_display_cancel_read(layer->display);
         fail_fatal(layer, "wl_display_flush failed");
         return 0;
     }
+
     struct pollfd pfd = {
         .fd = wl_display_get_fd(layer->display),
         .events = POLLIN,
         .revents = 0,
     };
     int ready = poll(&pfd, 1, 0);
-    if (ready > 0 && (pfd.revents & POLLIN) != 0) {
+    if (ready > 0 && (pfd.revents & POLLIN) != 0)
+    {
         if (wl_display_read_events(layer->display) < 0 ||
-            wl_display_dispatch_pending(layer->display) < 0) {
+            wl_display_dispatch_pending(layer->display) < 0)
+        {
             fail_fatal(layer, "failed to read Wayland events");
             return 0;
         }
-    } else {
+    }
+
+    else
+    {
         wl_display_cancel_read(layer->display);
-        if (ready < 0 && errno != EINTR) {
+        if (ready < 0 && errno != EINTR)
+        {
             fail_fatal(layer, "poll failed for the Wayland display");
             return 0;
         }
-        if (ready > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+
+        if (ready > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+        {
             fail_fatal(layer, "the Wayland display connection closed");
             return 0;
         }
     }
 
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (!bar->closed && bar->surface == NULL) {
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (!bar->closed && bar->surface == NULL)
+        {
             create_bar_surface(bar);
-        } else if (bar->closed && bar->surface != NULL) {
+        }
+
+        else if (bar->closed && bar->surface != NULL)
+        {
             destroy_bar_surface(bar);
         }
     }
-    if (layer->repeat_active && layer->repeat_rate > 0 && layer->repeat_bar != NULL) {
+
+    if (layer->repeat_active && layer->repeat_rate > 0 &&
+        layer->repeat_bar != NULL)
+    {
         int64_t now = monotonic_milliseconds();
-        if (now >= layer->repeat_next_ms) {
+        if (now >= layer->repeat_next_ms)
+        {
             queue_keyboard_input(layer, layer->repeat_bar, layer->repeat_key);
             int64_t interval = 1000 / layer->repeat_rate;
             layer->repeat_next_ms = now + (interval > 0 ? interval : 1);
         }
     }
+
     return 1;
 }
 
-int hypr_layer_should_close(const hypr_layer* layer) {
+int hypr_layer_should_close(const hypr_layer *layer)
+{
     return layer == NULL || layer->should_close;
 }
 
-int hypr_layer_has_error(const hypr_layer* layer) {
+int hypr_layer_has_error(const hypr_layer *layer)
+{
     return layer != NULL && layer->has_error;
 }
 
-uint64_t hypr_layer_get_topology_serial(const hypr_layer* layer) {
+uint64_t hypr_layer_get_topology_serial(const hypr_layer *layer)
+{
     return layer != NULL ? layer->topology_serial : 0;
 }
 
-int hypr_layer_get_bar_count(const hypr_layer* layer) {
+int hypr_layer_get_bar_count(const hypr_layer *layer)
+{
     int count = 0;
-    if (layer != NULL) {
-        for (const struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-            if (bar->active && !bar->closed) {
+    if (layer != NULL)
+    {
+        for (const struct hypr_bar *bar = layer->bars; bar != NULL;
+             bar = bar->next)
+        {
+            if (bar->active && !bar->closed)
+            {
                 count++;
             }
         }
     }
+
     return count;
 }
 
-uint64_t hypr_layer_get_bar_id(const hypr_layer* layer, int index) {
-    if (layer == NULL || index < 0) {
+uint64_t hypr_layer_get_bar_id(const hypr_layer *layer, int index)
+{
+    if (layer == NULL || index < 0)
+    {
         return 0;
     }
-    for (const struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (bar->active && !bar->closed) {
-            if (index == 0) {
+
+    for (const struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (bar->active && !bar->closed)
+        {
+            if (index == 0)
+            {
                 return bar->id;
             }
+
             index--;
         }
     }
+
     return 0;
 }
 
-int hypr_layer_get_bar_width(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_get_bar_width(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL ? bar->width : 0;
 }
 
-int hypr_layer_get_bar_height(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_get_bar_height(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL ? bar->height : 0;
 }
 
-int hypr_layer_get_output_name(
-    const hypr_layer* layer,
-    uint64_t id,
-    char* buffer,
-    int buffer_size) {
-    if (buffer == NULL || buffer_size <= 0) {
+int hypr_layer_get_output_name(const hypr_layer *layer, uint64_t id,
+                               char *buffer, int buffer_size)
+{
+    if (buffer == NULL || buffer_size <= 0)
+    {
         return 0;
     }
+
     buffer[0] = '\0';
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return 0;
     }
-    const char* value = bar->output_name != NULL && bar->output_name[0] != '\0'
-        ? bar->output_name
-        : bar->fallback_output_name;
+
+    const char *value = bar->output_name != NULL && bar->output_name[0] != '\0'
+                            ? bar->output_name
+                            : bar->fallback_output_name;
     size_t required_length = strlen(value);
     size_t copied_length = required_length;
-    if (copied_length >= (size_t)buffer_size) {
+    if (copied_length >= (size_t)buffer_size)
+    {
         copied_length = (size_t)buffer_size - 1;
     }
+
     memcpy(buffer, value, copied_length);
     buffer[copied_length] = '\0';
     return required_length <= INT32_MAX ? (int)required_length : INT32_MAX;
 }
 
-int hypr_layer_make_current(hypr_layer* layer, uint64_t id) {
-    if (layer == NULL) {
+int hypr_layer_make_current(hypr_layer *layer, uint64_t id)
+{
+    if (layer == NULL)
+    {
         return 0;
     }
-    if (id == 0) {
+
+    if (id == 0)
+    {
         return make_fallback_current(layer);
     }
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE) {
+
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE)
+    {
         return 0;
     }
-    if (!eglMakeCurrent(
-            layer->egl_display,
-            bar->egl_surface,
-            bar->egl_surface,
-            layer->egl_context)) {
+
+    if (!eglMakeCurrent(layer->egl_display, bar->egl_surface, bar->egl_surface,
+                        layer->egl_context))
+    {
         fail_bar_egl(bar, "eglMakeCurrent failed");
         mark_bar_closed(bar);
         make_fallback_current(layer);
         return 0;
     }
+
     return 1;
 }
 
-int hypr_layer_swap_buffers(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE) {
+int hypr_layer_swap_buffers(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL || bar->egl_surface == EGL_NO_SURFACE)
+    {
         return 0;
     }
-    if (!eglSwapBuffers(layer->egl_display, bar->egl_surface)) {
+
+    if (!eglSwapBuffers(layer->egl_display, bar->egl_surface))
+    {
         EGLint error = eglGetError();
-        fprintf(stderr, "hypr_layer: output %llu: eglSwapBuffers failed (EGL error 0x%04x)\n", (unsigned long long)id, error);
-        if (error == EGL_BAD_SURFACE) {
+        fprintf(stderr,
+                "hypr_layer: output %llu: eglSwapBuffers failed (EGL error "
+                "0x%04x)\n",
+                (unsigned long long)id, error);
+        if (error == EGL_BAD_SURFACE)
+        {
             destroy_bar_egl_surface(bar);
             if (create_bar_egl_surface(bar) &&
-                eglMakeCurrent(layer->egl_display, bar->egl_surface, bar->egl_surface, layer->egl_context) &&
-                eglSwapBuffers(layer->egl_display, bar->egl_surface)) {
+                eglMakeCurrent(layer->egl_display, bar->egl_surface,
+                               bar->egl_surface, layer->egl_context) &&
+                eglSwapBuffers(layer->egl_display, bar->egl_surface))
+            {
                 wl_display_flush(layer->display);
                 return 1;
             }
         }
+
         mark_bar_closed(bar);
         return 0;
     }
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
         fail_fatal(layer, "wl_display_flush failed after swapping buffers");
         return 0;
     }
+
     return 1;
 }
 
-int hypr_layer_set_input_regions(
-    hypr_layer* layer,
-    uint64_t id,
-    const int* rectangles,
-    int rectangle_count) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+int hypr_layer_set_input_regions(hypr_layer *layer, uint64_t id,
+                                 const int *rectangles, int rectangle_count)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return 0;
     }
-    apply_input_regions(bar, rectangles, rectangle_count > 0 ? rectangle_count : 0);
-    if (bar->closed) {
+
+    apply_input_regions(bar, rectangles,
+                        rectangle_count > 0 ? rectangle_count : 0);
+    if (bar->closed)
+    {
         return 0;
     }
+
     wl_surface_commit(bar->surface);
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
-        fail_fatal(layer, "wl_display_flush failed after setting input regions");
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
+        fail_fatal(layer,
+                   "wl_display_flush failed after setting input regions");
         return 0;
     }
+
     return 1;
 }
 
-int hypr_layer_set_screenshot_overlay(hypr_layer* layer, uint64_t id) {
-    if (layer == NULL) {
+int hypr_layer_set_screenshot_overlay(hypr_layer *layer, uint64_t id)
+{
+    if (layer == NULL)
+    {
         return 0;
     }
-    struct hypr_bar* target = id != 0 ? find_bar(layer, id) : NULL;
-    if (id != 0 && (target == NULL || !target->active || target->closed)) {
+
+    struct hypr_bar *target = id != 0 ? find_bar(layer, id) : NULL;
+    if (id != 0 && (target == NULL || !target->active || target->closed))
+    {
         return 0;
     }
 
     int succeeded = 1;
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (bar == target) {
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (bar == target)
+        {
             succeeded = create_screenshot_surface(bar);
-        } else {
+        }
+
+        else
+        {
             destroy_screenshot_surface(bar);
         }
     }
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
+
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
         fail_fatal(layer, "failed to update the screenshot overlay surface");
         return 0;
     }
+
     return succeeded;
 }
 
-int hypr_layer_make_screenshot_current(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_make_screenshot_current(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     if (bar == NULL || !bar->screenshot_configured ||
-        bar->screenshot_egl_surface == EGL_NO_SURFACE) {
+        bar->screenshot_egl_surface == EGL_NO_SURFACE)
+    {
         return 0;
     }
-    if (!eglMakeCurrent(
-            layer->egl_display,
-            bar->screenshot_egl_surface,
-            bar->screenshot_egl_surface,
-            layer->egl_context)) {
+
+    if (!eglMakeCurrent(layer->egl_display, bar->screenshot_egl_surface,
+                        bar->screenshot_egl_surface, layer->egl_context))
+    {
         fail_bar_egl(bar, "eglMakeCurrent failed for screenshot overlay");
         destroy_screenshot_surface(bar);
         return 0;
     }
+
     return 1;
 }
 
-int hypr_layer_swap_screenshot_buffers(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_swap_screenshot_buffers(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     if (bar == NULL || !bar->screenshot_configured ||
-        bar->screenshot_egl_surface == EGL_NO_SURFACE) {
+        bar->screenshot_egl_surface == EGL_NO_SURFACE)
+    {
         return 0;
     }
-    if (!eglSwapBuffers(layer->egl_display, bar->screenshot_egl_surface)) {
+
+    if (!eglSwapBuffers(layer->egl_display, bar->screenshot_egl_surface))
+    {
         fail_bar_egl(bar, "eglSwapBuffers failed for screenshot overlay");
         destroy_screenshot_surface(bar);
         return 0;
     }
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
-        fail_fatal(layer, "wl_display_flush failed after swapping screenshot overlay buffers");
+
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
+        fail_fatal(layer, "wl_display_flush failed after swapping screenshot "
+                          "overlay buffers");
         return 0;
     }
+
     return 1;
 }
 
-int hypr_layer_set_keyboard_interactive_bar(hypr_layer* layer, uint64_t id) {
-    if (layer == NULL) {
+int hypr_layer_set_keyboard_interactive_bar(hypr_layer *layer, uint64_t id)
+{
+    if (layer == NULL)
+    {
         return 0;
     }
-    if (id != 0 && find_bar(layer, id) == NULL) {
+
+    if (id != 0 && find_bar(layer, id) == NULL)
+    {
         return 0;
     }
+
     layer->keyboard_interactive_id = id;
-    for (struct hypr_bar* bar = layer->bars; bar != NULL; bar = bar->next) {
-        if (!bar->active || bar->closed || bar->layer_surface == NULL) {
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (!bar->active || bar->closed || bar->layer_surface == NULL)
+        {
             continue;
         }
+
         int enabled = bar->id == id;
-        if (bar->keyboard_interactive == enabled) {
+        if (bar->keyboard_interactive == enabled)
+        {
             continue;
         }
+
         bar->keyboard_interactive = enabled;
-        zwlr_layer_surface_v1_set_keyboard_interactivity(bar->layer_surface, enabled ? 1 : 0);
+        zwlr_layer_surface_v1_set_keyboard_interactivity(bar->layer_surface,
+                                                         enabled ? 1 : 0);
         wl_surface_commit(bar->surface);
     }
-    if (id == 0) {
+
+    if (id == 0)
+    {
         layer->repeat_bar = NULL;
         layer->repeat_active = 0;
     }
-    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN) {
-        fail_fatal(layer, "wl_display_flush failed after changing keyboard interactivity");
+
+    if (wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
+        fail_fatal(
+            layer,
+            "wl_display_flush failed after changing keyboard interactivity");
         return 0;
     }
+
     return 1;
 }
 
-double hypr_layer_get_pointer_x(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+double hypr_layer_get_pointer_x(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL ? bar->pointer_x : 0.0;
 }
 
-double hypr_layer_get_pointer_y(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+double hypr_layer_get_pointer_y(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL ? bar->pointer_y : 0.0;
 }
 
-int hypr_layer_pointer_inside(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_pointer_inside(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL && bar->pointer_inside;
 }
 
-int hypr_layer_pointer_button(const hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
+int hypr_layer_pointer_button(const hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
     return bar != NULL && bar->pointer_button_down;
 }
 
-double hypr_layer_take_scroll(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+double hypr_layer_take_scroll(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return 0.0;
     }
+
     double value = bar->pending_scroll;
     bar->pending_scroll = 0.0;
     return value;
 }
 
-int hypr_layer_take_key(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+int hypr_layer_take_key(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return -1;
     }
+
     int key = bar->pending_key;
     bar->pending_key = -1;
     return key;
 }
 
-int hypr_layer_take_key_control(hypr_layer* layer, uint64_t id) {
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+int hypr_layer_take_key_control(hypr_layer *layer, uint64_t id)
+{
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return 0;
     }
+
     int control = bar->pending_key_control;
     bar->pending_key_control = 0;
     return control;
 }
 
-int hypr_layer_take_text(
-    hypr_layer* layer,
-    uint64_t id,
-    char* buffer,
-    int buffer_size) {
-    if (buffer == NULL || buffer_size <= 0) {
+int hypr_layer_take_text(hypr_layer *layer, uint64_t id, char *buffer,
+                         int buffer_size)
+{
+    if (buffer == NULL || buffer_size <= 0)
+    {
         return 0;
     }
+
     buffer[0] = '\0';
-    struct hypr_bar* bar = find_bar(layer, id);
-    if (bar == NULL) {
+    struct hypr_bar *bar = find_bar(layer, id);
+    if (bar == NULL)
+    {
         return 0;
     }
+
     int length = bar->pending_text_length;
-    if (length >= buffer_size) {
+    if (length >= buffer_size)
+    {
         length = buffer_size - 1;
     }
+
     memcpy(buffer, bar->pending_text, (size_t)length);
     buffer[length] = '\0';
     bar->pending_text_length = 0;
@@ -2849,6 +3993,7 @@ int hypr_layer_take_text(
     return length;
 }
 
-void* hypr_layer_get_proc_address(const char* name) {
-    return name != NULL ? (void*)eglGetProcAddress(name) : NULL;
+void *hypr_layer_get_proc_address(const char *name)
+{
+    return name != NULL ? (void *)eglGetProcAddress(name) : NULL;
 }

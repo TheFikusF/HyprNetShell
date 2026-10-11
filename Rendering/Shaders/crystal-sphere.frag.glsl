@@ -25,6 +25,8 @@ const float SHRINK_AMOUNT = 0.75; // 0 = no shrinking, 1 = shrink to nothing.
 const float SPARKLE_BRIGHTNESS = 1.0;
 const float SPARKLE_HALO_STRENGTH = 0.14;
 const float SPARKLE_RAY_STRENGTH = 0.22;
+// At 16 sizes, even the longest ray is below 0.000014 per candidate.
+const float SPARKLE_TAIL_DISTANCE_SQUARED = 256.0;
 const vec3 SPARKLE_END_COLOR = vec3(1.0, 0.82, 0.32);
 
 // Warm light inside the sphere.
@@ -112,11 +114,22 @@ vec4 Sparkles(vec2 p, float radius)
             float spawnChance = mix(EDGE_SPAWN_CHANCE, CENTER_SPAWN_CHANCE, 1.0 - smoothstep(0.0, 1.0, length(center)));
             float spawnRoll = SparkleHash(seed + cycle * 31.3 + vec2(71.9, 43.7)).x;
             envelope *= 1.0 - step(spawnChance, spawnRoll);
+            if (envelope == 0.0)
+            {
+                continue;
+            }
+
             vec2 delta = p - center;
             float centerWeight = pow(clamp(1.0 - length(center), 0.0, 1.0), CENTER_SIZE_FOCUS);
             float centerScale = mix(1.0, CENTER_SIZE_MULTIPLIER, centerWeight);
             float dissolveScale = 1.0 - smoothstep(SHRINK_START, 1.0, age) * SHRINK_AMOUNT;
             float size = max((SPARKLE_SIZE_PIXELS + variation.x * SPARKLE_SIZE_VARIATION_PIXELS) / radius, 0.0015) * centerScale * dissolveScale;
+            // The radial bound includes the broad halo and both elongated rays.
+            if (dot(delta, delta) >= SPARKLE_TAIL_DISTANCE_SQUARED * size * size)
+            {
+                continue;
+            }
+
             float distance = length(delta) / size;
             float core = exp(-distance * distance * 1.8);
             float halo = exp(-distance * distance * 0.12) * SPARKLE_HALO_STRENGTH;
@@ -155,6 +168,18 @@ void main()
     color = (color * alpha * (1.0 - innerGlow) + INNER_GLOW_COLOR * innerGlow)
         / max(glowingAlpha, 0.0001);
     alpha = glowingAlpha;
+
+    if (body == 0.0)
+    {
+        // Preserve the original zero-contribution compositing, even for tiny glow alpha.
+        for (int layer = 0; layer < 4; layer++)
+        {
+            color = color * alpha / max(alpha, 0.0001);
+        }
+
+        FragColor = vec4(color, clamp(alpha, 0.0, 1.0) * vColor.a);
+        return;
+    }
 
     vec2 cloudOffset = (p - CLOUD_POSITION) / CLOUD_SIZE;
     vec2 cloudFlow = p * CLOUD_DETAIL + vec2(-uTime * CLOUD_SPEED, uTime * CLOUD_SPEED * 0.3);

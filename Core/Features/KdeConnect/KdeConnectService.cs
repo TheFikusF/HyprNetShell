@@ -980,13 +980,6 @@ internal sealed class KdeConnectService : IDisposable
         try
         {
             await SendBatteryRequestAsync(channel, cancellationToken);
-            var content = await _clipboard.ReadTextAsync(cancellationToken);
-            if (content is not null && !_clipboardPlugin.ShouldSuppressOutbound(content))
-            {
-                await channel.SendAsync(
-                    ClipboardPlugin.CreateConnectPacket(content, _clipboard.LastChangeTimestamp),
-                    cancellationToken);
-            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

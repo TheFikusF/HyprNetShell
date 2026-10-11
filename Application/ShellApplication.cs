@@ -126,11 +126,13 @@ internal sealed class ShellLoop : IDisposable
     private bool RunFrame()
     {
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.Frame);
+        PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.ActiveFrame);
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.Update);
         var shouldContinue = _layer.Update();
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.Update);
         if (!shouldContinue)
         {
+            PerformanceProfiler.End(_performanceProfiler, PerformancePhase.ActiveFrame);
             PerformanceProfiler.End(_performanceProfiler, PerformancePhase.Frame);
             return false;
         }
@@ -138,13 +140,13 @@ internal sealed class ShellLoop : IDisposable
         ReconcileViews();
         var inputOwnerId = ResolveInputOwner();
         ProcessInput(inputOwnerId);
-        if (_services.Overview.IsVisible)
-        {
-            _services.WindowThumbnails.Update();
-        }
+        PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.PollThumbnails);
+        _services.WindowThumbnails.Update();
+        PerformanceProfiler.End(_performanceProfiler, PerformancePhase.PollThumbnails);
 
         RenderOutputs();
         _renderer.EndApplicationFrame();
+        PerformanceProfiler.End(_performanceProfiler, PerformancePhase.ActiveFrame);
         CompleteFrame();
         return true;
     }
@@ -303,8 +305,12 @@ internal sealed class ShellLoop : IDisposable
         if (_services.Overview.RenderOutputId == output.Id)
         {
             Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = _services.Overview.IsVisible ? output.Input : LayoutInput.None);
-            Layout.DrawOnLayer(RenderLayer.Dialog,
-                renderer => _services.Overview.Draw(renderer, output.Width, output.Height));
+            Layout.DrawOnLayer(RenderLayer.Dialog, renderer =>
+            {
+                PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.DrawOverview);
+                _services.Overview.Draw(renderer, output.Width, output.Height);
+                PerformanceProfiler.End(_performanceProfiler, PerformancePhase.DrawOverview);
+            });
             Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = LayoutInput.None);
         }
 

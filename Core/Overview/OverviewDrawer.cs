@@ -1,3 +1,4 @@
+using HyprNetShell.Core.Models;
 using HyprNetShell.GUI;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
@@ -6,6 +7,7 @@ namespace HyprNetShell.Core.Overview;
 
 internal abstract class OverviewDrawer : IOverviewDrawer
 {
+    protected const float THUMBNAIL_HOVER_SCALE = 1.035f;
     protected const float THUMBNAIL_CAPTION_HEIGHT = 44f;
     protected const float THUMBNAIL_ICON_SIZE = 52f;
     protected const float THUMBNAIL_ICON_TOP = -12f;
@@ -15,6 +17,7 @@ internal abstract class OverviewDrawer : IOverviewDrawer
 
     public abstract Rect[] BuildLayout(int width, int height, float[] ratios);
     public abstract Point ProjectCenter(Rect bounds, int width, int height);
+    public abstract WindowThumbnailSize GetThumbnailSize(Rect bounds, float aspect, int width, int height);
     public abstract string? Draw(IRenderApi renderer, OverviewDrawContext context);
 
     public void Reset()
@@ -54,6 +57,24 @@ internal abstract class OverviewDrawer : IOverviewDrawer
         var fit = Math.Min(source.Width / image.Width, source.Height / image.Height);
         return new Rect(source.X + (source.Width - image.Width * fit) / 2,
             source.Y + (source.Height - image.Height * fit) / 2, image.Width * fit, image.Height * fit);
+    }
+
+    protected static Rect GetThumbnailSource(Rect bounds, float aspect, float scale)
+    {
+        var width = bounds.Width * scale;
+        var height = bounds.Height * scale;
+        var imageHeight = Math.Min(height, width / aspect);
+        var imageWidth = imageHeight * aspect;
+        return new Rect(bounds.X + (bounds.Width - imageWidth) / 2,
+            bounds.Y + (bounds.Height - imageHeight) / 2, imageWidth, imageHeight);
+    }
+
+    protected static WindowThumbnailSize GetCaptureSize(float width, float height)
+    {
+        var scale = Math.Min(1, Math.Min(WindowThumbnailSize.MAX_WIDTH / Math.Max(1, width),
+            WindowThumbnailSize.MAX_HEIGHT / Math.Max(1, height)));
+        return new WindowThumbnailSize(Math.Max(1, (int)MathF.Ceiling(width * scale)),
+            Math.Max(1, (int)MathF.Ceiling(height * scale)));
     }
 
     protected static bool ContainsImage(Rect source, Point pointer)

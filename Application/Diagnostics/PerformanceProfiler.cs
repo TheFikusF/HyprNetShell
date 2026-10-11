@@ -11,6 +11,9 @@ namespace HyprNetShell.Application.Diagnostics;
 internal enum PerformancePhase
 {
     Frame,
+    ActiveFrame,
+    PollThumbnails,
+    DrawOverview,
     Update,
     RefreshState,
     Input,

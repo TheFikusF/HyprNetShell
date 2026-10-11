@@ -16,12 +16,6 @@ internal sealed class WindowThumbnailBackend : IWindowThumbnailBackend
     private ulong? _serial;
     private bool _disposed;
 
-    internal WindowThumbnailBackend(HyprLayer layer)
-    {
-        _layer = layer;
-        SetEnabled(false);
-    }
-
     public bool IsAvailable
     {
         get
@@ -35,6 +29,12 @@ internal sealed class WindowThumbnailBackend : IWindowThumbnailBackend
             LogNativeError(0);
             return NativeMethods.hypr_layer_thumbnails_available(_layer.NativeHandle) != 0;
         }
+    }
+
+    internal WindowThumbnailBackend(HyprLayer layer)
+    {
+        _layer = layer;
+        SetEnabled(false);
     }
 
     public IReadOnlyList<WindowThumbnailMetadata> PollWindows()
@@ -136,6 +136,14 @@ internal sealed class WindowThumbnailBackend : IWindowThumbnailBackend
             }
 
             LogFailure(handle, "Could not change native thumbnail visibility.");
+        }
+    }
+
+    public void SetWindowSize(ulong handle, int width, int height)
+    {
+        if (NativeMethods.hypr_layer_set_window_thumbnail_size(GetHandle(), handle, width, height) == 0)
+        {
+            LogFailure(handle, $"Could not request native thumbnail size {width}x{height}.");
         }
     }
 

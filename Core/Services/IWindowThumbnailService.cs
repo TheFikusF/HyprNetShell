@@ -15,7 +15,8 @@ public interface IWindowThumbnailService : IDisposable
     event Action<WindowThumbnailSnapshot>? WindowAdded;
     event Action<WindowThumbnailSnapshot>? WindowRemoved;
     void Update();
-    /// <summary>A null handle list requests all windows. Owners are compared by reference.</summary>
-    void SetOverviewVisible(object owner, string outputName, bool visible, IReadOnlyCollection<ulong>? handles = null);
+    /// <summary>A null handle list requests all windows. Missing sizes use 640x360. Owners are compared by reference.</summary>
+    void SetOverviewVisible(object owner, string outputName, bool visible, IReadOnlyCollection<ulong>? handles = null,
+        IReadOnlyDictionary<ulong, WindowThumbnailSize>? sizes = null);
     void RemoveOwner(object owner);
 }

@@ -25,6 +25,7 @@ internal interface IOverviewDrawer
 {
     Rect[] BuildLayout(int width, int height, float[] ratios);
     Point ProjectCenter(Rect bounds, int width, int height);
+    WindowThumbnailSize GetThumbnailSize(Rect bounds, float aspect, int width, int height);
     string? Draw(IRenderApi renderer, OverviewDrawContext context);
     void DrawCaption(IRenderApi renderer, string text, float x, float y, float width, float size, Color color);
     void Reset();

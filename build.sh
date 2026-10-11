@@ -3,7 +3,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 NATIVE_DIR="$ROOT_DIR/Native"
-NATIVE_BUILD_DIR="$NATIVE_DIR/build"
+NATIVE_BUILD_DIR="$NATIVE_DIR/build/clang"
 SOLUTION="$ROOT_DIR/HyprNetShell.slnx"
 PROJECT="$ROOT_DIR/HyprNetShell.csproj"
 PUBLISH_PROFILE="$ROOT_DIR/Properties/PublishProfiles/NativeAotOneFile.pubxml"
@@ -41,13 +41,27 @@ EOF
 }
 
 build_native() {
+    if ! command -v clang >/dev/null 2>&1; then
+        printf 'Clang is required to build the native libraries. Install clang and retry.\n' >&2
+        exit 1
+    fi
+
+    # A separate Meson tree avoids cached GCC selection without wiping AOT dependencies.
     if [ -f "$NATIVE_BUILD_DIR/build.ninja" ]; then
-        meson setup "$NATIVE_BUILD_DIR" "$NATIVE_DIR" --reconfigure
+        CC=clang meson setup "$NATIVE_BUILD_DIR" "$NATIVE_DIR" --reconfigure --buildtype=debugoptimized
     else
-        meson setup "$NATIVE_BUILD_DIR" "$NATIVE_DIR"
+        CC=clang meson setup "$NATIVE_BUILD_DIR" "$NATIVE_DIR" --buildtype=debugoptimized
     fi
 
     meson compile -C "$NATIVE_BUILD_DIR"
+
+    # Managed builds and AOT linking consume these established library paths.
+    cp "$NATIVE_BUILD_DIR/libhypr_layer.so" "$NATIVE_DIR/build/libhypr_layer.so"
+    cp "$NATIVE_BUILD_DIR/libhypr_layer.a" "$NATIVE_DIR/build/libhypr_layer.a"
+    if [ -f "$NATIVE_BUILD_DIR/libhypr_audio.so" ]; then
+        cp "$NATIVE_BUILD_DIR/libhypr_audio.so" "$NATIVE_DIR/build/libhypr_audio.so"
+        cp "$NATIVE_BUILD_DIR/libhypr_audio.a" "$NATIVE_DIR/build/libhypr_audio.a"
+    fi
 }
 
 build_static() {

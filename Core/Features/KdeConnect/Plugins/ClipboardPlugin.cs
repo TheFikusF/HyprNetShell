@@ -64,16 +64,4 @@ internal sealed class ClipboardPlugin(ClipboardHistoryService clipboard) : IKdeC
     internal static byte[] CreateClipboardPacket(string content) => KdeConnectProtocol.CreatePacket(
         KdeConnectProtocol.ClipboardType,
         writer => writer.WriteString("content", content));
-
-    internal static byte[] CreateConnectPacket(string content, long timestamp)
-    {
-        timestamp = timestamp > 0 ? timestamp : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        return KdeConnectProtocol.CreatePacket(
-            KdeConnectProtocol.ClipboardConnectType,
-            writer =>
-            {
-                writer.WriteString("content", content);
-                writer.WriteNumber("timestamp", timestamp);
-            });
-    }
 }

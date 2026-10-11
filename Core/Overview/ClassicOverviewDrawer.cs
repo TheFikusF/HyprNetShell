@@ -1,4 +1,5 @@
 using HyprNetShell.Core.Assets;
+using HyprNetShell.Core.Models;
 using HyprNetShell.GUI;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
@@ -16,6 +17,12 @@ internal sealed class ClassicOverviewDrawer : OverviewDrawer
 
     public override Point ProjectCenter(Rect bounds, int width, int height) =>
         new(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+
+    public override WindowThumbnailSize GetThumbnailSize(Rect bounds, float aspect, int width, int height)
+    {
+        var source = GetThumbnailSource(bounds, aspect, THUMBNAILS_SCALE * THUMBNAIL_HOVER_SCALE);
+        return GetCaptureSize(source.Width, source.Height);
+    }
 
     public override Rect[] BuildLayout(int width, int height, float[] ratios)
     {
