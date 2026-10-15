@@ -1,6 +1,7 @@
 // #define DEBUG_OVERVIEW_ZOOM
 
 using HyprNetShell.Core.Configuration;
+using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Bar.Dialogs;
@@ -30,10 +31,13 @@ public sealed class OverviewController : IDisposable
     private const int ZOOM_TEST_WIDTH = 220;
 #endif
     private const double TRANSITION_DURATION = 0.3;
+    private const double IDLE_TIMEOUT = 10;
+    private const double IDLE_FADE_DURATION = 0.4;
 
     private readonly HyprlandService _hyprland;
     private readonly IHyprctl _hyprctl;
     private readonly IWindowThumbnailService _thumbnails;
+    private readonly MusicModuleService _music;
     private readonly OverviewBackgroundService _background;
     private readonly Ref<bool> _searchHovered = new();
     private readonly TextInputCoordinator _searchInputs;
@@ -72,6 +76,9 @@ public sealed class OverviewController : IDisposable
     private int _layoutHeight = -1;
     private bool _layoutDirty = true;
     private double _lastDraw;
+    private double _lastActivity;
+    private float _contentOpacity = 1;
+    private LayoutInput _previousInput = LayoutInput.None;
 
     private string _outputName = "";
     private HashSet<ulong> _demand = [];
@@ -115,12 +122,13 @@ public sealed class OverviewController : IDisposable
     }
 
     internal OverviewController(HyprlandService hyprland, IHyprctl hyprctl, IWindowThumbnailService thumbnails,
-        Func<string?> currentWallpaper, ClipboardHistoryService clipboard)
+        Func<string?> currentWallpaper, ClipboardHistoryService clipboard, MusicModuleService music)
     {
         _drawer = _crystalDrawer;
         _hyprland = hyprland;
         _hyprctl = hyprctl;
         _thumbnails = thumbnails;
+        _music = music;
         _background = new OverviewBackgroundService(currentWallpaper);
         _searchInputs = new TextInputCoordinator(clipboard);
         _searchUrls = new UrlLauncher(hyprland, hyprctl, Close);
@@ -161,6 +169,9 @@ public sealed class OverviewController : IDisposable
             _outputName = outputName;
             _transitionStart = Now;
             _open = true;
+            _lastActivity = Now;
+            _contentOpacity = 1;
+            _previousInput = LayoutInput.None;
 
             _openedWorkspaceId = snapshot.FocusedWorkspaceId;
 
@@ -185,6 +196,11 @@ public sealed class OverviewController : IDisposable
         if (!_open)
         {
             return;
+        }
+
+        if (pressedKey >= 0 || textInput.Length > 0 || controlPressed)
+        {
+            _lastActivity = Now;
         }
 
         var key = DialogService.ToDialogKey(pressedKey, textInput);
@@ -309,8 +325,21 @@ public sealed class OverviewController : IDisposable
         previewTransition |= _zoomTest.HasValue;
 #endif
         var now = Now;
+        var input = Layout.Input;
+        if (_open && (input.HasPointer != _previousInput.HasPointer
+            || input.HasPointer && (input.PointerX != _previousInput.PointerX || input.PointerY != _previousInput.PointerY)
+            || input.PointerDown != _previousInput.PointerDown || input.PointerPressed || input.ScrollDelta != 0))
+        {
+            _lastActivity = now;
+        }
+
+        _previousInput = input;
+        var idle = _open && ReferenceEquals(_drawer, _crystalDrawer) && now - _lastActivity >= IDLE_TIMEOUT;
         var dt = Math.Max(0, now - _lastDraw);
         _lastDraw = now;
+        var opacityStep = (float)(dt / IDLE_FADE_DURATION);
+        _contentOpacity = idle ? Math.Max(0, _contentOpacity - opacityStep) : Math.Min(1, _contentOpacity + opacityStep);
+        var contentHidden = _contentOpacity <= 0;
         var theme = ThemeManager.Current;
 #if DEBUG_OVERVIEW_ZOOM
         var zoomPanel = new BoxNode(Math.Min(ZOOM_TEST_WIDTH, Math.Max(80, width / 3))) {
@@ -355,8 +384,9 @@ public sealed class OverviewController : IDisposable
             Children = [clock],
         };
 #if DEBUG_OVERVIEW_ZOOM
-        if (_open)
+        if (_open && !contentHidden)
         {
+            zoomPanel.Opacity = _contentOpacity;
             sidePanel.Children.Add(zoomPanel);
         }
 #endif
@@ -365,7 +395,7 @@ public sealed class OverviewController : IDisposable
             IsHovered = _searchHovered,
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Children = [_search.DrawOverview(height - 2 * OVERVIEW_PADDING)],
+            Children = contentHidden ? [] : [_search.DrawOverview(height - 2 * OVERVIEW_PADDING)],
         };
 
         var hint = _previews.Count == 0 ? "No windows · Type to search"
@@ -391,13 +421,65 @@ public sealed class OverviewController : IDisposable
                 },
             ],
         };
+
+        foreach (var child in overlay.Children)
+        {
+            if (!ReferenceEquals(child, sidePanel))
+            {
+                child.Opacity = _contentOpacity;
+            }
+        }
+
+        if (contentHidden)
+        {
+            overlay.Children.Clear();
+            overlay.Children.Add(sidePanel);
+        }
+
+        var music = _music.Snapshot;
+        if (music.Playing)
+        {
+            var musicWidth = Math.Max(1, Math.Min(320, (width - searchWidth) / 2 - 2 * OVERVIEW_PADDING));
+            var textWidth = Math.Max(1, musicWidth - 64 - 12);
+            overlay.Children.Add(new BoxNode(musicWidth) {
+                IgnoreLayout = true,
+                Left = OVERVIEW_PADDING,
+                Top = OVERVIEW_PADDING,
+                Direction = Direction.Horizontal,
+                VerticalAlignment = ItemsAlignment.Center,
+                Style = Style.Spacer with { Spacing = 12 },
+                Children =
+                [
+                    string.IsNullOrWhiteSpace(music.ImagePath)
+                        ? new BoxNode(64, 64)
+                        {
+                            HorizontalAlignment = ItemsAlignment.Center,
+                            VerticalAlignment = ItemsAlignment.Center,
+                            Style = new Style { BackgroundColor = theme.Panel },
+                            Children = [new ImageNode(Icons.MusicNotes[0], 32, 32, theme.Text.Color)]
+                        }
+                        : new ImageNode(music.ImagePath, 64, 64),
+                    new BoxNode(textWidth) {
+                        Direction = Direction.Vertical,
+                        HorizontalAlignment = ItemsAlignment.Start,
+                        Style = Style.Spacer,
+                        Children =
+                        [
+                            new TextNode(music.Title, 24, maxWidth: textWidth, wrapping: TextWrapping.Ellipsis),
+                            new TextNode(music.Artist, maxWidth: textWidth, wrapping: TextWrapping.Ellipsis),
+                        ],
+                    },
+                ],
+            });
+        }
+
         var pointerOverSearch = _searchHovered.Value;
 #if DEBUG_OVERVIEW_ZOOM
         pointerOverSearch |= _zoomTestDragging.Value || _zoomTestHovered.Value;
 #endif
         var activated = _drawer.Draw(renderer, new OverviewDrawContext(width, height, 0, 0,
             progress, transitionProgress, previewTransition, _open, pointerOverSearch, now, dt,
-            _hyprland.FocusedAddress, _selected, _previews, _background.GetImage()));
+            _hyprland.FocusedAddress, _selected, _previews, _background.GetImage(), _contentOpacity));
         overlay.Opacity = progress;
         overlay.Draw(renderer, 0, 0);
         var pointerOverOverlay = _searchHovered.Value;

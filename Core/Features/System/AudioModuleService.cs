@@ -122,7 +122,7 @@ internal sealed partial class AudioModuleService : IBarDataService, IDisposable
     {
         try
         {
-            if (AudioNativeMethods.hypr_audio_get_abi_version() != AudioNativeMethods.AbiVersion)
+            if (AudioNativeMethods.hypr_audio_get_abi_version() != AudioNativeMethods.ABI_VERSION)
             {
                 AppLogger.Warning("Audio", "Native audio backend ABI version does not match; using wpctl fallback");
                 return;
@@ -194,7 +194,7 @@ internal sealed partial class AudioModuleService : IBarDataService, IDisposable
             }
 
             var native = Marshal.PtrToStructure<AudioNativeMethods.Snapshot>(snapshotPointer);
-            if (native.AbiVersion != AudioNativeMethods.AbiVersion ||
+            if (native.AbiVersion != AudioNativeMethods.ABI_VERSION ||
                 native.StructSize < Marshal.SizeOf<AudioNativeMethods.Snapshot>())
             {
                 return;

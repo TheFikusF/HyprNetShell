@@ -230,7 +230,7 @@ public sealed class StatusBarServices : IDisposable
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
         Music = new MusicModuleService(Spotify);
         ClipboardHistory = new ClipboardHistoryService(History);
-        Overview = new OverviewController(Hyprland, Hyprctl, WindowThumbnails, () => Wallpapers.CurrentWallpaper, ClipboardHistory);
+        Overview = new OverviewController(Hyprland, Hyprctl, WindowThumbnails, () => Wallpapers.CurrentWallpaper, ClipboardHistory, Music);
         KdeConnect = new KdeConnectService(ClipboardHistory);
         DeviceBatteries = new DeviceBatteryService(Battery, Bluetooth, KdeConnect, Notifications);
         Tray = new SniTrayService();
@@ -466,6 +466,7 @@ public sealed class StatusBarServices : IDisposable
         PipeWireGraph.Dispose();
         Network.Dispose();
         Wallpapers.Dispose();
+        DisplayControls.Dispose();
 
         Screenshots.Dispose();
         Notifications.Dispose();

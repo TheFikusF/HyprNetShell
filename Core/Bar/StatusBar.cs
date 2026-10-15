@@ -14,13 +14,6 @@ public interface IDrawableModule
     public Node Draw();
 }
 
-file class CompositeModule(Style style, params ICollection<IDrawableModule> drawableModules) : IDrawableModule
-{
-    public Node Draw() => new BoxNode {
-        Style = style,
-        Children = [.. drawableModules.Select(x => x.Draw())]
-    };
-}
 
 public sealed class StatusBar
 {
@@ -68,6 +61,7 @@ public sealed class StatusBar
         var trayModule = new TrayModule(services.Tray, _popupCoordinator);
         var powerModule = new PowerModule(
             services.Dialogs,
+            trayModule,
             services.Hyprctl,
             services.RequestLockScreen, _popupCoordinator);
         var workspacesModule = new WorkspacesModule(
@@ -91,16 +85,11 @@ public sealed class StatusBar
         _rightModules =
         [
             privacyModule,
-            new CompositeModule(new Style()
-            {
-                BorderRadius = 999,
-                ShadowColor = Color.Black with { A = 0.45f },
-                ShadowDistance = 5.0f
-            }, audioModule, displayControlsModule, bluetoothModule, networkModule),
+            new SystemControlsModule(services.Audio, services.DisplayControls,
+                audioModule, displayControlsModule, bluetoothModule, networkModule),
             systemStatsModule,
             languageModule,
             batteryModule,
-            trayModule,
             powerModule,
         ];
     }

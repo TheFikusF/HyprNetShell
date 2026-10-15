@@ -4,8 +4,8 @@ namespace HyprNetShell.Core.Features.System;
 
 internal static class AudioNativeMethods
 {
-    internal const uint AbiVersion = 1;
-    private const string LibraryName = "hypr_audio";
+    internal const uint ABI_VERSION = 1;
+    private const string LIBRARY_NAME = "hypr_audio";
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate void SnapshotCallback(IntPtr userData, IntPtr snapshot);
@@ -41,24 +41,24 @@ internal static class AudioNativeMethods
         internal byte Reserved6;
     }
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr hypr_audio_create(IntPtr callback, IntPtr userData);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void hypr_audio_destroy(IntPtr audio);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern uint hypr_audio_get_abi_version();
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int hypr_audio_is_available(IntPtr audio);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int hypr_audio_set_default(IntPtr audio, uint deviceId);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int hypr_audio_set_volume(IntPtr audio, uint deviceId, int volumePercent);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(LIBRARY_NAME, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int hypr_audio_set_muted(IntPtr audio, uint deviceId, int muted);
 }

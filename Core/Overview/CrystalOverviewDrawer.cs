@@ -31,9 +31,10 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
     public override string? Draw(IRenderApi renderer, OverviewDrawContext context)
     {
         DrawBackground(renderer, context);
+
         var (width, height, x, y) = (context.Width, context.Height, context.X, context.Y);
         var transitionProgress = context.TransitionProgress;
-        var progress = context.Progress;
+        var progress = context.Progress * context.ContentOpacity;
         var previewTransition = context.PreviewTransition;
         var pointerOverSearch = context.PointerOverOverlay;
         var now = context.Now;
@@ -57,7 +58,12 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
         Rect Transform(Rect rect) => new(x + center.X + (rect.X - center.X) * zoom,
             y + center.Y + (rect.Y - center.Y) * zoom, rect.Width * zoom, rect.Height * zoom);
 
-        renderer.DrawCrystalSphere(Transform(GetSphere(width, height)), (float)(now % 3600), progress);
+        renderer.DrawCrystalSphere(Transform(GetSphere(width, height)), (float)(now % 3600), context.Progress);
+        if (context.ContentOpacity <= 0)
+        {
+            return null;
+        }
+
         var sphere = Transform(sphereBounds);
         var drawPreviews = !previewTransition ? (IEnumerable<OverviewPreview>)context.Previews
             : context.Previews.OrderBy(preview => preview.Address == focusedAddress);

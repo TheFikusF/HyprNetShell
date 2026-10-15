@@ -28,6 +28,8 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
     private readonly Ref<float> _automaticBrightnessSwitchAnimation = new(service.IsAutomaticBrightnessEnabled() ? 1.0f : 0.0f);
     private float _iconRotation = 0;
 
+    public bool IsPopupVisible => _node.ShouldShowPopup;
+
     public Node Draw()
     {
         var controls = service.Snapshot;

@@ -2,25 +2,39 @@ using System.Diagnostics;
 using System.Globalization;
 using HyprNetShell.Core.Configuration;
 using HyprNetShell.Core.Features.Hyprland;
+using HyprNetShell.Core.Features.Sni;
+using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
+using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Features.System;
 
-internal sealed class DisplayControlsModuleService : IBarDataService
+internal sealed class DisplayControlsModuleService : IBarDataService, IDisposable
 {
     private const int DEFAULT_TEMPERATURE = 6000;
-    private static readonly TimeSpan BacklightRefreshInterval = TimeSpan.FromSeconds(2);
+    private const string UPOWER_BUS = "org.freedesktop.UPower";
+    private const string KEYBOARD_PATH = "/org/freedesktop/UPower/KbdBacklight";
+    private const string KEYBOARD_INTERFACE = "org.freedesktop.UPower.KbdBacklight";
+
     private static readonly TimeSpan TemperatureRecoveryInterval = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim HyprsunsetLock = new(1, 1);
-    private readonly object _curveLock = new();
-    private readonly object _temperatureQueueLock = new();
-    private readonly object _brightnessQueueLock = new();
+
+    private readonly Lock _snapshotLock = new();
+    private readonly Lock _curveLock = new();
+    private readonly Lock _temperatureQueueLock = new();
+    private readonly Lock _brightnessQueueLock = new();
+
+    private readonly CancellationTokenSource _monitorLifetime = new();
+    private readonly Task _monitorTask;
+
     private readonly IHyprctl _hyprctl;
     private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
-    private TemperatureCurvePoint[] _temperatureCurve;
-    private BrightnessCurvePoint[] _brightnessCurve;
+
+    private readonly TemperatureCurvePoint[] _temperatureCurve;
+    private readonly BrightnessCurvePoint[] _brightnessCurve;
+
     private bool _automaticTemperatureEnabled;
     private bool _automaticBrightnessEnabled;
     private int _latestQueuedTemperature;
@@ -29,13 +43,18 @@ internal sealed class DisplayControlsModuleService : IBarDataService
     private int _latestQueuedBrightness;
     private int _sentQueuedBrightness = int.MinValue;
     private bool _brightnessQueueRunning;
+    private int _disposed;
     private bool? _hyprsunsetInstalled;
     private int _temperature = DEFAULT_TEMPERATURE;
+    
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
     private DateTime _nextBrightnessUpdate = DateTime.MinValue;
     private DateTime _nextBacklightRefreshUtc = DateTime.MinValue;
     private DateTime _nextTemperatureRecoveryUtc = DateTime.MinValue;
     private DisplayControlsSnapshot _snapshot = DisplayControlsSnapshot.Empty;
+
+    public event Action<int>? BrightnessChanged;
+    public event Action<int>? KeyboardBrightnessChanged;
 
     public DisplayControlsSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
@@ -49,6 +68,10 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         _brightnessCurve = NormalizeBrightnessCurve(display.Brightness.Points
             .Select(point => new BrightnessCurvePoint(point.Hour, point.Value)));
         _automaticBrightnessEnabled = display.Brightness.Enabled;
+
+        _monitorTask = Task.WhenAll(
+            Task.Run(MonitorBacklightsAsync),
+            Task.Run(MonitorKeyboardBrightnessAsync));
     }
 
     internal IReadOnlyList<TemperatureCurvePoint> GetTemperatureCurve()
@@ -143,12 +166,11 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
 
         BacklightSnapshot? display = current.Display;
-        BacklightSnapshot? keyboard = current.Keyboard;
         if (refreshBacklights)
         {
-            _nextBacklightRefreshUtc = utcNow + BacklightRefreshInterval;
-            display = ReadBacklight("/sys/class/backlight");
-            keyboard = ReadBacklight("/sys/class/leds", IsKeyboardBacklight);
+            _nextBacklightRefreshUtc = DateTime.MaxValue;
+            RefreshBacklights();
+            display = Snapshot.Display;
         }
 
         if (updateAutomaticBrightness && display is not null)
@@ -161,9 +183,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService
 
             var percentage = BrightnessCurveMath.Evaluate(curve, CurrentHour(localNow));
             await SetBacklightAsync(display, percentage);
-            display = display with {
-                Value = (int)Math.Round(display.Maximum * percentage / 100.0, MidpointRounding.AwayFromZero),
-            };
             _nextBrightnessUpdate = localNow.AddMinutes(5);
         }
 
@@ -175,16 +194,20 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             snapshotBrightnessCurve = [.. _brightnessCurve];
         }
 
-        Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
-            display,
-            keyboard,
-            _hyprsunsetInstalled == true,
-            running,
-            _temperature,
-            snapshotTemperatureCurve,
-            automaticTemperatureEnabled,
-            snapshotBrightnessCurve,
-            automaticBrightnessEnabled));
+        lock (_snapshotLock)
+        {
+            current = Snapshot;
+            Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
+                current.Display,
+                current.Keyboard,
+                _hyprsunsetInstalled == true,
+                running,
+                _temperature,
+                snapshotTemperatureCurve,
+                automaticTemperatureEnabled,
+                snapshotBrightnessCurve,
+                automaticBrightnessEnabled));
+        }
     }
 
     internal void SetCurvePoint(int index, float hour, int temperatureKelvin)
@@ -286,7 +309,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             CancellationToken.None);
         if (result is not null)
         {
-            PublishBacklightValue(backlight, value);
+            PublishBacklightValue(backlight);
             return;
         }
 
@@ -295,11 +318,11 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             await File.WriteAllTextAsync(
                 Path.Combine(backlight.DevicePath, "brightness"),
                 value.ToString(CultureInfo.InvariantCulture));
-            PublishBacklightValue(backlight, value);
+            PublishBacklightValue(backlight);
         }
-        catch
+        catch (Exception exception)
         {
-            // The device may disappear or deny writes; the next snapshot restores the real value.
+            AppLogger.Warning("Display", $"Could not write brightness for {backlight.Name}", exception);
         }
     }
 
@@ -327,30 +350,295 @@ internal sealed class DisplayControlsModuleService : IBarDataService
         }
     }
 
-    private void PublishBacklightValue(BacklightSnapshot backlight, int value)
+    private void PublishBacklightValue(BacklightSnapshot backlight)
     {
-        var current = Snapshot;
-        var updated = backlight with {
-            Value = value
-        };
-        Volatile.Write(ref _snapshot, string.Equals(current.Display?.DevicePath, backlight.DevicePath, StringComparison.Ordinal)
-            ? current with {
-                Display = updated
+        lock (_snapshotLock)
+        {
+            var current = Snapshot;
+            // Read back the applied value: a successful command can still be clamped by the driver.
+            if (!TryReadInt(Path.Combine(backlight.DevicePath, "brightness"), out var actualValue))
+            {
+                return;
             }
-            : current with {
-                Keyboard = updated
-            });
+
+            var updated = backlight with { Value = actualValue };
+            if (string.Equals(current.Display?.DevicePath, backlight.DevicePath, StringComparison.Ordinal))
+            {
+                PublishBacklights(updated, current.Keyboard);
+            }
+
+            else if (string.Equals(current.Keyboard?.DevicePath, backlight.DevicePath, StringComparison.Ordinal))
+            {
+                PublishBacklights(current.Display, updated);
+            }
+        }
     }
 
     private void PublishTemperature(int temperatureKelvin, bool running)
     {
-        _temperature = temperatureKelvin;
+        lock (_snapshotLock)
+        {
+            _temperature = temperatureKelvin;
+            Volatile.Write(ref _snapshot, Snapshot with {
+                HyprsunsetInstalled = true,
+                HyprsunsetRunning = running,
+                TemperatureKelvin = temperatureKelvin,
+            });
+        }
+    }
+
+    private void RefreshBacklights()
+    {
+        lock (_snapshotLock)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                return;
+            }
+
+            PublishBacklights(ReadBacklight("/sys/class/backlight"),
+                ReadBacklight("/sys/class/leds", IsKeyboardBacklight));
+        }
+    }
+
+    // Callers hold the snapshot lock so reads, publications and notifications stay ordered.
+    private void PublishBacklights(BacklightSnapshot? display, BacklightSnapshot? keyboard)
+    {
         var current = Snapshot;
-        Volatile.Write(ref _snapshot, current with {
-            HyprsunsetInstalled = true,
-            HyprsunsetRunning = running,
-            TemperatureKelvin = temperatureKelvin,
-        });
+        Volatile.Write(ref _snapshot, current with { Display = display, Keyboard = keyboard });
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        NotifyBacklightChanged(current.Display, display, BrightnessChanged, "Screen");
+        NotifyBacklightChanged(current.Keyboard, keyboard, KeyboardBrightnessChanged, "Keyboard");
+    }
+
+    private static void NotifyBacklightChanged(BacklightSnapshot? previous, BacklightSnapshot? updated,
+        Action<int>? handlers, string device)
+    {
+        if (previous is null || updated is null || previous.DevicePath != updated.DevicePath ||
+            previous.Percentage == updated.Percentage)
+        {
+            return;
+        }
+
+        if (handlers is not null)
+        {
+            foreach (Action<int> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(updated.Percentage);
+                }
+                catch (Exception exception)
+                {
+                    AppLogger.Warning("Display", $"{device} brightness change subscriber failed", exception);
+                }
+            }
+        }
+    }
+
+    private async Task MonitorKeyboardBrightnessAsync()
+    {
+        var cancellationToken = _monitorLifetime.Token;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                using var connection = new DBusConnection(
+                    DBusAddress.System ?? throw new InvalidOperationException("The system D-Bus address is unavailable"));
+                using var stop = cancellationToken.Register(connection.Dispose);
+                var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                await connection.ConnectAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                using var brightness = await AddKeyboardBrightnessSubscriptionAsync(
+                    connection, "BrightnessChanged", disconnected)
+                    .AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                using var brightnessWithSource = await AddKeyboardBrightnessSubscriptionAsync(
+                    connection, "BrightnessChangedWithSource", disconnected)
+                    .AsTask().WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                RefreshBacklights();
+                await disconnected.Task.WaitAsync(cancellationToken);
+                AppLogger.Warning("Display", "Keyboard brightness D-Bus monitor disconnected; retrying in 30 seconds");
+            }
+            catch (Exception) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Display", "Keyboard brightness D-Bus monitor failed; retrying in 30 seconds", exception);
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private ValueTask<IDisposable> AddKeyboardBrightnessSubscriptionAsync(
+        DBusConnection connection, string member, TaskCompletionSource disconnected) =>
+        connection.AddMatchAsync(
+            new MatchRule {
+                Type = MessageType.Signal,
+                Sender = UPOWER_BUS,
+                Path = KEYBOARD_PATH,
+                Interface = KEYBOARD_INTERFACE,
+                Member = member,
+            },
+            static (message, state) => message.GetBodyReader().ReadInt32(),
+            static notification =>
+            {
+                var (service, disconnected) =
+                    ((DisplayControlsModuleService, TaskCompletionSource))notification.State!;
+                if (!notification.HasValue)
+                {
+                    disconnected.TrySetResult();
+                    return;
+                }
+
+                // Read sysfs rather than assuming UPower selected the same keyboard LED.
+                // Both signals can describe one write; publication suppresses duplicate values.
+                service.RefreshBacklights();
+            },
+            false,
+            Dbus.CONNECTION_FAILURE_OBSERVER_FLAGS,
+            (this, disconnected));
+
+    private async Task MonitorBacklightsAsync()
+    {
+        var cancellationToken = _monitorLifetime.Token;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // Periodic restart bounds each child lifetime and recovers a stuck monitor.
+                using var session = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                session.CancelAfter(TimeSpan.FromMinutes(10));
+                using var process = new Process {
+                    StartInfo = new ProcessStartInfo {
+                        FileName = "udevadm",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                    },
+                };
+                foreach (var argument in new[] { "monitor", "--kernel", "--subsystem-match=backlight", "--subsystem-match=leds" })
+                {
+                    process.StartInfo.ArgumentList.Add(argument);
+                }
+
+                process.Start();
+                using var stop = session.Token.Register(() =>
+                {
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill(entireProcessTree: true);
+                        }
+                    }
+
+                    catch (Exception exception)
+                    {
+                        AppLogger.Warning("Display", "Could not stop backlight monitor", exception);
+                    }
+                });
+                var errors = DrainMonitorErrorsAsync(process, session.Token);
+                try
+                {
+                    while (await process.StandardOutput.ReadLineAsync(session.Token) is { } line)
+                    {
+                        if (line.StartsWith("KERNEL[", StringComparison.Ordinal))
+                        {
+                            RefreshBacklights();
+                        }
+                    }
+
+                    await process.WaitForExitAsync(session.Token);
+                    AppLogger.Warning("Display", $"Backlight monitor exited with code {process.ExitCode}; retrying in 30 seconds");
+                }
+
+                finally
+                {
+                    session.Cancel();
+                    await errors;
+                    using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                    await process.WaitForExitAsync(shutdown.Token);
+                }
+            }
+
+            catch (OperationCanceledException)
+            {
+                continue;
+            }
+
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Display", "Backlight event monitor failed; retrying in 30 seconds", exception);
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+
+            catch (OperationCanceledException) { }
+        }
+    }
+
+    private static async Task DrainMonitorErrorsAsync(Process process, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await process.StandardError.ReadLineAsync(cancellationToken) is { } line)
+            {
+                AppLogger.Warning("Display", $"Backlight monitor: {line}");
+            }
+        }
+
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _monitorLifetime.Cancel();
+        try
+        {
+            if (!_monitorTask.Wait(TimeSpan.FromSeconds(2)))
+            {
+                AppLogger.Warning("Display", "Backlight monitor did not stop within two seconds");
+            }
+        }
+
+        catch (Exception exception)
+        {
+            AppLogger.Warning("Display", "Backlight monitor shutdown failed", exception);
+        }
+
+        // If shutdown times out, release subscribers and the token source only after the worker stops.
+        _ = _monitorTask.ContinueWith(
+            _ =>
+            {
+                BrightnessChanged = null;
+                KeyboardBrightnessChanged = null;
+                _monitorLifetime.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private static BacklightSnapshot? ReadBacklight(
@@ -375,9 +663,11 @@ internal sealed class DisplayControlsModuleService : IBarDataService
                 }
             }
         }
-        catch
+        catch (DirectoryNotFoundException) { }
+
+        catch (Exception exception)
         {
-            // Treat inaccessible sysfs classes as unavailable.
+            AppLogger.Warning("Display", $"Could not discover backlights under {root}", exception);
         }
 
         return null;
@@ -390,8 +680,9 @@ internal sealed class DisplayControlsModuleService : IBarDataService
             return int.TryParse(File.ReadAllText(path).Trim(), NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out value);
         }
-        catch
+        catch (Exception exception)
         {
+            AppLogger.Warning("Display", $"Could not read backlight value from {path}", exception);
             value = 0;
             return false;
         }

@@ -16,6 +16,8 @@ threads = dependency('threads')
 libm = cc.find_library('m', required: true)
 
 wayland_scanner = find_program('wayland-scanner')
+wayland_protocols = dependency('wayland-protocols', version: '>= 1.32')
+wayland_protocols_dir = wayland_protocols.get_variable(pkgconfig: 'pkgdatadir')
 layer_shell_xml = files('protocols/wlr-layer-shell-unstable-v1.xml')
 session_lock_xml = files('protocols/ext-session-lock-v1.xml')
 image_capture_source_xml = files('protocols/ext-image-capture-source-v1.xml')
@@ -53,6 +55,14 @@ session_lock_code = custom_target(
 
 capture_protocols = []
 foreach protocol_definition : [
+    [
+        'cursor-shape-v1',
+        files(wayland_protocols_dir / 'staging/cursor-shape/cursor-shape-v1.xml'),
+    ],
+    [
+        'tablet-v2',
+        files(wayland_protocols_dir / 'unstable/tablet/tablet-unstable-v2.xml'),
+    ],
     ['ext-foreign-toplevel-list-v1', foreign_toplevel_xml],
     ['ext-image-capture-source-v1', image_capture_source_xml],
     ['ext-image-copy-capture-v1', image_copy_capture_xml],

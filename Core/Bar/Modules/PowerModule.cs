@@ -14,6 +14,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class PowerModule(
     DialogService dialogs,
+    TrayModule tray,
     IHyprctl hyprctl,
     Action requestLockScreen,
     PopupCoordinator popupCoordinator) : IDrawableModule
@@ -28,7 +29,13 @@ internal sealed class PowerModule(
         HorizontalAlignment = ItemsAlignment.End,
     };
 
-    public Node Draw() => _node.Draw([
+    public Node Draw() => new BoxNode {
+        Direction = Direction.Horizontal,
+        VerticalAlignment = ItemsAlignment.Center,
+        Children = [tray.Draw(), BuildPower()],
+    };
+
+    private Node BuildPower() => _node.Draw([
             new BoxNode(height: 52 - (int)(ThemeManager.Current.Border.Width * 2))
             {
                 VerticalAlignment = ItemsAlignment.Center,

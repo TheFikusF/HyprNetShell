@@ -19,7 +19,7 @@ internal sealed record OverviewPreview(string Address, string Title, string Subt
 internal readonly record struct OverviewDrawContext(int Width, int Height, int X, int Y,
     float Progress, float TransitionProgress, bool PreviewTransition, bool Interactive,
     bool PointerOverOverlay, double Now, double DeltaTime, string? FocusedAddress,
-    string? SelectedAddress, IReadOnlyList<OverviewPreview> Previews, RawImageData? Background);
+    string? SelectedAddress, IReadOnlyList<OverviewPreview> Previews, RawImageData? Background, float ContentOpacity = 1);
 
 internal interface IOverviewDrawer
 {

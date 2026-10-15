@@ -20,6 +20,7 @@
 #include <wayland-egl.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include "cursor-shape-v1-client-protocol.h"
 #include "ext-data-control-v1-client-protocol.h"
 #include "ext-foreign-toplevel-list-v1-client-protocol.h"
 #include "ext-image-capture-source-v1-client-protocol.h"
@@ -118,6 +119,9 @@ struct hypr_layer
     uint32_t seat_registry_name;
     uint32_t seat_version;
     struct wl_pointer *pointer;
+    struct wp_cursor_shape_manager_v1 *cursor_shape_manager;
+    struct wp_cursor_shape_device_v1 *cursor_shape_device;
+    uint32_t cursor_shape_manager_name;
     struct wl_keyboard *keyboard;
     struct zwlr_layer_shell_v1 *layer_shell;
     uint32_t layer_shell_version;
@@ -877,8 +881,45 @@ static void destroy_output(struct hypr_bar *bar)
     free(bar);
 }
 
+static void ensure_cursor_shape_device(struct hypr_layer *layer)
+{
+    if (layer->cursor_shape_manager != NULL && layer->pointer != NULL &&
+        layer->cursor_shape_device == NULL)
+    {
+        layer->cursor_shape_device = wp_cursor_shape_manager_v1_get_pointer(
+            layer->cursor_shape_manager, layer->pointer);
+        if (layer->cursor_shape_device == NULL)
+        {
+            fail_fatal(layer,
+                       "failed to create the Wayland cursor shape device");
+        }
+    }
+}
+
+static void release_cursor_shape_device(struct hypr_layer *layer)
+{
+    if (layer->cursor_shape_device != NULL)
+    {
+        wp_cursor_shape_device_v1_destroy(layer->cursor_shape_device);
+        layer->cursor_shape_device = NULL;
+    }
+}
+
+static void release_cursor_shape_manager(struct hypr_layer *layer)
+{
+    release_cursor_shape_device(layer);
+    if (layer->cursor_shape_manager != NULL)
+    {
+        wp_cursor_shape_manager_v1_destroy(layer->cursor_shape_manager);
+        layer->cursor_shape_manager = NULL;
+    }
+
+    layer->cursor_shape_manager_name = 0;
+}
+
 static void release_pointer(struct hypr_layer *layer)
 {
+    release_cursor_shape_device(layer);
     if (layer->pointer == NULL)
     {
         return;
@@ -1147,6 +1188,23 @@ static void registry_global(void *data, struct wl_registry *registry,
         }
     }
 
+    else if (strcmp(interface, wp_cursor_shape_manager_v1_interface.name) ==
+                 0 &&
+             layer->cursor_shape_manager == NULL)
+    {
+        layer->cursor_shape_manager = wl_registry_bind(
+            registry, name, &wp_cursor_shape_manager_v1_interface, 1);
+        if (layer->cursor_shape_manager == NULL)
+        {
+            fail_fatal(layer,
+                       "failed to bind the Wayland cursor shape manager");
+            return;
+        }
+
+        layer->cursor_shape_manager_name = name;
+        ensure_cursor_shape_device(layer);
+    }
+
     else if (strcmp(interface, wl_shm_interface.name) == 0 &&
              layer->shm == NULL)
     {
@@ -1284,6 +1342,13 @@ static void registry_global_remove(void *data, struct wl_registry *registry,
 {
     (void)registry;
     struct hypr_layer *layer = data;
+    if (layer->cursor_shape_manager != NULL &&
+        name == layer->cursor_shape_manager_name)
+    {
+        release_cursor_shape_manager(layer);
+        return;
+    }
+
     if (layer->mapping_manager != NULL && name == layer->mapping_manager_name)
     {
         fail("hyprland-toplevel-mapping-v1 global removed; exact window "
@@ -1375,7 +1440,6 @@ static void pointer_enter(void *data, struct wl_pointer *pointer,
                           wl_fixed_t surface_x, wl_fixed_t surface_y)
 {
     (void)pointer;
-    (void)serial;
     struct hypr_layer *layer = data;
     struct hypr_bar *bar = find_bar_by_surface(layer, surface);
     if (layer->pointer_focus != NULL && layer->pointer_focus != bar)
@@ -1387,6 +1451,15 @@ static void pointer_enter(void *data, struct wl_pointer *pointer,
     layer->pointer_focus = bar;
     if (bar != NULL)
     {
+        if (layer->cursor_shape_device != NULL)
+        {
+            uint32_t shape = surface == bar->screenshot_surface
+                                 ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
+                                 : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+            wp_cursor_shape_device_v1_set_shape(layer->cursor_shape_device,
+                                                serial, shape);
+        }
+
         bar->pointer_inside = 1;
         bar->pointer_x = wl_fixed_to_double(surface_x);
         bar->pointer_y = wl_fixed_to_double(surface_y);
@@ -1720,6 +1793,11 @@ static void seat_capabilities(void *data, struct wl_seat *seat,
     else if (!has_pointer && layer->pointer != NULL)
     {
         release_pointer(layer);
+    }
+
+    if (has_pointer)
+    {
+        ensure_cursor_shape_device(layer);
     }
 
     if (has_keyboard && layer->keyboard == NULL)
@@ -3411,6 +3489,7 @@ void hypr_layer_destroy(hypr_layer *layer)
     }
 
     release_seat(layer);
+    release_cursor_shape_manager(layer);
     while (layer->clipboard_sources != NULL)
     {
         struct clipboard_source *clipboard = layer->clipboard_sources;

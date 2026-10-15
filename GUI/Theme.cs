@@ -6,26 +6,11 @@ public sealed record Theme
 {
     public readonly struct TextParams
     {
-        public float Size
-        {
-            get; init;
-        }
-        public float HeaderSize
-        {
-            get; init;
-        }
-        public float SmallSize
-        {
-            get; init;
-        }
-        public Color Color
-        {
-            get; init;
-        }
-        public Color MutedColor
-        {
-            get; init;
-        }
+        public float Size { get; init; }
+        public float HeaderSize { get; init; }
+        public float SmallSize { get; init; }
+        public Color Color { get; init; }
+        public Color MutedColor { get; init; }
 
         public static implicit operator Color(TextParams value) => value.Color;
         public static implicit operator float(TextParams value) => value.Size;
@@ -33,51 +18,21 @@ public sealed record Theme
 
     public readonly struct BorderParams
     {
-        public float Radius
-        {
-            get; init;
-        }
-        public float Width
-        {
-            get; init;
-        }
-        public Color Color
-        {
-            get; init;
-        }
+        public float Radius { get; init; }
+        public float Width { get; init; }
+        public Color Color { get; init; }
 
         public static implicit operator Color(BorderParams value) => value.Color;
     }
 
-    public Color Panel
-    {
-        get; init;
-    }
-    public Color Active
-    {
-        get; init;
-    }
-    public Color Warning
-    {
-        get; init;
-    }
-    public Color Critical
-    {
-        get; init;
-    }
+    public Color Panel { get; init; }
+    public Color Active { get; init; }
+    public Color Warning { get; init; }
+    public Color Critical { get; init; }
 
-    public int IconSize
-    {
-        get; init;
-    }
-    public BorderParams Border
-    {
-        get; init;
-    }
-    public TextParams Text
-    {
-        get; init;
-    }
+    public int IconSize { get; init; }
+    public BorderParams Border { get; init; }
+    public TextParams Text { get; init; }
 
     internal static Theme CreateDefault() => new() {
         Panel = Color.FromRgb(31, 35, 44, 0.9f),

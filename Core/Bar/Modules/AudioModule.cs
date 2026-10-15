@@ -48,6 +48,8 @@ internal sealed class AudioModule(
         HorizontalAlignment = ItemsAlignment.Center,
     };
 
+    public bool IsPopupVisible => _node.ShouldShowPopup;
+
     public Node Draw()
     {
         var audio = service.Snapshot;
