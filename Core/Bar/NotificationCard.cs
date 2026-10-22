@@ -89,20 +89,16 @@ internal static class NotificationCard
     {
         if (!state.ContentInitialized)
         {
-            state.Content.Background = ThemeManager.Current.Panel with {
-                A = 0.2f
-            };
+            state.Content.Background = ThemeManager.Current.Panel with { A = 0.3f };
             state.ContentInitialized = true;
         }
-        state.Content.UpdateColor(ThemeManager.Current.Panel with {
-            A = 0.2f
-        });
+        state.Content.UpdateColor(ThemeManager.Current.Panel with { A = 0.3f });
 
         TextNode[] children = string.IsNullOrWhiteSpace(notification.Body)
             ? [new TextNode(notification.Title, wrapping: TextWrapping.Wrap, maxLines: 3)]
             :
             [
-                new TextNode(notification.Title, 16, wrapping: TextWrapping.Ellipsis),
+                new TextNode(notification.Title, ThemeManager.Current.Text.HeaderSize, wrapping: TextWrapping.Ellipsis),
                 new TextNode(notification.Body, wrapping: TextWrapping.Wrap, maxLines: 3),
             ];
 
@@ -219,7 +215,7 @@ internal static class NotificationCard
         yield return new BoxNode {
             Direction = Direction.Vertical,
             HorizontalAlignment = ItemsAlignment.Stretch,
-            Style = new Style { Spacing = 6 },
+            Style = Style.Spacer,
             Children =
             [
                 ..actions.Select(action => BuildAction(notification.Id, action, service, state)),
@@ -246,7 +242,7 @@ internal static class NotificationCard
             },
             Children =
             [
-                new TextNode(action.Label, 12, wrapping: TextWrapping.Ellipsis),
+                new TextNode(action.Label, ThemeManager.Current.Text.SmallSize, wrapping: TextWrapping.Ellipsis),
             ],
         };
     }

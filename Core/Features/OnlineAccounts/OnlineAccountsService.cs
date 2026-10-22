@@ -199,9 +199,12 @@ internal sealed class OnlineAccountsService : IDisposable
             using var response = await SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                var providerError = ReadOAuthError(responseBody);
+                var detail = providerError is null ? "" : $": {providerError.TrimEnd().TrimEnd('.')}";
                 AppLogger.Warning(
                     "OnlineAccounts",
-                    $"{definition.Name} token refresh failed ({(int)response.StatusCode})");
+                    $"{definition.Name} token refresh failed ({(int)response.StatusCode}){detail}");
                 return null;
             }
 

@@ -28,6 +28,7 @@ internal sealed class TabsService : IDisposable
         WeatherService weather,
         CalendarService calendar,
         DictionaryService dictionary,
+        NotificationService notifications,
         Action closeDialog)
     {
         Inputs = new TextInputCoordinator(clipboardHistory);
@@ -37,12 +38,13 @@ internal sealed class TabsService : IDisposable
             new ApplicationLauncherTab(hyprctl, closeDialog, Inputs),
             new CalculatorTab(clipboardHistory, Inputs),
             new DictionaryTab(dictionary, clipboardHistory, Inputs),
-            new WorldClockTab(Inputs),
+            new ClocksTab(Inputs),
             new CalendarTab(calendar),
             new TetrisTab(),
             new SolitaireTab(),
             new MinesweeperTab(),
             new ClipboardManagerTab(clipboardHistory, kdeConnect, closeDialog, Inputs),
+            new NotificationsTab(notifications, Inputs),
             new KdeConnectTab(kdeConnect),
             new WallpapersTab(wallpapers, closeDialog, Inputs),
             new WifiTab(network, Inputs),

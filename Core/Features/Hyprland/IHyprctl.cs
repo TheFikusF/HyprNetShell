@@ -8,6 +8,7 @@ internal interface IHyprctl : IDisposable
         string actionId,
         CancellationToken cancellationToken = default);
     Task<bool> FocusWorkspaceAsync(int workspaceId, CancellationToken cancellationToken = default);
+    Task<bool> OpenWorkspaceOnMonitorAsync(int workspaceId, string monitorName, CancellationToken cancellationToken = default);
     Task<bool> FocusWindowAsync(string windowAddress, CancellationToken cancellationToken = default);
     Task<bool> ExitSessionAsync(CancellationToken cancellationToken = default);
     Task<bool> Bind(

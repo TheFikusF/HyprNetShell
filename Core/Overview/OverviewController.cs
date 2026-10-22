@@ -25,6 +25,7 @@ namespace HyprNetShell.Core.Overview;
 public sealed class OverviewController : IDisposable
 {
     private readonly record struct WindowIdentity(string Address, string Title, int WorkspaceId, string MonitorName, int Width, int Height, string ClassName, string InitialClassName);
+
     public const float THUMBNAILS_SCALE = 1f;
     private const int OVERVIEW_PADDING = 24;
 #if DEBUG_OVERVIEW_ZOOM
@@ -161,7 +162,6 @@ public sealed class OverviewController : IDisposable
         {
             Close();
         }
-
         else if (outputId.HasValue && outputName is not null)
         {
             _transitionFrom = OwnerOutputId == outputId ? Progress : 0;
@@ -210,7 +210,6 @@ public sealed class OverviewController : IDisposable
             {
                 _search.ClearQuery();
             }
-
             else
             {
                 Close();
@@ -242,7 +241,6 @@ public sealed class OverviewController : IDisposable
             {
                 _search.ActivateSelection();
             }
-
             else if (key is DialogKey.Up or DialogKey.Down or DialogKey.Left or DialogKey.Right)
             {
                 _search.MoveSelection(key switch {
@@ -422,12 +420,9 @@ public sealed class OverviewController : IDisposable
             ],
         };
 
-        foreach (var child in overlay.Children)
+        foreach (var child in overlay.Children.Where(x => !ReferenceEquals(x, sidePanel)))
         {
-            if (!ReferenceEquals(child, sidePanel))
-            {
-                child.Opacity = _contentOpacity;
-            }
+            child.Opacity = _contentOpacity;
         }
 
         if (contentHidden)
@@ -439,26 +434,29 @@ public sealed class OverviewController : IDisposable
         var music = _music.Snapshot;
         if (music.Playing)
         {
-            var musicWidth = Math.Max(1, Math.Min(320, (width - searchWidth) / 2 - 2 * OVERVIEW_PADDING));
-            var textWidth = Math.Max(1, musicWidth - 64 - 12);
+            const int MAX_WIDTH = 400;
+            const int ICON_WIDTH = 64;
+
+            var musicWidth = Math.Max(1, Math.Min(MAX_WIDTH, (width - searchWidth) / 2 - 2 * OVERVIEW_PADDING));
+            var textWidth = Math.Max(1, musicWidth - ICON_WIDTH - 12);
             overlay.Children.Add(new BoxNode(musicWidth) {
                 IgnoreLayout = true,
                 Left = OVERVIEW_PADDING,
                 Top = OVERVIEW_PADDING,
                 Direction = Direction.Horizontal,
                 VerticalAlignment = ItemsAlignment.Center,
-                Style = Style.Spacer with { Spacing = 12 },
+                Style = new Style { Spacing = 12 },
                 Children =
                 [
                     string.IsNullOrWhiteSpace(music.ImagePath)
-                        ? new BoxNode(64, 64)
+                        ? new BoxNode(ICON_WIDTH, ICON_WIDTH)
                         {
                             HorizontalAlignment = ItemsAlignment.Center,
                             VerticalAlignment = ItemsAlignment.Center,
                             Style = new Style { BackgroundColor = theme.Panel },
                             Children = [new ImageNode(Icons.MusicNotes[0], 32, 32, theme.Text.Color)]
                         }
-                        : new ImageNode(music.ImagePath, 64, 64),
+                        : new ImageNode(music.ImagePath, ICON_WIDTH, ICON_WIDTH),
                     new BoxNode(textWidth) {
                         Direction = Direction.Vertical,
                         HorizontalAlignment = ItemsAlignment.Start,

@@ -13,6 +13,7 @@ namespace HyprNetShell.Core.Bar.Modules;
 internal sealed class WorkspacesModule : IDrawableModule
 {
     private readonly Dictionary<int, ModulesCommon.BoxState> _popupWorkspaceStates = [];
+    private readonly Dictionary<string, ModulesCommon.BoxState> _newWorkspaceStates = [];
 
     private readonly NodeWithPopup _node;
     private readonly HyprlandService _hyprland;
@@ -22,7 +23,6 @@ internal sealed class WorkspacesModule : IDrawableModule
     public WorkspacesModule(
         HyprlandService hyprland,
         IHyprctl hyprctl,
-
         Func<string> getOutputName,
         Func<bool> blockPopup,
         PopupCoordinator popupCoordinator)
@@ -33,8 +33,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         var blockPopup1 = blockPopup;
         _node = new(popupCoordinator, "workspaces_module", ignorePopupQueue: true) {
             TopOffset = 36,
-            GetShouldShowPopup = hovered => hovered &&
-                                            blockPopup1() == false,
+            GetShouldShowPopup = hovered => hovered && blockPopup1() == false,
         };
     }
 
@@ -50,6 +49,7 @@ internal sealed class WorkspacesModule : IDrawableModule
         var activeWorkspaceId = monitor?.ActiveWorkspaceId > 0
             ? monitor.ActiveWorkspaceId
             : 0;
+
         var activeWorkspace = monitor?.Workspaces.FirstOrDefault(workspace => workspace.Id == activeWorkspaceId);
         var representativeWindow = activeWorkspace?.Windows.FirstOrDefault();
         var useFocusedWindow = monitor?.Current == true;
@@ -149,8 +149,42 @@ internal sealed class WorkspacesModule : IDrawableModule
         [
             ModulesCommon.BuildTextWithIcon(Icons.Monitor, $"Monitor {monitorName}"),
             ..workspaces.Select(WorkspaceModule),
+            BuildNewWorkspaceButton(monitorName),
         ],
     };
+
+    private BoxNode BuildNewWorkspaceButton(string monitorName)
+    {
+        var state = _newWorkspaceStates.GetState(monitorName, ThemeManager.Current.Panel)
+            .UpdateColor(ThemeManager.Current.Panel);
+        return new BoxNode(height: 36) {
+            HorizontalAlignment = ItemsAlignment.Center,
+            VerticalAlignment = ItemsAlignment.Center,
+            OnClick = () => OpenNewWorkspace(monitorName),
+            IsHovered = state.Hovered,
+            Style = ModulesCommon.ModuleStyle(state.Background) with {
+                BorderRadius = 8,
+                BorderWidth = 0,
+                Spacing = 8,
+            },
+            Children = ["+", new ImageNode(Icons.Monitor, color: ThemeManager.Current.Text), "Workspace"],
+        };
+    }
+
+    private void OpenNewWorkspace(string monitorName)
+    {
+        var usedWorkspaceIds = _hyprland.Snapshot.MonitorWorkspaces
+            .SelectMany(monitor => monitor.Workspaces)
+            .Select(workspace => workspace.Id)
+            .ToHashSet();
+        var workspaceId = 1;
+        while (usedWorkspaceIds.Contains(workspaceId))
+        {
+            workspaceId++;
+        }
+
+        _ = _hyprctl.OpenWorkspaceOnMonitorAsync(workspaceId, monitorName);
+    }
 
     private BoxNode WorkspaceModule(WorkspaceSnapshot workspace)
     {
@@ -182,7 +216,7 @@ internal sealed class WorkspacesModule : IDrawableModule
 
     private void ResetPopupHoverState()
     {
-        foreach (var state in _popupWorkspaceStates.Values)
+        foreach (var state in _popupWorkspaceStates.Values.Concat(_newWorkspaceStates.Values))
         {
             state.Hovered.Value = false;
         }

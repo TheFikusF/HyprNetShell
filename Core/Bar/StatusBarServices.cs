@@ -170,6 +170,8 @@ public sealed class StatusBarServices : IDisposable
     {
         get;
     }
+    internal ClockToolsService ClockTools { get; }
+
     internal DictionaryService Dictionary
     {
         get;
@@ -225,6 +227,7 @@ public sealed class StatusBarServices : IDisposable
         Weather = new WeatherService(UrlLauncher);
         OnlineAccounts = new OnlineAccountsService(UrlLauncher);
         Calendar = new CalendarService(OnlineAccounts);
+        ClockTools = new ClockToolsService(Calendar, Notifications);
         Dictionary = new DictionaryService();
         ChatGptUsage = new ChatGptUsageService(OnlineAccounts);
         Spotify = new SpotifyPlaybackService(OnlineAccounts);
@@ -246,6 +249,7 @@ public sealed class StatusBarServices : IDisposable
             Weather,
             Calendar,
             Dictionary,
+            Notifications,
             Dialogs.Close);
         CompositeWindowConfiguration = new CompositeWindowConfiguration(Tabs.Tabs);
         Dialogs.Register(new CompositeWindow(Tabs.Inputs));
@@ -307,6 +311,7 @@ public sealed class StatusBarServices : IDisposable
     public void RefreshState()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ClockTools.Tick();
         CheckConnectionNotifications();
         DeviceBatteries.Refresh();
         if (_refreshTask is { IsCompleted: false })
@@ -456,6 +461,7 @@ public sealed class StatusBarServices : IDisposable
         Music.Dispose();
         Spotify.Dispose();
         ChatGptUsage.Dispose();
+        ClockTools.Dispose();
         Calendar.Dispose();
         OnlineAccounts.Dispose();
         Weather.Dispose();

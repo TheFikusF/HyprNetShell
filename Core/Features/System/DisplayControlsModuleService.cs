@@ -46,7 +46,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
     private int _disposed;
     private bool? _hyprsunsetInstalled;
     private int _temperature = DEFAULT_TEMPERATURE;
-    
+
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
     private DateTime _nextBrightnessUpdate = DateTime.MinValue;
     private DateTime _nextBacklightRefreshUtc = DateTime.MinValue;
@@ -424,18 +424,20 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
             return;
         }
 
-        if (handlers is not null)
+        if (handlers is null)
         {
-            foreach (Action<int> handler in handlers.GetInvocationList())
+            return;
+        }
+
+        foreach (var handler in handlers.GetInvocationList().Cast<Action<int>>())
+        {
+            try
             {
-                try
-                {
-                    handler(updated.Percentage);
-                }
-                catch (Exception exception)
-                {
-                    AppLogger.Warning("Display", $"{device} brightness change subscriber failed", exception);
-                }
+                handler(updated.Percentage);
+            }
+            catch (Exception exception)
+            {
+                AppLogger.Warning("Display", $"{device} brightness change subscriber failed", exception);
             }
         }
     }
@@ -565,7 +567,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                     await process.WaitForExitAsync(session.Token);
                     AppLogger.Warning("Display", $"Backlight monitor exited with code {process.ExitCode}; retrying in 30 seconds");
                 }
-
                 finally
                 {
                     session.Cancel();
@@ -574,12 +575,10 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                     await process.WaitForExitAsync(shutdown.Token);
                 }
             }
-
             catch (OperationCanceledException)
             {
                 continue;
             }
-
             catch (Exception exception)
             {
                 AppLogger.Warning("Display", "Backlight event monitor failed; retrying in 30 seconds", exception);
@@ -589,7 +588,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
             {
                 await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
             }
-
             catch (OperationCanceledException) { }
         }
     }
@@ -603,7 +601,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                 AppLogger.Warning("Display", $"Backlight monitor: {line}");
             }
         }
-
         catch (OperationCanceledException) { }
     }
 
@@ -622,7 +619,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                 AppLogger.Warning("Display", "Backlight monitor did not stop within two seconds");
             }
         }
-
         catch (Exception exception)
         {
             AppLogger.Warning("Display", "Backlight monitor shutdown failed", exception);
@@ -664,7 +660,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
             }
         }
         catch (DirectoryNotFoundException) { }
-
         catch (Exception exception)
         {
             AppLogger.Warning("Display", $"Could not discover backlights under {root}", exception);

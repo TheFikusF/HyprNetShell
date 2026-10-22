@@ -443,6 +443,15 @@ public static partial class Icons
         get;
     }
 
+    [SvgAsset("assets/icons/lucide/alarm-clock.svg")]
+    public static partial SvgAsset AlarmClock { get; }
+
+    [SvgAsset("assets/icons/lucide/timer.svg")]
+    public static partial SvgAsset Timer { get; }
+
+    [SvgAsset("assets/icons/lucide/timer-reset.svg")]
+    public static partial SvgAsset Stopwatch { get; }
+
     [SvgAsset("assets/icons/lucide/clock.svg")]
     public static partial SvgAsset Clock
     {

@@ -83,6 +83,7 @@ public static class ModulesCommon
     {
         state.UpdateColor(ThemeManager.Current.Panel);
         return new(height: 34) {
+            Flex = 1,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Center,
             OnClick = onClick,

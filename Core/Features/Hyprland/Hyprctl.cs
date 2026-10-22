@@ -38,6 +38,23 @@ internal sealed class Hyprctl : IHyprctl
             $"focus workspace {workspaceId}",
             cancellationToken);
 
+    public async Task<bool> OpenWorkspaceOnMonitorAsync(
+        int workspaceId,
+        string monitorName,
+        CancellationToken cancellationToken = default)
+    {
+        var focused = await DispatchAsync(
+            $"hl.dsp.focus({{ monitor = {LuaString(monitorName)} }})",
+            $"focus monitor {monitorName}",
+            cancellationToken);
+        if (!focused)
+        {
+            return false;
+        }
+
+        return await FocusWorkspaceAsync(workspaceId, cancellationToken);
+    }
+
     public Task<bool> FocusWindowAsync(string windowAddress, CancellationToken cancellationToken = default) =>
         DispatchAsync(
             $"hl.dsp.focus({{ window = {LuaString($"address:{windowAddress}")} }})",

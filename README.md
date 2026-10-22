@@ -47,6 +47,13 @@ Runtime integrations use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bl
 
 **Gentoo:** see [`packaging/gentoo/`](packaging/gentoo/README.md) for the binary ebuild, overlay setup, runtime dependencies, and lock-screen PAM policy.
 
+## Logs
+
+Logs are sent directly to the systemd journal with the identifier `hyprnetshell`, including when launched directly from Hyprland.
+Journald and console logging are enabled by default; file logging is disabled.
+
+Configure `AppLogger.ConsoleLoggingEnabled`, `AppLogger.JournalLoggingEnabled`, and `AppLogger.FileLoggingEnabled` before calling `AppLogger.Initialize()`; enabled outputs are registered during initialization. Opting into file logging creates the rotating log at `$XDG_STATE_HOME/hyprnetshell/hyprnetshell.log` (default: `~/.local/state/hyprnetshell/hyprnetshell.log`). If journald is absent, other enabled outputs continue; journal connection or send failures are reported through them.
+
 ## Optional online accounts
 
 **Settings → Accounts** supports Google, Spotify, and ChatGPT sign-in. Credentials are stored through a Freedesktop Secret Service provider such as GNOME Keyring, KDE Wallet, or KeePassXC—not plaintext files.

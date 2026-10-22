@@ -23,7 +23,7 @@ internal sealed class CenterModule : IDrawableModule
     private const string SUN_MOON_IMAGE_RESOURCE_NAME = "HyprNetShell.Assets.Clock_4.png";
     private const int CAROUSEL_PAGE_COUNT = 3;
 
-    public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + WorldClocksWidget.WIDTH;
+    public const int WIDTH = CalendarWidget.WIDTH + 12 + WeatherWidget.WIDTH + 12 + ClocksWidget.WIDTH;
 
     private static readonly EncodedImageData ClockImage = LoadClockImage(CLOCK_IMAGE_RESOURCE_NAME);
     private static readonly EncodedImageData SunMoonImage = LoadClockImage(SUN_MOON_IMAGE_RESOURCE_NAME);
@@ -31,7 +31,7 @@ internal sealed class CenterModule : IDrawableModule
     private readonly NotificationService _notificationService;
 
     private readonly CalendarWidget _calendar;
-    private readonly WorldClocksWidget _worldClocks;
+    private readonly ClocksWidget _worldClocks;
     private readonly WeatherWidget _weather;
     private readonly DialogService _dialogs;
     private readonly TabsService _tabs;
@@ -66,7 +66,7 @@ internal sealed class CenterModule : IDrawableModule
             HorizontalAlignment = ItemsAlignment.Center,
         };
         _calendar = new CalendarWidget(calendar);
-        _worldClocks = new WorldClocksWidget(clipboard);
+        _worldClocks = new ClocksWidget(clipboard);
         _weather = weather;
         _dialogs = dialogs;
         _tabs = tabs;
@@ -262,7 +262,7 @@ internal sealed class CenterModule : IDrawableModule
                 },
                 BuildCarouselNavigation(),
                 ModulesCommon.BuildDivider(ThemeManager.Current.Border, height: 12),
-                _notificationsWidget.Draw(snapshot),
+                _notificationsWidget.Draw(snapshot, openNotifications: OpenNotifications),
             ],
         };
     }
@@ -323,6 +323,12 @@ internal sealed class CenterModule : IDrawableModule
         Children = [new ImageNode(direction > 0 ? Icons.ChevronRight : Icons.ChevronLeft, color: ThemeManager.Current.Text)],
     };
 
+    private void OpenNotifications()
+    {
+        _node.ClosePopup();
+        _dialogs.Open<CompositeWindow>([_tabs.Get<NotificationsTab>()]);
+    }
+
     private void OpenCalendar()
     {
         _node.ClosePopup();
@@ -338,7 +344,7 @@ internal sealed class CenterModule : IDrawableModule
     private void OpenWorldClocks()
     {
         _node.ClosePopup();
-        _dialogs.Open<CompositeWindow>([_tabs.Get<WorldClockTab>()]);
+        _dialogs.Open<CompositeWindow>([_tabs.Get<ClocksTab>()]);
     }
 
     private void OpenKdeConnect()

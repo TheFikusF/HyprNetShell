@@ -17,49 +17,62 @@ internal sealed class NotificationsWidget(NotificationService service)
     private readonly Ref<float> _doNotDisturbSwitchAnimation = new(service.Snapshot.DoNotDisturb ? 1.0f : 0.0f);
     private readonly Dictionary<uint, NotificationCard.State> _cardStates = new();
     private readonly ModulesCommon.BoxState _clearButtonState = new();
+    private readonly ModulesCommon.BoxState _titleState = new();
     private bool _clearButtonInitialized;
     private HistoryDateRange _dateRange;
     private DropdownNode? _dateDropdown;
     private int _firstNotificationIndex;
 
-    public Node Draw(NotificationsSnapshot snapshot)
+    public void ResetViewport() => _firstNotificationIndex = 0;
+
+    public void MoveViewport(int delta) => _firstNotificationIndex = Math.Max(0, _firstNotificationIndex + delta);
+
+    public Node Draw(NotificationsSnapshot snapshot, string query = "", bool constrainWidth = true, Action? openNotifications = null)
     {
         RemoveExpiredCardStates(snapshot.Items);
         var filteredItems = snapshot.Items
             .Where(notification => notification.StoreInHistory)
             .Where(notification => HistoryDateFilter.Includes(_dateRange, notification.ReceivedAt))
+            .Where(notification => string.IsNullOrWhiteSpace(query)
+                || notification.AppName.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || notification.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || notification.Body.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         BoundedListUi.NormalizeViewport(
             ref _firstNotificationIndex,
             filteredItems.Length,
             VISIBLE_NOTIFICATION_COUNT);
 
-        return new BoxNode(CenterModule.WIDTH + (28 + 12) * 2) {
+        return new BoxNode(constrainWidth ? CenterModule.WIDTH + (28 + 12) * 2 : null) {
             Direction = Direction.Vertical,
             VerticalAlignment = ItemsAlignment.Center,
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children =
             [
-                new BoxNode(new Style(), ItemsAlignment.Spread, ItemsAlignment.Center)
+                new BoxNode(new Style { Spacing = 16 }, ItemsAlignment.Stretch, ItemsAlignment.Center)
                 {
-                    new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-                    {
-                        new ImageNode(snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell, 22, 22, ThemeManager.Current.Text),
-                        new TextNode("Notifications", 22),
-                    },
+                    ModulesCommon.CentralWidgetHeader(
+                        snapshot.DoNotDisturb ? Icons.BellOff : Icons.Bell,
+                        "Notifications",
+                        openNotifications,
+                        _titleState),
 
                     new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
                     {
-                        BuildDateDropdown(),
-                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
-                        BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
-                        new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
-                        new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-                        {
-                            new TextNode($"{filteredItems.Length}", 22),
-                            BuildClearButton(snapshot.Count),
-                        }
+                        Flex = 0,
+                        Children = [
+                            new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
+                            BuildDateDropdown(),
+                            new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
+                            BuildDoNotDisturbToggle(snapshot.DoNotDisturb),
+                            new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
+                            new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
+                            {
+                                new TextNode($"{filteredItems.Length}", 22),
+                                BuildClearButton(snapshot.Count),
+                            }
+                        ]
                     }
                 },
                 ..BuildRows(filteredItems),

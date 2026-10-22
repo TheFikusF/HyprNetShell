@@ -8,52 +8,36 @@ using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell.Core.Bar.MainDialogTabs;
+namespace HyprNetShell.Core.Bar.MainDialogTabs.Clocks.WorldClocks;
 
-internal sealed class WorldClockTab : IMainDialogTab
+internal sealed class WorldClocksSubtab : IClocksSubtab
 {
     private readonly WorldClockService _clocks;
     private readonly TextInputCoordinator _inputs;
     private readonly TextInputCoordinator.Input _queryInput;
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
-
     private IReadOnlyList<WorldClock> _filteredClocks = [];
     private int _firstIndex;
     private int _selectedIndex;
 
-    public WorldClockTab(TextInputCoordinator inputs)
-        : this(WorldClockService.Shared, inputs)
-    {
-    }
-
-    public WorldClockTab(WorldClockService clocks, TextInputCoordinator inputs)
+    public WorldClocksSubtab(WorldClockService clocks, TextInputCoordinator inputs)
     {
         _clocks = clocks;
         _inputs = inputs;
-        _queryInput = inputs.Create(
-            "",
-            "",
-            "Search cities or time zones...",
-            4096,
-            alwaysActive: true);
-
+        _queryInput = inputs.Create("", "", "Search cities or time zones...", 4096, alwaysActive: true);
         ApplyFilter();
     }
 
-    public string Id => "world-clocks";
-    public string Title => "World clocks";
-    public SvgAsset Icon => Icons.Clock;
-
-    public void Activate()
+    public void ResetSearch()
     {
         _inputs.Configure(_queryInput, _ => ApplyFilter());
         _inputs.SetValue(_queryInput, "");
-        _inputs.Activate(_queryInput);
         _firstIndex = 0;
         _selectedIndex = 0;
         ApplyFilter();
     }
 
+    public void Activate() => _inputs.Activate(_queryInput);
 
     public void MoveSelection(SelectionDirection direction)
     {
@@ -78,7 +62,6 @@ internal sealed class WorldClockTab : IMainDialogTab
 
         _clocks.Toggle(_filteredClocks[_selectedIndex].TimeZoneId);
     }
-
     public Node Draw()
     {
         var selectedCount = _clocks.SelectedClocks.Count;
@@ -96,7 +79,7 @@ internal sealed class WorldClockTab : IMainDialogTab
                     {
                         Direction = Direction.Vertical,
                         HorizontalAlignment = ItemsAlignment.Stretch,
-                        Style = new Style { Spacing = 8 },
+                        Style = Style.Spacer,
                         Children = _filteredClocks
                             .VisibleItems(_firstIndex)
                             .Select(item => BuildRow(item.Item, item.Index))
@@ -130,7 +113,7 @@ internal sealed class WorldClockTab : IMainDialogTab
             Style = ModulesCommon.ModuleStyle(state.Background) with {
                 Padding = new Insets(14, 8),
                 BorderRadius = 8,
-                BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
+                BorderWidth = 0,
             },
             Children =
             [
@@ -146,11 +129,10 @@ internal sealed class WorldClockTab : IMainDialogTab
                     new TextNode(clock.DisplayName),
                     new TextNode(clock.TimeZoneId, color: selected ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor),
                 },
-                new TextNode(time.ToString("HH:mm"), 18),
+                new TextNode($"{time:HH:mm}  ({ClockFormatting.FormatOffset(time, DateTime.Now)})", 18),
             ],
         };
     }
-
     private void ApplyFilter()
     {
         var terms = _queryInput.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
