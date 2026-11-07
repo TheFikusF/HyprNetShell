@@ -11,6 +11,8 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
 {
     private const float THUMBNAILS_SCALE = OverviewController.THUMBNAILS_SCALE;
     private const float THUMBNAILS_GAP = 32f;
+
+    private const float THUMBNAIL_MAX_HEIGHT = 680f;
     private const int OVERVIEW_PADDING = 24;
     private const float SURFACE_SPHERE_SCALE = 1.12f;
     private const float SPHERE_SCALE = 1.8f;
@@ -216,6 +218,9 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
             return result;
         }
 
+        var imageRatios = ratios;
+        // Limit layout cells to a maximized window's aspect while preserving the image aspect below.
+        ratios = ratios.Select(ratio => Math.Min(ratio, (float)width / Math.Max(1, height))).ToArray();
         var sphere = GetSurfaceSphere(width, height);
         var availableHeight = Math.Max(1, Math.Min(sphere.Height * 0.88f, height - 160));
         var captionSpace = THUMBNAIL_CAPTION_HEIGHT;
@@ -244,7 +249,8 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
         }
 
         var low = 0f;
-        var high = Math.Max(0, Math.Min(680, (availableHeight - (count - 1) * THUMBNAILS_GAP - count * captionSpace) / count));
+        var high = Math.Max(0, Math.Min(THUMBNAIL_MAX_HEIGHT,
+                    (availableHeight - (count - 1) * THUMBNAILS_GAP - count * captionSpace) / count));
         for (var step = 0; step < 24; step++)
         {
             var candidate = (low + high) / 2;
@@ -287,7 +293,7 @@ internal sealed class CrystalOverviewDrawer : OverviewDrawer
             {
                 var w = ratios[i] * bestHeight;
                 var cell = new Rect(x, y, w, bestHeight);
-                var patch = SphereProjection.FitSurfacePatch(cell, ratios[i], sphere);
+                var patch = SphereProjection.FitSurfacePatch(cell, imageRatios[i], sphere);
                 result[i] = patch;
                 x += w + THUMBNAILS_GAP;
             }

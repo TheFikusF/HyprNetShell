@@ -30,6 +30,10 @@ extern "C"
                                      const int *rectangles,
                                      int rectangle_count);
     int hypr_layer_set_keyboard_interactive_bar(hypr_layer *layer, uint64_t id);
+    /* Elevate only this output's normal shell surface; 0 or an unavailable
+     * output restores all shell surfaces to top. Requires layer-shell v2.
+     * Screenshot surfaces and exclusive zones are unchanged. */
+    int hypr_layer_set_overview_overlay(hypr_layer *layer, uint64_t id);
     int hypr_layer_set_screenshot_overlay(hypr_layer *layer, uint64_t id);
     int hypr_layer_make_screenshot_current(hypr_layer *layer, uint64_t id);
     int hypr_layer_swap_screenshot_buffers(hypr_layer *layer, uint64_t id);

@@ -10,6 +10,8 @@ namespace HyprNetShell.Core.Overview;
 internal sealed class ClassicOverviewDrawer : OverviewDrawer
 {
     private const float THUMBNAILS_SCALE = 0.88f;
+
+    private const float THUMBNAIL_MAX_HEIGHT = 340f;
     private const float THUMBNAILS_HORIZONTAL_PADDING = 56f;
     private const float THUMBNAILS_TOP_PADDING = 160f;
     private const float THUMBNAILS_BOTTOM_PADDING = 80f;
@@ -32,6 +34,8 @@ internal sealed class ClassicOverviewDrawer : OverviewDrawer
             return result;
         }
 
+        // Extra-wide windows occupy no more width than a maximized window on this output.
+        ratios = ratios.Select(ratio => Math.Min(ratio, (float)width / Math.Max(1, height))).ToArray();
         var availableWidth = Math.Max(1, width - 2 * THUMBNAILS_HORIZONTAL_PADDING);
         var availableHeight = Math.Max(1, height - THUMBNAILS_TOP_PADDING - THUMBNAILS_BOTTOM_PADDING);
 
@@ -61,7 +65,8 @@ internal sealed class ClassicOverviewDrawer : OverviewDrawer
                 remaining -= sum;
             }
 
-            var h = Math.Min(340, (availableHeight - (count - 1) * THUMBNAILS_GAP - count * THUMBNAIL_CAPTION_HEIGHT) / count);
+            var h = Math.Min(THUMBNAIL_MAX_HEIGHT,
+                            (availableHeight - (count - 1) * THUMBNAILS_GAP - count * THUMBNAIL_CAPTION_HEIGHT) / count);
             foreach (var row in rows)
             {
                 h = Math.Min(h, (availableWidth - (row.Count - 1) * THUMBNAILS_GAP) / row.Sum(i => ratios[i]));

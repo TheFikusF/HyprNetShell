@@ -80,6 +80,7 @@ struct hypr_bar
     int active;
     int closed;
     int keyboard_interactive;
+    int overview_overlay;
 
     struct wl_surface *screenshot_surface;
     struct zwlr_layer_surface_v1 *screenshot_layer_surface;
@@ -806,6 +807,7 @@ static void create_bar_surface(struct hypr_bar *bar)
         return;
     }
 
+    bar->overview_overlay = 0;
     bar->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
         layer->layer_shell, bar->surface, bar->output,
         ZWLR_LAYER_SHELL_V1_LAYER_TOP, "hyprnetshell");
@@ -2264,6 +2266,7 @@ static const struct ext_foreign_toplevel_handle_v1_listener
         .app_id = thumbnail_app_id,
         .identifier = thumbnail_identifier,
 };
+
 static void thumbnail_toplevel(void *data,
                                struct ext_foreign_toplevel_list_v1 *list,
                                struct ext_foreign_toplevel_handle_v1 *handle)
@@ -2438,6 +2441,7 @@ static const struct ext_image_copy_capture_session_v1_listener
         .done = thumbnail_constraints_done,
         .stopped = thumbnail_stopped,
 };
+
 static void thumbnail_transform(void *data,
                                 struct ext_image_copy_capture_frame_v1 *frame,
                                 uint32_t transform)
@@ -3790,6 +3794,16 @@ int hypr_layer_swap_buffers(hypr_layer *layer, uint64_t id)
         return 0;
     }
 
+    /* The managed loop owns frame pacing. Vsynced swaps can wait indefinitely
+     * for frame callbacks when fullscreen content occludes the bar, preventing
+     * that loop from processing the overview request that would raise it. */
+    if (!eglSwapInterval(layer->egl_display, 0))
+    {
+        fail_bar_egl(bar, "failed to disable compositor swap throttling");
+        mark_bar_closed(bar);
+        return 0;
+    }
+
     if (!eglSwapBuffers(layer->egl_display, bar->egl_surface))
     {
         EGLint error = eglGetError();
@@ -3803,6 +3817,7 @@ int hypr_layer_swap_buffers(hypr_layer *layer, uint64_t id)
             if (create_bar_egl_surface(bar) &&
                 eglMakeCurrent(layer->egl_display, bar->egl_surface,
                                bar->egl_surface, layer->egl_context) &&
+                eglSwapInterval(layer->egl_display, 0) &&
                 eglSwapBuffers(layer->egl_display, bar->egl_surface))
             {
                 wl_display_flush(layer->display);
@@ -3926,6 +3941,52 @@ int hypr_layer_swap_screenshot_buffers(hypr_layer *layer, uint64_t id)
     {
         fail_fatal(layer, "wl_display_flush failed after swapping screenshot "
                           "overlay buffers");
+        return 0;
+    }
+
+    return 1;
+}
+
+int hypr_layer_set_overview_overlay(hypr_layer *layer, uint64_t id)
+{
+    if (layer == NULL)
+    {
+        return 0;
+    }
+
+    struct hypr_bar *target = find_bar(layer, id);
+    if (target != NULL && layer->layer_shell_version <
+                              ZWLR_LAYER_SURFACE_V1_SET_LAYER_SINCE_VERSION)
+    {
+        fail("overview overlay requires layer-shell version 2 or newer");
+        return 0;
+    }
+
+    int changed = 0;
+    for (struct hypr_bar *bar = layer->bars; bar != NULL; bar = bar->next)
+    {
+        if (!bar->active || bar->closed || bar->layer_surface == NULL)
+        {
+            continue;
+        }
+
+        int enabled = bar == target;
+        if (bar->overview_overlay == enabled)
+        {
+            continue;
+        }
+
+        bar->overview_overlay = enabled;
+        zwlr_layer_surface_v1_set_layer(
+            bar->layer_surface, enabled ? ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY
+                                        : ZWLR_LAYER_SHELL_V1_LAYER_TOP);
+        wl_surface_commit(bar->surface);
+        changed = 1;
+    }
+
+    if (changed && wl_display_flush(layer->display) < 0 && errno != EAGAIN)
+    {
+        fail_fatal(layer, "failed to update the overview overlay layer");
         return 0;
     }
 

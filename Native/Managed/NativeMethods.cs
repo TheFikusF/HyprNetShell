@@ -56,6 +56,9 @@ internal static partial class NativeMethods
     internal static partial int hypr_layer_set_keyboard_interactive_bar(IntPtr layer, ulong outputId);
 
     [LibraryImport(HYPR_LAYER_LIBRARY)]
+    internal static partial int hypr_layer_set_overview_overlay(IntPtr layer, ulong outputId);
+
+    [LibraryImport(HYPR_LAYER_LIBRARY)]
     internal static partial int hypr_layer_set_screenshot_overlay(IntPtr layer, ulong outputId);
 
     [LibraryImport(HYPR_LAYER_LIBRARY)]

@@ -110,6 +110,7 @@ internal sealed class ShellLoop : IDisposable
     public void Dispose()
     {
         _services.Overview.Close();
+        _layer.SetOverviewOverlay(0);
         foreach (var view in _views.Values)
         {
             DisposeIfNeeded(view);
@@ -259,6 +260,7 @@ internal sealed class ShellLoop : IDisposable
 
     private void RenderOutputs()
     {
+        _layer.SetOverviewOverlay(_services.Overview.RenderOutputId ?? 0);
         foreach (var output in _layer.Outputs)
         {
             if (!_layer.MakeCurrent(output.Id))

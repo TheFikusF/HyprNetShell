@@ -212,6 +212,14 @@ public sealed class HyprLayer : IDisposable
         NativeMethods.hypr_layer_set_input_regions(_layer, outputId, rectangles, regions.Count);
     }
 
+    public void SetOverviewOverlay(ulong outputId)
+    {
+        if (_layer != IntPtr.Zero)
+        {
+            NativeMethods.hypr_layer_set_overview_overlay(_layer, outputId);
+        }
+    }
+
     public void SetScreenshotOverlay(ulong outputId)
     {
         if (_layer != IntPtr.Zero)
