@@ -7,7 +7,7 @@ namespace HyprNetShell.Core.Features.OnlineAccounts;
 
 internal sealed class OAuthCallbackListener : IAsyncDisposable
 {
-    private const string CallbackPath = "/auth/callback";
+    private const string CALLBACK_PATH = "/auth/callback";
 
     private readonly TcpListener _listener;
     private readonly string _callbackHost;
@@ -24,7 +24,7 @@ internal sealed class OAuthCallbackListener : IAsyncDisposable
         get
         {
             var endpoint = (IPEndPoint)_listener.LocalEndpoint;
-            return $"http://{_callbackHost}:{endpoint.Port}{CallbackPath}";
+            return $"http://{_callbackHost}:{endpoint.Port}{CALLBACK_PATH}";
         }
     }
 
@@ -83,7 +83,7 @@ internal sealed class OAuthCallbackListener : IAsyncDisposable
             while (!string.IsNullOrEmpty(line));
 
             var target = ParseTarget(requestLine);
-            if (target is null || !string.Equals(target.AbsolutePath, CallbackPath, StringComparison.Ordinal))
+            if (target is null || !string.Equals(target.AbsolutePath, CALLBACK_PATH, StringComparison.Ordinal))
             {
                 await WriteResponseAsync(stream, HttpStatusCode.NotFound, "Sign-in callback not found.", cancellationToken);
                 continue;

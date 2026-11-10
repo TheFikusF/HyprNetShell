@@ -8,6 +8,20 @@ Features include workspaces, system and media controls, notifications, a system 
 
 This is a work in progress, not a polished drop-in desktop. Hyprland is the intended environment; other layer-shell compositors may support the bar, but Hyprland-specific features will not work there.
 
+## Wallpapers
+
+Wallpapers are rendered by HyprNetShell itself; `hyprpaper` is no longer needed. Remove any separate `hyprpaper` autostart entry to avoid competing background surfaces. The wallpaper picker and slideshow apply the selected image to every output using centered cover scaling. Background surfaces follow monitor hotplug and scaling, accept no input, and reserve no desktop space. They live only while HyprNetShell is running.
+
+The first wallpaper appears immediately; subsequent selections and slideshow changes crossfade over two seconds. Selecting another wallpaper during a transition starts the new fade from the last submitted blend. Transition rendering stops once the fade completes.
+
+Image support follows the built-in decoder; unsupported or invalid files are logged without replacing the current wallpaper. Animated images are displayed as still images.
+
+## Color temperature
+
+Color temperature is controlled natively through Hyprland's CTM protocol; `hyprsunset` is no longer needed. **Stop any running `hyprsunset` instance and remove its autostart entry before launching HyprNetShell**, because Hyprland CTM control is exclusive and cannot be shared with another controller.
+
+The native range is 2000–6500 K; 6500 K is the identity transform (no color adjustment). Existing manual controls and the saved temperature schedule are preserved. HyprNetShell resets the color transform on shutdown. If the compositor does not support the required protocol or exclusive control cannot be acquired, color-temperature controls show as unavailable.
+
 ## Build and run
 
 You need:
@@ -43,7 +57,7 @@ Publishing additionally requires Python 3.12 or newer, Clang/Clang++, `ar`, Font
 
 The source versions match SkiaSharp 4.151.1, HarfBuzzSharp 14.2.0, and SQLitePCLRaw 2.1.12 (SQLite 3.53.3). HarfBuzz builds without optional system integrations and verifies every managed native import against the archive. Use `./build.sh static --harfbuzz-only` to build just that archive. Update the script's source pins/checksums together with those package versions.
 
-Runtime integrations use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, `wl-copy`/`wl-paste`, `hyprpaper`, and `hyprsunset`. Install the tools for the features you want. Media controls use MPRIS over the session D-Bus.
+Runtime integrations use tools such as `hyprctl`, `socat`, `wpctl`, `nmcli`, `bluetoothctl`, and `wl-copy`/`wl-paste`. Install the tools for the features you want. Wallpapers and color temperature use built-in native control, not external daemons. Media controls use MPRIS over the session D-Bus.
 
 **Gentoo:** see [`packaging/gentoo/`](packaging/gentoo/README.md) for the binary ebuild, overlay setup, runtime dependencies, and lock-screen PAM policy.
 

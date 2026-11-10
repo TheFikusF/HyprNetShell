@@ -54,7 +54,7 @@ masters = gentoo
 auto-sync = no
 ```
 
-The package also depends on `gui-wm/hyprland`, `gui-apps/hyprpaper`, and `gui-apps/hyprsunset`. Enable `hyproverlay` if those packages are not supplied by another configured repository.
+The package also depends on `gui-wm/hyprland`. Enable `hyproverlay` if that package is not supplied by another configured repository. Wallpapers and color temperature are built in; `gui-apps/hyprpaper` and `gui-apps/hyprsunset` are no longer runtime dependencies.
 
 ## 4. Install
 
@@ -73,8 +73,10 @@ sudo emerge --ask gui-apps/hyprnetshell-bin
 All feature USE flags are enabled by default. Disable integrations you do not need in `/etc/portage/package.use/hyprnetshell`, for example:
 
 ```text
-gui-apps/hyprnetshell-bin -ocr -wallpaper
+gui-apps/hyprnetshell-bin -ocr
 ```
+
+The former `wallpaper` USE flag has been removed; remove `wallpaper` or `-wallpaper` from existing package.use entries. Built-in wallpaper and color-temperature support do not require a USE flag.
 
 The installation places:
 
@@ -83,6 +85,8 @@ The installation places:
 - a Gentoo-native PAM policy at `/etc/pam.d/hyprnetshell`.
 
 ## 5. Start from Hyprland
+
+Before launching, stop any running `hyprsunset` instance and remove its autostart entry: HyprNetShell requires exclusive Hyprland CTM control for color temperature. Remove any separate `hyprpaper` autostart entry as well to avoid competing background surfaces. See the root [README](../../README.md#color-temperature) for color-temperature behavior and availability.
 
 Add this to `~/.config/hypr/hyprland.lua` and remove any old screenshot bindings that use the same keys:
 

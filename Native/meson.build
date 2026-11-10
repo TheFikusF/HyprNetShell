@@ -67,6 +67,7 @@ foreach protocol_definition : [
     ['ext-image-capture-source-v1', image_capture_source_xml],
     ['ext-image-copy-capture-v1', image_copy_capture_xml],
     ['ext-data-control-v1', data_control_xml],
+    ['hyprland-ctm-control-v1', files('protocols/hyprland-ctm-control-v1.xml')],
     [
         'hyprland-toplevel-mapping-v1',
         files('protocols/hyprland-toplevel-mapping-v1.xml'),
@@ -94,6 +95,8 @@ endforeach
 
 hypr_layer_sources = [
     'hypr_layer.c',
+    'hypr_wallpaper.c',
+    'hypr_temperature.c',
     'thumbnail_pool.c',
     'hypr_lock.c',
     layer_shell_header,
@@ -109,6 +112,7 @@ hypr_layer_dependencies = [
     xkbcommon,
     pam,
     threads,
+    libm,
 ]
 hypr_layer_include_directories = include_directories('.')
 
@@ -153,3 +157,13 @@ thumbnail_pool_test = executable(
 )
 test('thumbnail-pool', thumbnail_pool_test, timeout: 120)
 benchmark('thumbnail-pool', thumbnail_pool_test, args: ['--benchmark'], timeout: 120)
+
+# Keep the source outside Native/tests, whose local ignore rules exclude new files.
+temperature_test = executable(
+    'temperature_test',
+    ['temperature_test.c', capture_protocols],
+    dependencies: [wayland_client, libm],
+    include_directories: hypr_layer_include_directories,
+    c_args: ['-UNDEBUG', '-Wall', '-Wextra', '-Wpedantic', '-Werror'],
+)
+test('temperature', temperature_test, timeout: 10)

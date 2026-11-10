@@ -12,6 +12,5 @@
     <flag name="network">Install NetworkManager tools used for Wi-Fi management</flag>
     <flag name="ocr">Install Tesseract for screenshot text recognition</flag>
     <flag name="power-profiles">Install power-profiles-daemon for power profile controls</flag>
-    <flag name="wallpaper">Install hyprpaper and hyprsunset wallpaper/display integrations</flag>
   </use>
 </pkgmetadata>

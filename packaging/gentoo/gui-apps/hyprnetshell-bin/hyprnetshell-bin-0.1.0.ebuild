@@ -13,7 +13,7 @@ S="${WORKDIR}/HyprNetShell-${PV}-linux-x64"
 LICENSE="all-rights-reserved"
 SLOT="0"
 KEYWORDS="~amd64"
-IUSE="+audio +bluetooth +clipboard +network +ocr +power-profiles +wallpaper"
+IUSE="+audio +bluetooth +clipboard +network +ocr +power-profiles"
 
 RDEPEND="
 	app-arch/bzip2
@@ -39,10 +39,6 @@ RDEPEND="
 	network? ( net-misc/networkmanager )
 	ocr? ( app-text/tesseract )
 	power-profiles? ( sys-power/power-profiles-daemon )
-	wallpaper? (
-		gui-apps/hyprpaper
-		gui-apps/hyprsunset
-	)
 "
 
 RESTRICT="strip"

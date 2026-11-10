@@ -108,47 +108,6 @@ internal sealed class Hyprctl : IHyprctl
             $"switch keyboard layout for {keyboardName}",
             cancellationToken);
 
-    public async Task<bool> SetWallpaperAsync(string path, CancellationToken cancellationToken = default)
-    {
-        if (await RunForSuccessAsync(
-                ["hyprpaper", "wallpaper", $", {path}, cover"],
-                $"set wallpaper {path}",
-                cancellationToken,
-                logFailure: false))
-        {
-            return true;
-        }
-
-        return await RunForSuccessAsync(
-            ["hyprpaper", "reload", $",{path}"],
-            $"reload wallpaper {path}",
-            cancellationToken);
-    }
-
-    public async Task<int?> GetColorTemperatureAsync(CancellationToken cancellationToken = default)
-    {
-        var result = await RunAsync(
-            ["hyprsunset", "temperature"],
-            "read color temperature",
-            cancellationToken,
-            logFailure: false);
-        var token = result.StandardOutput
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault();
-        return result.Success &&
-               double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature)
-            ? (int)Math.Round(temperature)
-            : null;
-    }
-
-    public Task<bool> SetColorTemperatureAsync(
-        int temperatureKelvin,
-        CancellationToken cancellationToken = default) =>
-        RunForSuccessAsync(
-            ["hyprsunset", "temperature", temperatureKelvin.ToString(CultureInfo.InvariantCulture)],
-            $"set color temperature to {temperatureKelvin}K",
-            cancellationToken);
-
     private Task<bool> DispatchAsync(
         string dispatcherExpression,
         string operation,

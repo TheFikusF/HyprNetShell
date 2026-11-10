@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using HyprNetShell.Core.Configuration;
-using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
@@ -13,13 +12,9 @@ namespace HyprNetShell.Core.Features.System;
 
 internal sealed class DisplayControlsModuleService : IBarDataService, IDisposable
 {
-    private const int DEFAULT_TEMPERATURE = 6000;
     private const string UPOWER_BUS = "org.freedesktop.UPower";
     private const string KEYBOARD_PATH = "/org/freedesktop/UPower/KbdBacklight";
     private const string KEYBOARD_INTERFACE = "org.freedesktop.UPower.KbdBacklight";
-
-    private static readonly TimeSpan TemperatureRecoveryInterval = TimeSpan.FromSeconds(30);
-    private static readonly SemaphoreSlim HyprsunsetLock = new(1, 1);
 
     private readonly Lock _snapshotLock = new();
     private readonly Lock _curveLock = new();
@@ -29,7 +24,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
     private readonly CancellationTokenSource _monitorLifetime = new();
     private readonly Task _monitorTask;
 
-    private readonly IHyprctl _hyprctl;
+    private readonly ColorTemperatureBackend _temperatureBackend = new();
     private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
 
     private readonly TemperatureCurvePoint[] _temperatureCurve;
@@ -44,13 +39,10 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
     private int _sentQueuedBrightness = int.MinValue;
     private bool _brightnessQueueRunning;
     private int _disposed;
-    private bool? _hyprsunsetInstalled;
-    private int _temperature = DEFAULT_TEMPERATURE;
 
     private DateTime _nextTemperatureUpdate = DateTime.MinValue;
     private DateTime _nextBrightnessUpdate = DateTime.MinValue;
     private DateTime _nextBacklightRefreshUtc = DateTime.MinValue;
-    private DateTime _nextTemperatureRecoveryUtc = DateTime.MinValue;
     private DisplayControlsSnapshot _snapshot = DisplayControlsSnapshot.Empty;
 
     public event Action<int>? BrightnessChanged;
@@ -58,9 +50,8 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
 
     public DisplayControlsSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
-    public DisplayControlsModuleService(IHyprctl hyprctl)
+    public DisplayControlsModuleService()
     {
-        _hyprctl = hyprctl;
         var display = _configuration.Snapshot.Display;
         _temperatureCurve = NormalizeTemperatureCurve(display.Temperature.Points
             .Select(point => new TemperatureCurvePoint(point.Hour, point.Value)));
@@ -110,7 +101,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
     {
         var utcNow = DateTime.UtcNow;
         var refreshBacklights = utcNow >= _nextBacklightRefreshUtc;
-        var recoverTemperature = utcNow >= _nextTemperatureRecoveryUtc;
+        var temperatureBecameAvailable = _temperatureBackend.Available && !Snapshot.TemperatureControlAvailable;
 
         bool automaticTemperatureEnabled;
         bool automaticBrightnessEnabled;
@@ -121,37 +112,12 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
         }
 
         var localNow = DateTime.Now;
-        var updateAutomaticTemperature = automaticTemperatureEnabled && localNow >= _nextTemperatureUpdate;
+        var updateAutomaticTemperature = automaticTemperatureEnabled &&
+            (localNow >= _nextTemperatureUpdate || temperatureBecameAvailable);
         var updateAutomaticBrightness = automaticBrightnessEnabled && localNow >= _nextBrightnessUpdate;
-        if (!refreshBacklights && !recoverTemperature && !updateAutomaticTemperature && !updateAutomaticBrightness)
-        {
-            return;
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
         var current = Snapshot;
-        var running = current.HyprsunsetRunning;
-        if (recoverTemperature)
-        {
-            _nextTemperatureRecoveryUtc = utcNow + TemperatureRecoveryInterval;
-            var temperature = await _hyprctl.GetColorTemperatureAsync(cancellationToken);
-            running = temperature.HasValue;
-            if (temperature.HasValue)
-            {
-                _hyprsunsetInstalled = true;
-                _temperature = temperature.Value;
-            }
-            else if (!_hyprsunsetInstalled.HasValue)
-            {
-                var version = await CommandRunner.TryReadAsync(
-                    "hyprsunset",
-                    "--version",
-                    TimeSpan.FromMilliseconds(500),
-                    cancellationToken);
-                _hyprsunsetInstalled = !string.IsNullOrWhiteSpace(version);
-            }
-        }
-
-        if (_hyprsunsetInstalled == true && updateAutomaticTemperature)
+        if (_temperatureBackend.Available && updateAutomaticTemperature)
         {
             TemperatureCurvePoint[] curve;
             lock (_curveLock)
@@ -159,9 +125,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                 curve = [.. _temperatureCurve];
             }
 
-            _temperature = TemperatureCurveMath.Evaluate(curve, CurrentHour(localNow));
-            await SetTemperatureAsync(_temperature);
-            running = Snapshot.HyprsunsetRunning;
+            await SetTemperatureAsync(TemperatureCurveMath.Evaluate(curve, CurrentHour(localNow)), cancellationToken);
             _nextTemperatureUpdate = localNow.AddMinutes(5);
         }
 
@@ -200,9 +164,9 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
             Volatile.Write(ref _snapshot, new DisplayControlsSnapshot(
                 current.Display,
                 current.Keyboard,
-                _hyprsunsetInstalled == true,
-                running,
-                _temperature,
+                _temperatureBackend.Available,
+                _temperatureBackend.Active,
+                _temperatureBackend.Temperature,
                 snapshotTemperatureCurve,
                 automaticTemperatureEnabled,
                 snapshotBrightnessCurve,
@@ -326,28 +290,25 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
         }
     }
 
-    internal async Task SetTemperatureAsync(int temperatureKelvin)
-    {
-        temperatureKelvin = Math.Clamp(temperatureKelvin, 2000, 6500);
-        await HyprsunsetLock.WaitAsync();
-        try
-        {
-            if (await _hyprctl.SetColorTemperatureAsync(temperatureKelvin))
-            {
-                PublishTemperature(temperatureKelvin, running: true);
-                return;
-            }
+    internal Task SetTemperatureAsync(int temperatureKelvin) =>
+        SetTemperatureAsync(temperatureKelvin, CancellationToken.None);
 
-            if (StartHyprsunset(temperatureKelvin))
-            {
-                PublishTemperature(temperatureKelvin, running: true);
-                await Task.Delay(150);
-            }
-        }
-        finally
+    private async Task SetTemperatureAsync(int temperatureKelvin, CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
         {
-            HyprsunsetLock.Release();
+            return;
         }
+
+        temperatureKelvin = Math.Clamp(temperatureKelvin,
+            TemperatureCurveMath.MINIMUM_TEMPERATURE,
+            TemperatureCurveMath.MAXIMUM_TEMPERATURE);
+        if (!await _temperatureBackend.SetAsync(temperatureKelvin, cancellationToken))
+        {
+            AppLogger.Warning("Display", $"Could not submit screen temperature {temperatureKelvin}K");
+        }
+
+        PublishTemperature();
     }
 
     private void PublishBacklightValue(BacklightSnapshot backlight)
@@ -374,15 +335,14 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
         }
     }
 
-    private void PublishTemperature(int temperatureKelvin, bool running)
+    private void PublishTemperature()
     {
         lock (_snapshotLock)
         {
-            _temperature = temperatureKelvin;
             Volatile.Write(ref _snapshot, Snapshot with {
-                HyprsunsetInstalled = true,
-                HyprsunsetRunning = running,
-                TemperatureKelvin = temperatureKelvin,
+                TemperatureControlAvailable = _temperatureBackend.Available,
+                TemperatureControlActive = _temperatureBackend.Active,
+                TemperatureKelvin = _temperatureBackend.Temperature,
             });
         }
     }
@@ -611,6 +571,7 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
             return;
         }
 
+        _temperatureBackend.Dispose();
         _monitorLifetime.Cancel();
         try
         {
@@ -823,7 +784,6 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
                 return;
             }
 
-            _temperature = temperature;
             await SetTemperatureAsync(temperature);
             await Task.Delay(50);
         }
@@ -905,23 +865,4 @@ internal sealed class DisplayControlsModuleService : IBarDataService, IDisposabl
     private static float CurrentHour(DateTime now) =>
         now.Hour + now.Minute / 60.0f + now.Second / 3600.0f;
 
-    private static bool StartHyprsunset(int temperatureKelvin)
-    {
-        try
-        {
-            var startInfo = new ProcessStartInfo {
-                FileName = "hyprsunset",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            startInfo.ArgumentList.Add("--temperature");
-            startInfo.ArgumentList.Add(temperatureKelvin.ToString(CultureInfo.InvariantCulture));
-            using var process = Process.Start(startInfo);
-            return process is not null;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

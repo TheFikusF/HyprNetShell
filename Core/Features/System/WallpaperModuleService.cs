@@ -1,6 +1,6 @@
-using System.Diagnostics;
+
 using HyprNetShell.Core.Configuration;
-using HyprNetShell.Core.Features.Hyprland;
+
 using HyprNetShell.Core.Logging;
 
 namespace HyprNetShell.Core.Features.System;
@@ -17,21 +17,20 @@ internal sealed class WallpaperModuleService : IDisposable
     };
 
     private readonly Lock _stateLock = new();
-    private readonly IHyprctl _hyprctl;
+    private readonly WallpaperBackend _backend = new();
     private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _settingsChanged = new(0, 1);
     private readonly Task _slideshowTask;
-    private Process? _hyprpaperProcess;
+
     private string _wallpaperDirectory;
     private bool _slideshowEnabled;
     private int _durationMinutes;
     private string? _currentWallpaper;
     private bool _disposed;
 
-    internal WallpaperModuleService(IHyprctl hyprctl)
+    internal WallpaperModuleService()
     {
-        _hyprctl = hyprctl;
         var config = _configuration.Snapshot.Wallpaper;
         _wallpaperDirectory = string.IsNullOrWhiteSpace(config.Directory)
             ? DefaultWallpaperDirectory()
@@ -39,7 +38,7 @@ internal sealed class WallpaperModuleService : IDisposable
         _slideshowEnabled = config.SlideshowEnabled;
         _durationMinutes = NormalizeDuration(config.DurationMinutes);
 
-        StartHyprpaper();
+
         _slideshowTask = Task.Run(() => RunSlideshowAsync(_lifetime.Token));
     }
 
@@ -124,7 +123,7 @@ internal sealed class WallpaperModuleService : IDisposable
 
     internal async Task SetWallpaperAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (await _hyprctl.SetWallpaperAsync(path, cancellationToken))
+        if (await _backend.SetAsync(path, cancellationToken))
         {
             lock (_stateLock)
             {
@@ -185,8 +184,7 @@ internal sealed class WallpaperModuleService : IDisposable
         var wasEnabled = false;
         try
         {
-            // Give the freshly launched daemon a moment to create its control socket.
-            await Task.Delay(TimeSpan.FromMilliseconds(300), cancellationToken);
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 bool enabled;
@@ -294,29 +292,6 @@ internal sealed class WallpaperModuleService : IDisposable
         "Pictures",
         "wp");
 
-    private void StartHyprpaper()
-    {
-        try
-        {
-            _hyprpaperProcess = Process.Start(new ProcessStartInfo {
-                FileName = "hyprpaper",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-            if (_hyprpaperProcess is null)
-            {
-                AppLogger.Warning("Wallpapers", "Could not start hyprpaper");
-            }
-            else
-            {
-                AppLogger.Info("Wallpapers", "Started hyprpaper");
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning("Wallpapers", "Could not start hyprpaper", exception);
-        }
-    }
 
     public void Dispose()
     {
@@ -336,19 +311,7 @@ internal sealed class WallpaperModuleService : IDisposable
             // Cancellation or a timeout is harmless during shutdown.
         }
 
-        try
-        {
-            if (_hyprpaperProcess is { HasExited: false })
-            {
-                _hyprpaperProcess.Kill(true);
-            }
-        }
-        catch
-        {
-            // The daemon may already have exited or detached.
-        }
-
-        _hyprpaperProcess?.Dispose();
+        _backend.Dispose();
         _settingsChanged.Dispose();
         _lifetime.Dispose();
     }

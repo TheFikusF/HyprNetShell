@@ -161,7 +161,8 @@ The code intentionally uses Linux and desktop command-line interfaces instead of
 - session D-Bus for notifications, StatusNotifierItem, dbusmenu, and MPRIS;
 - `wpctl`, `nmcli`, `bluetoothctl`, and `powerprofilesctl`;
 - `wl-copy`/`wl-paste` for clipboard transport;
-- `hyprpaper`, `hyprsunset`, and `hyprlock`;
+- native Wayland background surfaces for wallpapers and exclusive Hyprland CTM control for color temperature;
+- `hyprlock` for external lock-screen integration;
 - Linux `sysfs` for battery, backlight, thermal, and hardware data;
 - GLib/GIO native libraries for `.desktop` entry launching.
 
@@ -195,6 +196,10 @@ Do not silently swallow runtime failures. Any caught exception or unsuccessful e
 - Do not add comments that merely narrate code; document non-obvious protocol, ownership, and concurrency constraints.
 - Avoid new dependencies when the existing architecture or platform APIs can solve the task cleanly.
 
+## Editing tools policy
+
+Prefer the built-in file editing tools for changes so the user can inspect edits directly. Use `edit_file` for targeted changes, `write_file` for new files or complete rewrites, and the dedicated file tools for moves, copies, and deletions. Do not use terminal scripts, shell redirection, or command-line text replacement to make routine file edits when the built-in tools can perform them. Apply this policy to delegated agents as well. Terminal commands remain appropriate for builds, tests, repository formatters, and other validation workflows.
+
 ## Formatting rules and mandatory final pass
 
 `.editorconfig` is the formatting baseline. These rules apply to all new and edited source files. The mandatory full-solution formatter may also update other source files; do not make unrelated functional changes or manually edit generated output.
@@ -204,15 +209,36 @@ Do not silently swallow runtime failures. Any caught exception or unsuccessful e
 - Use braces for every control-flow body, even a single statement. Never write `if (condition) DoSomething();` or a nonempty inline control-flow block.
 - Use Allman braces: opening and closing braces each have their own line, with four-space indentation in C#.
 - Object declarations/initializers, empty blocks, and auto-properties with semicolon-only accessors may keep `{ }` on the same line. This includes `get;`, `set;`, `init;`, accessor visibility modifiers, and partial property declarations, for example `public int Count { get; private set; }` or `public partial float Strength { get; set; }`. Properties with accessor bodies still use Allman braces. An empty block such as `catch (OperationCanceledException) { }` is permitted, not required; existing logging and cancellation rules still apply.
-- After a closing brace, leave exactly one empty line before any following code, including `else`, `catch`, and `finally`. Consecutive enclosing closing braces and punctuation belonging to the same expression (such as `};` or `});`) do not need intervening empty lines. Do not insert a trailing empty line when no code follows.
+- Keep related clauses together: do not insert empty lines before `else`, `else if`, `catch`, or `finally`. Their keywords go on the line immediately after the preceding closing brace.
+- Do not insert empty lines between consecutive enclosing closing braces, including nested blocks, or before punctuation belonging to the same expression (such as `};` or `});`). Each nested opening brace still goes on its own line under the Allman rule.
+- Leave exactly one empty line between a completed block and the next independent statement or member. Do not insert a trailing empty line when no code follows. Apply these rules according to the block structure, not blindly after every `}`.
 
 ```csharp
 if (condition)
 {
-    DoSomething();
+    try
+    {
+        DoSomething();
+    }
+    catch (Exception exception)
+    {
+        Handle(exception);
+    }
+    finally
+    {
+        Cleanup();
+    }
+}
+else if (otherCondition)
+{
+    DoSomethingElse();
+}
+else
+{
+    HandleFallback();
 }
 
-DoSomethingElse();
+Continue();
 ```
 
 ### Type member order and names
@@ -242,7 +268,7 @@ Agents may write intermediate code in any format, but formatting is **mandatory 
    ```
 
    Running this full-solution command after the last edit is required; an editor's Format File action or a file-scoped formatting command is not a substitute. Use the full `dotnet format`, not just `dotnet format whitespace`, so missing-brace and other supported analyzer fixes can run too. Exclude `IDE1006` because its naming code-fix provider does not support solution-wide Fix All; this does not disable the naming rule. Manually rename noncompliant constants in edited files to `UPPER_CASE` and update all references.
-2. Manually finish rules the built-in formatter cannot reliably enforce: member grouping, `UPPER_CASE` word boundaries, inline-brace exceptions, and exactly one blank line after closing braces. `.editorconfig` cannot express member ordering, and the experimental block-spacing option is not a complete closing-brace-spacing check. If the formatter expands a permitted inline initializer or empty block, leaving it expanded is valid.
+2. Manually finish rules the built-in formatter cannot reliably enforce: member grouping, `UPPER_CASE` word boundaries, inline-brace exceptions, and structure-aware block spacing (no blank lines between related clauses or consecutive enclosing closing braces; exactly one before the next independent statement or member). `.editorconfig` cannot express member ordering, and the experimental block-spacing option is not a complete closing-brace-spacing check. If the formatter expands a permitted inline initializer or empty block, leaving it expanded is valid.
 3. For edited native C/header files, use `clang-format` on only those files with Allman braces, four-space indentation, and single-line nonempty blocks/control bodies disabled, then manually check the same applicable block-spacing and naming rules. For other file types, use their existing formatter when available and check `.editorconfig` whitespace rules; do not introduce a dependency just for formatting.
 4. Review the final diff for unintended changes and rerun the relevant build/validation. If any subsequent edits are made, repeat the full-solution formatting command before final validation and the final response.
 5. Report which formatting command ran. If a formatter is unavailable or fails, do not claim formatting passed: perform the manual rule check and explicitly report the limitation.

@@ -13,17 +13,17 @@ internal interface ICredentialStore
 
 internal sealed class SecretServiceCredentialStore : ICredentialStore
 {
-    private const string ServiceName = "org.freedesktop.secrets";
-    private const string ServicePath = "/org/freedesktop/secrets";
-    private const string ServiceInterface = "org.freedesktop.Secret.Service";
-    private const string CollectionInterface = "org.freedesktop.Secret.Collection";
-    private const string ItemInterface = "org.freedesktop.Secret.Item";
-    private const string PromptInterface = "org.freedesktop.Secret.Prompt";
-    private const string DefaultCollectionPath = "/org/freedesktop/secrets/aliases/default";
-    private const string NoObjectPath = "/";
-    private const string ApplicationAttribute = "application";
-    private const string ProviderAttribute = "provider";
-    private const string ApplicationName = "hyprnetshell";
+    private const string SERVICE_NAME = "org.freedesktop.secrets";
+    private const string SERVICE_PATH = "/org/freedesktop/secrets";
+    private const string SERVICE_INTERFACE = "org.freedesktop.Secret.Service";
+    private const string COLLECTION_INTERFACE = "org.freedesktop.Secret.Collection";
+    private const string ITEM_INTERFACE = "org.freedesktop.Secret.Item";
+    private const string PROMPT_INTERFACE = "org.freedesktop.Secret.Prompt";
+    private const string DEFAULT_COLLECTION_PATH = "/org/freedesktop/secrets/aliases/default";
+    private const string NO_OBJECT_PATH = "/";
+    private const string APPLICATION_ATTRIBUTE = "application";
+    private const string PROVIDER_ATTRIBUTE = "provider";
+    private const string APPLICATION_NAME = "hyprnetshell";
 
     public async Task<string?> ReadAsync(string provider, CancellationToken cancellationToken)
     {
@@ -49,9 +49,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         var secretBytes = await Dbus.WaitAsync(
             Dbus.CallAsync(
                 connection,
-                ServiceName,
+                SERVICE_NAME,
                 unlocked[0].ToString(),
-                ItemInterface,
+                ITEM_INTERFACE,
                 "GetSecret",
                 static reader =>
                 {
@@ -86,9 +86,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
             var promptPath = await Dbus.WaitAsync(
                 Dbus.CallAsync(
                     connection,
-                    ServiceName,
-                    DefaultCollectionPath,
-                    CollectionInterface,
+                    SERVICE_NAME,
+                    DEFAULT_COLLECTION_PATH,
+                    COLLECTION_INTERFACE,
                     "CreateItem",
                     static reader =>
                     {
@@ -130,9 +130,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
             var promptPath = await Dbus.WaitAsync(
                 Dbus.CallAsync(
                     connection,
-                    ServiceName,
+                    SERVICE_NAME,
                     itemPath.ToString(),
-                    ItemInterface,
+                    ITEM_INTERFACE,
                     "Delete",
                     static reader => reader.ReadObjectPathAsString()),
                 cancellationToken);
@@ -159,9 +159,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         Dbus.WaitAsync(
             Dbus.CallAsync(
                 connection,
-                ServiceName,
-                ServicePath,
-                ServiceInterface,
+                SERVICE_NAME,
+                SERVICE_PATH,
+                SERVICE_INTERFACE,
                 "OpenSession",
                 static reader =>
                 {
@@ -183,9 +183,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         Dbus.WaitAsync(
             Dbus.CallAsync(
                 connection,
-                ServiceName,
-                ServicePath,
-                ServiceInterface,
+                SERVICE_NAME,
+                SERVICE_PATH,
+                SERVICE_INTERFACE,
                 "SearchItems",
                 static reader => (reader.ReadArrayOfObjectPath(), reader.ReadArrayOfObjectPath()),
                 "a{ss}",
@@ -200,15 +200,15 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         var (_, promptPath) = await Dbus.WaitAsync(
             Dbus.CallAsync(
                 connection,
-                ServiceName,
-                ServicePath,
-                ServiceInterface,
+                SERVICE_NAME,
+                SERVICE_PATH,
+                SERVICE_INTERFACE,
                 "Unlock",
                 static reader => (reader.ReadArrayOfObjectPath(), reader.ReadObjectPathAsString()),
                 "ao",
                 (ref MessageWriter writer) => writer.WriteArray(locked)),
             cancellationToken);
-        if (string.Equals(promptPath, NoObjectPath, StringComparison.Ordinal))
+        if (string.Equals(promptPath, NO_OBJECT_PATH, StringComparison.Ordinal))
         {
             return;
         }
@@ -218,7 +218,7 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
             new MatchRule {
                 Type = MessageType.Signal,
                 Path = promptPath,
-                Interface = PromptInterface,
+                Interface = PROMPT_INTERFACE,
                 Member = "Completed",
             },
             static (message, _) =>
@@ -248,9 +248,9 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
         await Dbus.WaitAsync(
             Dbus.CallAsync(
                 connection,
-                ServiceName,
+                SERVICE_NAME,
                 promptPath,
-                PromptInterface,
+                PROMPT_INTERFACE,
                 "Prompt",
                 "s",
                 static (ref MessageWriter writer) => writer.WriteString("")),
@@ -281,8 +281,8 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
     private static void WriteAttributes(ref MessageWriter writer, string provider)
     {
         var attributes = writer.WriteDictionaryStart();
-        WriteAttribute(ref writer, ApplicationAttribute, ApplicationName);
-        WriteAttribute(ref writer, ProviderAttribute, provider);
+        WriteAttribute(ref writer, APPLICATION_ATTRIBUTE, APPLICATION_NAME);
+        WriteAttribute(ref writer, PROVIDER_ATTRIBUTE, provider);
         writer.WriteDictionaryEnd(attributes);
     }
 
@@ -295,7 +295,7 @@ internal sealed class SecretServiceCredentialStore : ICredentialStore
 
     private static void EnsureNoPrompt(string promptPath, string message)
     {
-        if (!string.Equals(promptPath, NoObjectPath, StringComparison.Ordinal))
+        if (!string.Equals(promptPath, NO_OBJECT_PATH, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(message);
         }

@@ -163,9 +163,9 @@ internal sealed class DisplayControlsModule(DisplayControlsModuleService service
 
     private BoxNode BuildTemperatureSchedule(DisplayControlsSnapshot controls)
     {
-        if (!controls.HyprsunsetInstalled)
+        if (!controls.TemperatureControlAvailable)
         {
-            return BuildUnavailableRow("Screen temperature (hyprsunset unavailable)");
+            return BuildUnavailableRow("Screen temperature (unavailable)");
         }
 
         var automaticTemperatureEnabled = service.IsAutomaticTemperatureEnabled();

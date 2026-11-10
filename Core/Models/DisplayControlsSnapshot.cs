@@ -14,15 +14,15 @@ public sealed record BacklightSnapshot(
 public sealed record DisplayControlsSnapshot(
     BacklightSnapshot? Display,
     BacklightSnapshot? Keyboard,
-    bool HyprsunsetInstalled,
-    bool HyprsunsetRunning,
+    bool TemperatureControlAvailable,
+    bool TemperatureControlActive,
     int TemperatureKelvin,
     IReadOnlyList<TemperatureCurvePoint> TemperatureCurve,
     bool AutomaticTemperatureEnabled,
     IReadOnlyList<BrightnessCurvePoint> BrightnessCurve,
     bool AutomaticBrightnessEnabled)
 {
-    public bool Available => Display is not null || Keyboard is not null || HyprsunsetInstalled;
+    public bool Available => Display is not null || Keyboard is not null || TemperatureControlAvailable;
 
     public static DisplayControlsSnapshot Empty
     {
@@ -32,7 +32,7 @@ public sealed record DisplayControlsSnapshot(
         null,
         false,
         false,
-        6000,
+        6500,
         TemperatureCurveMath.DefaultPoints,
         true,
         BrightnessCurveMath.DefaultPoints,

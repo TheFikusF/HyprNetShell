@@ -20,9 +20,6 @@ internal interface IHyprctl : IDisposable
         string keyboardName,
         int? layoutIndex = null,
         CancellationToken cancellationToken = default);
-    Task<bool> SetWallpaperAsync(string path, CancellationToken cancellationToken = default);
-    Task<int?> GetColorTemperatureAsync(CancellationToken cancellationToken = default);
-    Task<bool> SetColorTemperatureAsync(int temperatureKelvin, CancellationToken cancellationToken = default);
 }
 
 internal readonly record struct HyprlandBindOptions(bool Release = false, bool Transparent = false);

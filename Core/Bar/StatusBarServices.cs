@@ -215,8 +215,8 @@ public sealed class StatusBarServices : IDisposable
         Notifications = new NotificationService(Hyprland, Hyprctl, History);
         Screenshots = new ScreenshotService(Hyprctl);
 
-        DisplayControls = new DisplayControlsModuleService(Hyprctl);
-        Wallpapers = new WallpaperModuleService(Hyprctl);
+        DisplayControls = new DisplayControlsModuleService();
+        Wallpapers = new WallpaperModuleService();
         Network = new NetworkModuleService();
         PipeWireGraph = new PipeWireGraphService();
         Audio = new AudioModuleService(PipeWireGraph);
