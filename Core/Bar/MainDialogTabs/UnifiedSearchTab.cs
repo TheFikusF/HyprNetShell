@@ -24,6 +24,7 @@ internal sealed class UnifiedSearchTab(
     Action<string>? focusWindow = null) : IMainDialogTab, IDisposable
 {
     private const int FUZZY_SCORE_CUTOFF = 35;
+
     private const int MAXIMUM_APPLICATION_RESULTS = 8;
 
     private readonly DesktopApplicationCatalog _catalog = new();
@@ -332,7 +333,16 @@ internal sealed class UnifiedSearchTab(
 
         if (!calculatorOnly && !browserOnly)
         {
-            results.AddRange(_windows
+            var applicationMatches = _applications
+                .Select(application => new
+                {
+                    Application = application,
+                    NameScore = FuzzySearch.Score(interpretedQuery, application.Name),
+                    CommentScore = FuzzySearch.Score(interpretedQuery, application.Comment ?? "") - 12,
+                })
+                .ToArray();
+
+            var windowResults = _windows
                 .Select(window => (Window: window, Score: Math.Max(
                                     FuzzySearch.Score(interpretedQuery, window.Title),
                                     Math.Max(FuzzySearch.Score(interpretedQuery, window.ClassName),
@@ -341,27 +351,29 @@ internal sealed class UnifiedSearchTab(
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Window.Title, StringComparer.CurrentCultureIgnoreCase)
                 .Take(MAXIMUM_APPLICATION_RESULTS)
-                .Select(result => new SearchResult(ResultKind.Window, result.Window.Title,
-                    result.Window.Description, result.Window.Address, Window: result.Window)));
+                .Select(result => (Result: new SearchResult(ResultKind.Window, result.Window.Title,
+                    result.Window.Description, result.Window.Address, Window: result.Window), result.Score));
 
-            results.AddRange(_applications
-                .Select(application => new
+            var applicationResults = applicationMatches
+                .Select(result => new
                 {
-                    Application = application,
-                    Score = Math.Max(
-                        FuzzySearch.Score(interpretedQuery, application.Name),
-                        FuzzySearch.Score(interpretedQuery, application.Comment ?? "") - 12),
+                    result.Application,
+                    Score = Math.Max(result.NameScore, result.CommentScore),
                 })
                 .Where(result => result.Score >= FUZZY_SCORE_CUTOFF)
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Application.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Take(MAXIMUM_APPLICATION_RESULTS)
-                .Select(result => new SearchResult(
+                .Select(result => (Result: new SearchResult(
                     ResultKind.Application,
                     result.Application.Name,
                     result.Application.Comment ?? "Launch application",
                     result.Application.DesktopFile,
-                    result.Application)));
+                    result.Application), result.Score));
+
+            results.AddRange(windowResults.Concat(applicationResults)
+                .OrderByDescending(result => result.Score)
+                .Select(result => result.Result));
         }
 
         if (!calculatorOnly && interpretedQuery.Length > 0)

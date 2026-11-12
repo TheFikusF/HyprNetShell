@@ -167,3 +167,21 @@ temperature_test = executable(
     c_args: ['-UNDEBUG', '-Wall', '-Wextra', '-Wpedantic', '-Werror'],
 )
 test('temperature', temperature_test, timeout: 10)
+
+wallpaper_memory_test = executable(
+    'wallpaper_memory_test',
+    ['wallpaper_memory_test.c', layer_shell_header, layer_shell_code],
+    dependencies: wayland_client,
+    include_directories: hypr_layer_include_directories,
+    c_args: ['-UNDEBUG', '-Wall', '-Wextra', '-Wpedantic', '-Werror'],
+    link_args: [
+        '-Wl,--wrap=wl_proxy_marshal_flags',
+        '-Wl,--wrap=wl_proxy_get_version',
+        '-Wl,--wrap=wl_proxy_add_listener',
+        '-Wl,--wrap=wl_proxy_destroy',
+        '-Wl,--wrap=wl_display_dispatch_pending',
+        '-Wl,--wrap=wl_display_prepare_read',
+        '-Wl,--wrap=wl_display_flush',
+    ],
+)
+test('wallpaper-memory', wallpaper_memory_test, timeout: 30)

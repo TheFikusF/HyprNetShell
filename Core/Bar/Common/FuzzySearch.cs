@@ -4,8 +4,8 @@ namespace HyprNetShell.Core.Bar.Common;
 
 internal static class FuzzySearch
 {
-    private const string EnglishKeys = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.";
-    private const string RussianKeys = "ёйцукенгшщзхъфывапролджэячсмитьбю";
+    private const string ENGLISH_KEYS = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.";
+    private const string RUSSIAN_KEYS = "ёйцукенгшщзхъфывапролджэячсмитьбю";
 
     private static readonly IReadOnlyDictionary<char, char> KeyboardLayoutMap = BuildKeyboardLayoutMap();
 
@@ -16,8 +16,8 @@ internal static class FuzzySearch
             return 0;
         }
 
-        var normalizedQuery = query.Trim();
-        var normalizedCandidate = candidate.Trim();
+        var normalizedQuery = query.Trim().ToLowerInvariant();
+        var normalizedCandidate = candidate.Trim().ToLowerInvariant();
         var translatedQuery = TranslateKeyboardLayout(normalizedQuery);
         var translatedCandidate = TranslateKeyboardLayout(normalizedCandidate);
 
@@ -61,10 +61,10 @@ internal static class FuzzySearch
     private static IReadOnlyDictionary<char, char> BuildKeyboardLayoutMap()
     {
         var map = new Dictionary<char, char>();
-        for (var index = 0; index < EnglishKeys.Length; index++)
+        for (var index = 0; index < ENGLISH_KEYS.Length; index++)
         {
-            AddPair(map, EnglishKeys[index], RussianKeys[index]);
-            AddPair(map, char.ToUpperInvariant(EnglishKeys[index]), char.ToUpperInvariant(RussianKeys[index]));
+            AddPair(map, ENGLISH_KEYS[index], RUSSIAN_KEYS[index]);
+            AddPair(map, char.ToUpperInvariant(ENGLISH_KEYS[index]), char.ToUpperInvariant(RUSSIAN_KEYS[index]));
         }
 
         return map;

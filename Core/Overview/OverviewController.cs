@@ -399,6 +399,7 @@ public sealed class OverviewController : IDisposable
         var hint = _previews.Count == 0 ? "No windows · Type to search"
             : "Type to search · Arrow keys to select · Enter to focus · Esc to clear / close";
         var overlay = new BoxNode(width, height) {
+            Style = new Style { BackgroundColor = _open ? Color.Transparent : null },
             OnClick = _open ? () => { } : null,
             Children =
             [
