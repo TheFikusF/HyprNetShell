@@ -15,7 +15,7 @@ internal sealed class SolitaireTab() : IMainDialogTab
 {
     private readonly SolitaireGame _game = new();
     private readonly SolitaireCardTextures _textures = new();
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttonStates = [];
 
     public string Id => "solitaire";
     public string Title => "Solitaire";
@@ -114,11 +114,12 @@ internal sealed class SolitaireTab() : IMainDialogTab
         Style = Style.Spacer,
         Children =
         [
-            MainDialogTabUi.BuildButton(_buttonStates, "New game", "restart", _game.Restart),
-            MainDialogTabUi.BuildButton(_buttonStates,
-                "Move to foundation",
-                "foundation",
-                () => { _game.TryMoveSelectionToFoundation(); }),
+            ActionButton.Build(_buttonStates, "restart", "New game", _game.Restart, style: MainDialogTabUi.ButtonStyle),
+            ActionButton.Build(_buttonStates, "foundation", "Move to foundation",
+                () =>
+                {
+                    _game.TryMoveSelectionToFoundation();
+                }, style: MainDialogTabUi.ButtonStyle),
             new TextNode("Controls", ThemeManager.Current.Text.HeaderSize),
             new TextNode(
                 $"Arrows or W/A/S/D select\nSpace/Enter draw, pick up, or place\nDouble-tap sends an eligible card home\nP moves the selected card to its foundation\nQ/Escape returns held cards\nR starts a new game\n\nDeals: {SolitaireConfig.AMOUNT_OF_DEALS}   Draw: {SolitaireConfig.CARDS_IN_DEAL}" +

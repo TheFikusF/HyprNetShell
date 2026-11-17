@@ -109,6 +109,12 @@ extern "C"
     int hypr_layer_set_clipboard(hypr_layer *layer, const unsigned char *data,
                                  int data_length, const char *mime_type);
 
+    /* Copies 1..4096 bytes; offers UTF-8/plain text and the literal secret
+     * hint. */
+    int hypr_layer_set_sensitive_clipboard(hypr_layer *layer,
+                                           const unsigned char *data,
+                                           int data_length);
+
     double hypr_layer_get_pointer_x(const hypr_layer *layer, uint64_t id);
     double hypr_layer_get_pointer_y(const hypr_layer *layer, uint64_t id);
     int hypr_layer_pointer_inside(const hypr_layer *layer, uint64_t id);

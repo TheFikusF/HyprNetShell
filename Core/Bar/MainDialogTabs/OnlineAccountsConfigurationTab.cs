@@ -11,7 +11,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
 internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accounts) : IMainDialogTab
 {
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttons = [];
 
     public string Id => "online-accounts";
     public string Title => "Accounts";
@@ -53,9 +53,9 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
     {
         var busy = accounts.BusyProvider;
         var isBusy = busy == snapshot.Provider;
-        Action? connectionAction = snapshot.Connected
-            ? busy is null ? () => accounts.Disconnect(snapshot.Provider) : null
-            : snapshot.Configured && busy is null ? () => accounts.Connect(snapshot.Provider) : null;
+        Action connectionAction = snapshot.Connected
+            ? () => accounts.Disconnect(snapshot.Provider)
+            : () => accounts.Connect(snapshot.Provider);
         var connectionLabel = isBusy
             ? "Working…"
             : snapshot.Connected ? "Disconnect" : snapshot.Configured ? "Connect" : "No client ID";
@@ -63,6 +63,20 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
             ? snapshot.AccountName ?? "Connected"
             : "Not connected");
 
+        var key = "connect:" + snapshot.Provider;
+        if (!_buttons.TryGetValue(key, out var button))
+        {
+            button = new ActionButton();
+            _buttons[key] = button;
+        }
+
+        button.Text = connectionLabel;
+        button.Action = connectionAction;
+        button.IsEnabled = busy is null && (snapshot.Connected || snapshot.Configured);
+        button.Style = ActionButton.ButtonStyle.Default with {
+            Background = snapshot.Connected ? ThemeManager.Current.Active : ThemeManager.Current.Panel,
+            DisabledOpacity = 0.55f,
+        };
         return new BoxNode() {
             HorizontalAlignment = ItemsAlignment.Spread,
             VerticalAlignment = ItemsAlignment.Center,
@@ -103,11 +117,7 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
                     Style = new Style { Spacing = 8 },
                     Children =
                     [
-                        BuildButton(
-                            connectionLabel,
-                            "connect:" + snapshot.Provider,
-                            connectionAction,
-                            snapshot.Connected),
+                        button.Build(),
                     ],
                 },
             ],
@@ -115,28 +125,6 @@ internal sealed class OnlineAccountsConfigurationTab(OnlineAccountsService accou
     }
 
 
-    private BoxNode BuildButton(string label, string key, Action? action, bool active = false)
-    {
-        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(active ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        if (action is null)
-        {
-            state.Hovered.Value = false;
-        }
-
-        return new BoxNode {
-            OnClick = action,
-            IsHovered = action is null ? null : state.Hovered,
-            Opacity = action is null ? 0.55f : 1.0f,
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = new Insets(12, 8),
-                BorderRadius = 8,
-                BorderWidth = 0,
-            },
-            Children = [new TextNode(label)],
-        };
-    }
 
 
     private static SvgAsset ProviderIcon(OnlineAccountProvider provider) => provider switch {

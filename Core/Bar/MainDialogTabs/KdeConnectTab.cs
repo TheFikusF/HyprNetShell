@@ -19,7 +19,7 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttonStates = [];
     private IReadOnlyList<KdeConnectDeviceSnapshot> _devices = [];
     private Task? _operationTask;
     private string? _status;
@@ -188,35 +188,24 @@ internal sealed class KdeConnectTab(KdeConnectService service) : IMainDialogTab,
         var actions = new List<Node>();
         if (device.PairingState == KdeConnectPairingState.IncomingRequest)
         {
-            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
-                "Accept",
-                $"accept:{device.Id}",
-                busy || string.IsNullOrWhiteSpace(device.VerificationCode)
-                    ? null
-                    : () => AcceptPairing(device)));
-            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
-                "Reject",
-                $"reject:{device.Id}",
-                busy ? null : () => RejectPairing(device)));
+            actions.Add(ActionButton.Build(_buttonStates, $"accept:{device.Id}", "Accept",
+                () => AcceptPairing(device),
+                isEnabled: !busy && !string.IsNullOrWhiteSpace(device.VerificationCode), style: MainDialogTabUi.ButtonStyle));
+            actions.Add(ActionButton.Build(_buttonStates, $"reject:{device.Id}", "Reject",
+                () => RejectPairing(device), isEnabled: !busy, style: MainDialogTabUi.ButtonStyle));
         }
         else if (device.IsPaired)
         {
-            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
-                "Send clipboard",
-                $"clipboard:{device.Id}",
-                !busy && device.IsReachable ? () => SendClipboard(device) : null));
-            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
-                "Unpair",
-                $"unpair:{device.Id}",
-                busy ? null : () => Unpair(device)));
+            actions.Add(ActionButton.Build(_buttonStates, $"clipboard:{device.Id}", "Send clipboard",
+                () => SendClipboard(device), isEnabled: !busy && device.IsReachable, style: MainDialogTabUi.ButtonStyle));
+            actions.Add(ActionButton.Build(_buttonStates, $"unpair:{device.Id}", "Unpair",
+                () => Unpair(device), isEnabled: !busy, style: MainDialogTabUi.ButtonStyle));
         }
         else
         {
             var requestPending = device.PairingState == KdeConnectPairingState.OutgoingRequest;
-            actions.Add(MainDialogTabUi.BuildButton(_buttonStates,
-                requestPending ? "Pairing requested" : "Pair",
-                $"pair:{device.Id}",
-                !busy && !requestPending && device.IsReachable ? () => RequestPairing(device) : null));
+            actions.Add(ActionButton.Build(_buttonStates, $"pair:{device.Id}", requestPending ? "Pairing requested" : "Pair",
+                () => RequestPairing(device), isEnabled: !busy && !requestPending && device.IsReachable, style: MainDialogTabUi.ButtonStyle));
         }
 
         return new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center) {

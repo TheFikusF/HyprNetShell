@@ -6,9 +6,7 @@ using HyprNetShell.Core.Features.System;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
-using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
-
 using HyprNetShell.Core.Bar.Common;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
@@ -19,31 +17,17 @@ internal sealed class ClipboardManagerTab(
     Action closeDialog,
     TextInputCoordinator inputs) : IMainDialogTab
 {
-    private sealed class ActionButtonState : ModulesCommon.BoxState
-    {
-        public float IconOpacity
-        {
-            get; set;
-        }
-    }
-
     private sealed class ClipboardButtonState : ModulesCommon.BoxState
     {
-        public ActionButtonState Send { get; } = new();
-        public ActionButtonState Pin { get; } = new();
-        public ActionButtonState Delete { get; } = new();
+        public AnimatedIconButton Send { get; } = new();
+        public AnimatedIconButton Pin { get; } = new();
+        public AnimatedIconButton Delete { get; } = new();
     }
 
     private const int FUZZY_SCORE_CUTOFF = 35;
-    private const int PREVIEW_MAX_WIDTH = 700;
     private readonly Dictionary<string, ClipboardButtonState> _buttonsState = new();
     private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
-        "",
-        "",
-        "Search clipboard history...",
-        4096,
-        alwaysActive: true);
-
+        "", "", "Search clipboard history...", 4096, alwaysActive: true);
     private IReadOnlyList<ClipboardHistoryEntry> _entries = [];
     private IReadOnlyList<ClipboardHistoryEntry> _filteredEntries = [];
     private string _query = "";
@@ -72,11 +56,8 @@ internal sealed class ClipboardManagerTab(
     {
         if (direction is SelectionDirection.Up or SelectionDirection.Down)
         {
-            BoundedListUi.MoveSelection(
-                ref _selectedIndex,
-                ref _firstIndex,
-                direction == SelectionDirection.Up ? -1 : 1,
-                _filteredEntries.Count);
+            BoundedListUi.MoveSelection(ref _selectedIndex, ref _firstIndex,
+                direction == SelectionDirection.Up ? -1 : 1, _filteredEntries.Count);
         }
     }
 
@@ -104,22 +85,14 @@ internal sealed class ClipboardManagerTab(
             Style = new Style { Spacing = 8 },
             Children =
             [
-                MainDialogTabUi.BuildSectionHeader(
-                    "Clipboard",
-                    MainDialogTabUi.ResultCount(
-                        _selectedIndex,
-                        _filteredEntries.Count,
-                        "Clipboard history is empty")),
+                MainDialogTabUi.BuildSectionHeader("Clipboard",
+                    MainDialogTabUi.ResultCount(_selectedIndex, _filteredEntries.Count, "Clipboard history is empty")),
                 new BoxNode(height: 46)
                 {
                     HorizontalAlignment = ItemsAlignment.Stretch,
                     VerticalAlignment = ItemsAlignment.Center,
                     Style = new Style { Spacing = 8 },
-                    Children =
-                    [
-                        inputs.Build(_queryInput),
-                        BuildDateDropdown(),
-                    ],
+                    Children = [inputs.Build(_queryInput), BuildDateDropdown()],
                 },
                 BoundedListUi.BuildScrollableResults(
                     new BoxNode
@@ -127,16 +100,9 @@ internal sealed class ClipboardManagerTab(
                         Direction = Direction.Vertical,
                         HorizontalAlignment = ItemsAlignment.Stretch,
                         Style = new Style { Spacing = 8 },
-                        Children =
-                        [
-                            .._filteredEntries
-                                .VisibleItems(_firstIndex)
-                                .Select(item => BuildRow(item.Item, item.Index)),
-                        ],
+                        Children = [.._filteredEntries.VisibleItems(_firstIndex).Select(item => BuildRow(item.Item, item.Index))],
                     },
-                    _firstIndex,
-                    _filteredEntries.Count,
-                    BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
+                    _firstIndex, _filteredEntries.Count, BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT),
             ],
         };
     }
@@ -145,9 +111,13 @@ internal sealed class ClipboardManagerTab(
     {
         var selected = index == _selectedIndex;
         var stateKey = $"{entry.MimeType}\0{entry.Hash}";
-        var state = _buttonsState.GetState(stateKey, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
+        var state = _buttonsState.GetState(stateKey, ThemeManager.Current.Panel)
+            .UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
+        var active = selected || state.Hovered.Value;
+        var sendAvailable = entry.Image is null && kdeConnect.Snapshot.Devices.Any(
+            static device => device.IsPaired && device.IsReachable);
         return new BoxNode {
-            HorizontalAlignment = ItemsAlignment.Spread,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             VerticalAlignment = ItemsAlignment.Center,
             OnClick = () =>
             {
@@ -159,7 +129,7 @@ internal sealed class ClipboardManagerTab(
                 _selectedIndex = index;
                 ActivateSelection();
             },
-            IsHovered = state.Hovered,
+            IsHoveredThrough = state.Hovered,
             Style = ModulesCommon.ModuleStyle(state.Background) with {
                 BorderRadius = 8,
                 BorderWidth = selected ? ThemeManager.Current.Border.Width : 0,
@@ -168,156 +138,30 @@ internal sealed class ClipboardManagerTab(
             },
             Children =
             [
+                entry.Image is not null
+                    ? new ImageNode(entry.Image, 46, 46)
+                    : new ImageNode(Icons.Copy, 30, 30, ThemeManager.Current.Text),
                 new BoxNode
                 {
+                    Flex = 1,
+                    HorizontalAlignment = ItemsAlignment.Stretch,
                     VerticalAlignment = ItemsAlignment.Center,
-                    Style = new Style { Spacing = 14 },
+                    Children = [new TextNode(entry.Preview, wrapping: TextWrapping.Wrap, maxLines: 5)],
+                },
+                new BoxNode(height: 32)
+                {
+                    VerticalAlignment = ItemsAlignment.Center,
+                    HorizontalAlignment = ItemsAlignment.End,
+                    Style = new Style(),
+                    Flex = 0,
                     Children =
                     [
-                        entry.Image is not null
-                            ? new ImageNode(entry.Image, 46, 46)
-                            : new ImageNode(Icons.Copy, 30, 30, ThemeManager.Current.Text),
-                        new TextNode(entry.Preview, maxWidth: PREVIEW_MAX_WIDTH, wrapping: TextWrapping.Wrap, maxLines: 5),
+                        state.Send.Build(Icons.Smartphone, active && sendAvailable,
+                            () => _ = kdeConnect.SendClipboardTextAsync(Encoding.UTF8.GetString(entry.Data))),
+                        state.Pin.Build(entry.IsPinned && active ? Icons.PinOff : Icons.Pin,
+                            active || entry.IsPinned, () => history.TogglePinned(entry)),
+                        state.Delete.Build(Icons.Delete, active, () => history.Delete(entry)),
                     ],
-                },
-                new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
-                {
-                    BuildSendButton(entry, selected || state.Hovered.Value, state.Send),
-                    BuildPinButton(entry, selected || state.Hovered.Value, state.Pin),
-                    BuildDeleteButton(entry, selected || state.Hovered.Value, state.Delete),
-                },
-            ],
-        };
-    }
-
-    private BoxNode BuildSendButton(
-        ClipboardHistoryEntry entry,
-        bool active,
-        ActionButtonState state)
-    {
-        var available = entry.Image is null && kdeConnect.Snapshot.Devices.Any(
-            static device => device.IsPaired && device.IsReachable);
-        var transparent = Color.White with {
-            A = 0.0f
-        };
-        var hover = Color.White with {
-            A = 0.3f
-        };
-        state.Background = Color.LerpSmooth(
-            state.Background,
-            available && state.Hovered.Value ? hover : transparent,
-            18.0f,
-            Renderer.DeltaTime);
-        state.IconOpacity = PrimitivesMath.LerpSmooth(
-            state.IconOpacity,
-            available && active ? 1.0f : 0.0f,
-            18.0f,
-            Renderer.DeltaTime);
-
-        return new BoxNode(32, 32) {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = available
-                ? () => _ = kdeConnect.SendClipboardTextAsync(Encoding.UTF8.GetString(entry.Data))
-                : null,
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = 0,
-                BorderRadius = 8,
-                BorderWidth = 0,
-                ShadowColor = null,
-            },
-            Children =
-            [
-                new ImageNode(Icons.Smartphone, 18, 18, ThemeManager.Current.Text)
-                {
-                    Opacity = state.IconOpacity,
-                },
-            ],
-        };
-    }
-
-    private BoxNode BuildPinButton(
-        ClipboardHistoryEntry entry,
-        bool active,
-        ActionButtonState state)
-    {
-        var transparent = Color.White with {
-            A = 0.0f
-        };
-        var hover = Color.White with {
-            A = 0.3f
-        };
-        state.Background = Color.LerpSmooth(
-            state.Background,
-            state.Hovered.Value ? hover : transparent,
-            18.0f,
-            Renderer.DeltaTime);
-        state.IconOpacity = PrimitivesMath.LerpSmooth(
-            state.IconOpacity,
-            entry.IsPinned || active ? 1.0f : 0.0f,
-            18.0f,
-            Renderer.DeltaTime);
-
-        return new BoxNode(32, 32) {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = () => history.TogglePinned(entry),
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = 0,
-                BorderRadius = 8,
-                BorderWidth = 0,
-                ShadowColor = null,
-            },
-            Children =
-            [
-                new ImageNode(entry.IsPinned && active ? Icons.PinOff : Icons.Pin, 18, 18, ThemeManager.Current.Text)
-                {
-                    Opacity = state.IconOpacity,
-                },
-            ],
-        };
-    }
-
-    private BoxNode BuildDeleteButton(
-        ClipboardHistoryEntry entry,
-        bool active,
-        ActionButtonState state)
-    {
-        var transparent = Color.White with {
-            A = 0.0f
-        };
-        var hover = Color.White with {
-            A = 0.3f
-        };
-        state.Background = Color.LerpSmooth(
-            state.Background,
-            state.Hovered.Value ? hover : transparent,
-            18.0f,
-            Renderer.DeltaTime);
-        state.IconOpacity = PrimitivesMath.LerpSmooth(
-            state.IconOpacity,
-            active ? 1.0f : 0.0f,
-            18.0f,
-            Renderer.DeltaTime);
-
-        return new BoxNode(32, 32) {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            OnClick = () => history.Delete(entry),
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = 0,
-                BorderRadius = 8,
-                BorderWidth = 0,
-                ShadowColor = null,
-            },
-            Children =
-            [
-                new ImageNode(Icons.Delete, 18, 18, ThemeManager.Current.Text)
-                {
-                    Opacity = state.IconOpacity,
                 },
             ],
         };
@@ -325,13 +169,8 @@ internal sealed class ClipboardManagerTab(
 
     private DropdownNode BuildDateDropdown()
     {
-        _dateDropdown ??= new DropdownNode(
-            160,
-            HistoryDateFilter.Labels,
-            (int)_dateRange,
-            Icons.ChevronDown,
-            Icons.Check,
-            selected =>
+        _dateDropdown ??= new DropdownNode(160, HistoryDateFilter.Labels, (int)_dateRange,
+            Icons.ChevronDown, Icons.Check, selected =>
             {
                 _dateRange = (HistoryDateRange)selected;
                 ApplyFilter();
@@ -340,7 +179,6 @@ internal sealed class ClipboardManagerTab(
             BackgroundColor = ThemeManager.Current.Panel,
             HoverColor = Color.Lighten(ThemeManager.Current.Panel, 0.18f),
             SelectedColor = ThemeManager.Current.Active,
-
             BorderWidth = ThemeManager.Current.Border.Width,
             BorderRadius = 8,
             TextColor = ThemeManager.Current.Text,
@@ -364,8 +202,7 @@ internal sealed class ClipboardManagerTab(
 
     private void ApplyFilter()
     {
-        var dateFilteredEntries = _entries
-            .Where(entry => HistoryDateFilter.Includes(_dateRange, entry.CapturedAt));
+        var dateFilteredEntries = _entries.Where(entry => HistoryDateFilter.Includes(_dateRange, entry.CapturedAt));
         _filteredEntries = string.IsNullOrWhiteSpace(_query)
             ? dateFilteredEntries.ToArray()
             : dateFilteredEntries

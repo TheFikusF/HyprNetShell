@@ -8,6 +8,22 @@ Features include workspaces, system and media controls, notifications, a system 
 
 This is a work in progress, not a polished drop-in desktop. Hyprland is the intended environment; other layer-shell compositors may support the bar, but Hyprland-specific features will not work there.
 
+## Authenticator
+
+The **Authenticator** tab supports TOTP and HOTP accounts through [Otp.NET](https://github.com/kspearrin/Otp.NET), with SHA-1/SHA-256/SHA-512 and 6/8-digit codes. TOTP displays live codes and countdowns, including custom periods. HOTP uses an explicit **Generate & copy** action: the next counter is persisted before the code is made available. Opening, searching, and refreshing do not consume counters. If copying fails, **Retry copy** reuses the generated HOTP code without advancing its counter. Retry codes are retained only in memory for up to five minutes and are discarded after successful copying or tab disposal. Search by issuer or account, use Up/Down to select, and press Enter to copy TOTP or generate HOTP.
+
+A running Linux Secret Service (such as GNOME Keyring or KeePassXC's Secret Service integration) with an unlocked default collection is required. Account seeds and metadata are stored together in the keyring, never in shell settings. Keyring failures are shown in the tab; unlock/start the service and select **Retry keyring load**. Accurate system time is required for valid codes.
+
+Use **Import account** to paste a standard `otpauth://totp` or `otpauth://hotp` URI, or a Google Authenticator `otpauth-migration://offline?data=…` export URI decoded from a QR **offline**. Migration decoding is local; no converter is needed. Import each page of a multi-QR export separately. Reimporting matching HOTP accounts never lowers their saved counters. Never upload export QRs or URIs to an online converter.
+
+Import fields are masked. Import URIs and copied codes are excluded from HyprNetShell's clipboard history; standalone 6/8-digit numbers are also excluded conservatively, including when loading existing history. Code copying uses native Wayland `ext-data-control-v1`, offering text plus `x-kde-passwordManagerHint=secret`. It does not require `wl-copy` and never falls back to unmarked copying. This hint is a convention, not a universal privacy guarantee: other clipboard managers may ignore it, so disable their history while handling secrets. This does not erase older database backups or external clipboard histories. Existing custom window layouts can enable **Authenticator** in their tab configuration; new default layouts include it automatically.
+
+## Screenshot text and QR scanning
+
+Press **Shift+PrintScreen** and select an area to copy decoded QR-code content to the clipboard. Multiple QR results are separated by newlines; links are never opened automatically. If no QR code is found, the selection falls back to text recognition.
+
+QR scanning uses bundled [quirc](https://github.com/dlbeer/quirc) v1.2; no ZBar runtime is needed. Normal managed builds load `libhypr_qr.so` with quirc statically linked, and NativeAOT links the decoder into the executable. ASCII/UTF-8 payloads are copied as text; binary, invalid UTF-8, and explicitly declared legacy encodings are skipped. Mirrored codes are retried. Text recognition requires `libtesseract` and English language data. Scanning runs locally without uploading the screenshot or logging decoded content.
+
 ## Wallpapers
 
 Wallpapers are rendered by HyprNetShell itself; `hyprpaper` is no longer needed. Remove any separate `hyprpaper` autostart entry to avoid competing background surfaces. The wallpaper picker and slideshow apply the selected image to every output using centered cover scaling. Background surfaces follow monitor hotplug and scaling, accept no input, and reserve no desktop space. They live only while HyprNetShell is running.
@@ -33,6 +49,8 @@ You need:
 
 Wayland protocol XML files are vendored; no separate `wlr-protocols` package is needed.
 
+Native builds also require Python 3.12+ and `ar`. Upstream quirc publishes no release assets, so the build downloads v1.2 commit `542848dd6b9b0eaa9587bbf25b9bc67bd8a71fca`, verifies SHA-256 `bae99cf0debe866f2286f8491e39ab84e9187ba865d949f5616e36a560c791c6`, and compiles its four library source files as a PIC static archive. Only the first build needs access to `codeload.github.com`; verified downloads and build outputs are cached in `Native/build/`. Run `python3 scripts/build-static-libraries.py --quirc-only` to prepare it separately. The upstream ISC license is copied to `licenses/quirc/LICENSE` in managed build and publish outputs (including NativeAOT).
+
 From the repository root:
 
 ```bash
@@ -47,13 +65,23 @@ The project native libraries use Clang with Meson's `debugoptimized` configurati
 
 ### NativeAOT static libraries
 
-NativeAOT publishes statically link our Wayland and audio libraries, SQLite, SkiaSharp, and HarfBuzzSharp into the executable. Regular managed builds continue using shared libraries.
+NativeAOT publishes statically link our Wayland and audio libraries, SQLite, SkiaSharp, HarfBuzzSharp, and quirc into the executable. Regular managed builds continue using shared libraries.
 
 Publishing additionally requires Python 3.12 or newer, Clang/Clang++, `ar`, Fontconfig development files, and WirePlumber 0.5 development files (mandatory for AOT). `scripts/build-static-libraries.py` downloads version-pinned SQLite, SkiaSharp, and HarfBuzz sources and Skia's pinned image/font dependencies into the ignored `Native/build/` directory. If GN is not installed, it downloads a GN binary there. The first publish needs network access and can take several minutes; later builds reuse those downloads and incremental native outputs. To prepare the archives separately or limit compilation parallelism:
 
 ```bash
 ./build.sh static --jobs 2
 ```
+
+A generated-fixture QR regression test is available after the native build:
+
+```bash
+python3 -m venv /tmp/hyprnetshell-qr-test
+/tmp/hyprnetshell-qr-test/bin/pip install qrcode==8.2
+/tmp/hyprnetshell-qr-test/bin/python scripts/test-qr.py
+```
+
+The generator is test-only, not a runtime/build dependency. Tests cover ASCII/UTF-8, mirrored and multiple codes, blank images, and invalid ABI arguments.
 
 The source versions match SkiaSharp 4.151.1, HarfBuzzSharp 14.2.0, and SQLitePCLRaw 2.1.12 (SQLite 3.53.3). HarfBuzz builds without optional system integrations and verifies every managed native import against the archive. Use `./build.sh static --harfbuzz-only` to build just that archive. Update the script's source pins/checksums together with those package versions.
 

@@ -37,6 +37,7 @@ internal sealed class TabsService : IDisposable
             new UnifiedSearchTab(hyprctl, urlLauncher, closeDialog, clipboardHistory, Inputs),
             new ApplicationLauncherTab(hyprctl, closeDialog, Inputs),
             new CalculatorTab(clipboardHistory, Inputs),
+            new AuthenticatorTab(clipboardHistory, Inputs),
             new DictionaryTab(dictionary, clipboardHistory, Inputs),
             new ClocksTab(Inputs),
             new CalendarTab(calendar),

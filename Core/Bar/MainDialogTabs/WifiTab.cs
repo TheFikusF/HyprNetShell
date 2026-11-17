@@ -23,7 +23,8 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttonStates = [];
+    private readonly Dictionary<string, ModulesCommon.BoxState> _iconButtonStates = [];
     private readonly Ref<float> _wifiSwitchAnimation = new();
     private readonly TextInputCoordinator.Input _passwordInput;
 
@@ -305,10 +306,10 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                 },
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
-                    BuildButton(network.Active ? "Connected" : "Connect", $"connect:{network.Ssid}",
-                        network.Active || busy ? null : () => BeginConnect(network)),
-                    BuildButton("Forget", $"forget:{network.Ssid}",
-                        network.SavedConnectionName is null || busy ? null : () => BeginForget(network)),
+                    ActionButton.Build(_buttonStates, $"connect:{network.Ssid}", network.Active ? "Connected" : "Connect",
+                        () => BeginConnect(network), isEnabled: !network.Active && !busy, style: MainDialogTabUi.ButtonStyle),
+                    ActionButton.Build(_buttonStates, $"forget:{network.Ssid}", "Forget",
+                        () => BeginForget(network), isEnabled: network.SavedConnectionName is not null && !busy, style: MainDialogTabUi.ButtonStyle),
                     BuildIconButton(Icons.QrCode, $"share:{network.Ssid}",
                         busy || IsSecured(network) && network.SavedConnectionName is null ? null : () => BeginShare(network)),
                 },
@@ -331,7 +332,7 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                     Style = new Style { BackgroundColor = Color.White, Padding = 12, BorderRadius = 8 },
                     Children = [new ImageNode(qrImage, 320, 320)],
                 },
-            BuildButton("Back", "share-back", CancelShare),
+            ActionButton.Build(_buttonStates, "share-back", "Back", CancelShare, style: MainDialogTabUi.ButtonStyle),
         ],
     };
 
@@ -350,20 +351,18 @@ internal sealed class WifiTab : IMainDialogTab, IDisposable
                 Style = new Style { Spacing = 8 },
                 Children =
                 [
-                    BuildButton("Cancel", "password-cancel", busy ? null : CancelPassword),
-                    BuildButton(busy ? "Connecting..." : "Connect", "password-connect",
-                        busy || password.Length == 0 ? null : ConnectWithPassword),
+                    ActionButton.Build(_buttonStates, "password-cancel", "Cancel", CancelPassword, isEnabled: !busy, style: MainDialogTabUi.ButtonStyle),
+                    ActionButton.Build(_buttonStates, "password-connect", busy ? "Connecting..." : "Connect",
+                        ConnectWithPassword, isEnabled: !busy && password.Length > 0, style: MainDialogTabUi.ButtonStyle),
                 ],
             },
         ],
     };
 
-    private BoxNode BuildButton(string text, string key, Action? action) =>
-        MainDialogTabUi.BuildButton(_buttonStates, text, key, action);
 
     private BoxNode BuildIconButton(SvgAsset icon, string key, Action? action)
     {
-        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
+        var state = _iconButtonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
         return new(34, 34) {
             IsHovered = state.Hovered,
             OnClick = action,

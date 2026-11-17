@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Security.Cryptography;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering.Primitives;
 
@@ -9,14 +10,25 @@ namespace HyprNetShell;
 
 public sealed class HyprLayer : IDisposable
 {
+    private sealed class ClipboardRequest(byte[] data, CancellationToken token)
+    {
+        public byte[] Data { get; } = data;
+        public CancellationToken Token { get; } = token;
+        public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public CancellationTokenRegistration Registration { get; set; }
+    }
+
     public const float TARGET_FRAMERATE = 60.0f;
     private const int OUTPUT_NAME_BUFFER_SIZE = 256;
 
     private static readonly TimeSpan TargetFrameDuration = TimeSpan.FromSeconds(1.0 / TARGET_FRAMERATE);
 
+    private readonly object _clipboardLock = new();
+    private readonly Queue<ClipboardRequest> _clipboardRequests = new();
     private readonly Dictionary<ulong, Output> _outputsById = [];
     private readonly List<Output> _outputs = [];
     private readonly ReadOnlyCollection<Output> _readOnlyOutputs;
+    private bool _disposed;
     private PosixSignalRegistration? _sigIntRegistration;
     private PosixSignalRegistration? _sigTermRegistration;
     private IntPtr _layer;
@@ -136,6 +148,7 @@ public sealed class HyprLayer : IDisposable
             return false;
         }
 
+        ProcessClipboardRequests();
         ReconcileOutputs();
         foreach (var output in _outputs)
         {
@@ -181,6 +194,80 @@ public sealed class HyprLayer : IDisposable
     public bool SetClipboard(byte[] data, string mimeType) =>
         _layer != IntPtr.Zero && data.Length > 0 &&
         NativeMethods.hypr_layer_set_clipboard(_layer, data, data.Length, mimeType) != 0;
+
+    // Copies caller-owned data. The caller remains responsible for clearing its original buffer.
+    public Task<bool> SetSensitiveClipboardAsync(byte[] data, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Length is < 1 or > 4096)
+        {
+            throw new ArgumentOutOfRangeException(nameof(data), "Sensitive clipboard data must contain 1..4096 bytes.");
+        }
+
+        lock (_clipboardLock)
+        {
+            if (token.IsCancellationRequested)
+            {
+                return Task.FromCanceled<bool>(token);
+            }
+
+            if (_disposed || Volatile.Read(ref _shutdownRequested) != 0)
+            {
+                return Task.FromResult(false);
+            }
+
+            var request = new ClipboardRequest((byte[])data.Clone(), token);
+            _clipboardRequests.Enqueue(request);
+            request.Registration = token.Register(() =>
+            {
+                lock (_clipboardLock)
+                {
+                    if (!request.Completion.Task.IsCompleted)
+                    {
+                        CryptographicOperations.ZeroMemory(request.Data);
+                        request.Completion.TrySetCanceled(token);
+                    }
+                }
+            });
+            return request.Completion.Task;
+        }
+    }
+
+    private void ProcessClipboardRequests()
+    {
+        lock (_clipboardLock)
+        {
+            while (_clipboardRequests.TryDequeue(out var request))
+            {
+                try
+                {
+                    if (request.Completion.Task.IsCompleted)
+                    {
+                        continue;
+                    }
+
+                    if (request.Token.IsCancellationRequested)
+                    {
+                        request.Completion.TrySetCanceled(request.Token);
+                    }
+                    else
+                    {
+                        request.Completion.TrySetResult(_layer != IntPtr.Zero &&
+                            NativeMethods.hypr_layer_set_sensitive_clipboard(_layer, request.Data, request.Data.Length) != 0);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    request.Completion.TrySetException(exception);
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(request.Data);
+                    request.Registration.Unregister();
+                }
+            }
+        }
+    }
 
     public void SetInputRegions(ulong outputId, IReadOnlyList<Rect> regions)
     {
@@ -248,11 +335,22 @@ public sealed class HyprLayer : IDisposable
 
     public void Dispose()
     {
-        if (_layer != IntPtr.Zero)
+        lock (_clipboardLock)
         {
-            _returnCode = NativeMethods.hypr_layer_has_error(_layer);
-            NativeMethods.hypr_layer_destroy(_layer);
-            _layer = IntPtr.Zero;
+            _disposed = true;
+            while (_clipboardRequests.TryDequeue(out var request))
+            {
+                CryptographicOperations.ZeroMemory(request.Data);
+                request.Completion.TrySetResult(false);
+                request.Registration.Unregister();
+            }
+
+            if (_layer != IntPtr.Zero)
+            {
+                _returnCode = NativeMethods.hypr_layer_has_error(_layer);
+                NativeMethods.hypr_layer_destroy(_layer);
+                _layer = IntPtr.Zero;
+            }
         }
 
         _outputs.Clear();

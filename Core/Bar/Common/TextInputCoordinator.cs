@@ -90,14 +90,15 @@ internal sealed class TextInputCoordinator(ClipboardHistoryService clipboard)
         _activeInput = input;
     }
 
-    internal BoxNode Build(Input input)
+    internal BoxNode Build(Input input, bool masked = false)
     {
         var active = ReferenceEquals(_activeInput, input);
         var hasLabel = input.Label.Length > 0;
         var caret = active && Math.Sin(Environment.TickCount64 / 200.0) > 0 ? "|" : "";
+        var value = masked ? new string('•', Math.Min(input.Value.Length, 32)) : input.Value;
         var displayedValue = input.Value.Length == 0
             ? input.Placeholder
-            : active ? input.Value + caret : input.Value;
+            : active ? value + caret : value;
         var inputColor = active || input.Value.Length > 0 ? ThemeManager.Current.Text : ThemeManager.Current.Text.MutedColor;
         var background = active && !input.AlwaysActive ? ThemeManager.Current.Active : ThemeManager.Current.Panel;
         if (hasLabel)

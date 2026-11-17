@@ -21,7 +21,7 @@ internal sealed class CalendarSourcesConfigurationTab(
 
     private const int VISIBLE_SOURCE_COUNT = 6;
 
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttons = [];
     private readonly Dictionary<string, Ref<float>> _googleSwitchAnimations = [];
     private readonly TextInputCoordinator.Input _urlInput = inputs.Create(
         "Calendar URL",
@@ -94,11 +94,9 @@ internal sealed class CalendarSourcesConfigurationTab(
                     new TextNode(status, color: ThemeManager.Current.Text.MutedColor, wrapping: TextWrapping.Ellipsis),
                 ],
             },
-            BuildActionButton(
+            ActionButton.Build(_buttons, "refresh",
                 calendar.IsRefreshing ? "Refreshing…" : "Refresh",
-                Icons.Reboot,
-                "refresh",
-                calendar.IsRefreshing ? null : ForceRefresh),
+                ForceRefresh, Icons.Reboot, !calendar.IsRefreshing),
         ],
     };
 
@@ -195,11 +193,8 @@ internal sealed class CalendarSourcesConfigurationTab(
                 HorizontalAlignment = ItemsAlignment.Stretch,
                 Children = [inputs.Build(_urlInput)],
             },
-            BuildActionButton(
-                "Add",
-                Icons.Add,
-                "add",
-                string.IsNullOrWhiteSpace(_urlInput.Value) ? null : () => AddUrl()),
+            ActionButton.Build(_buttons, "add", "Add",
+                () => AddUrl(), Icons.Add, !string.IsNullOrWhiteSpace(_urlInput.Value)),
         ],
     };
 
@@ -224,43 +219,9 @@ internal sealed class CalendarSourcesConfigurationTab(
                 HorizontalAlignment = ItemsAlignment.Stretch,
                 Children = [new TextNode(url, wrapping: TextWrapping.Ellipsis)],
             },
-            BuildActionButton("Remove", Icons.Delete, "remove:" + url, () => RemoveUrl(url)),
+            ActionButton.Build(_buttons, "remove:" + url, "Remove", () => RemoveUrl(url), Icons.Delete),
         ],
     };
-
-    private BoxNode BuildActionButton(
-        string label,
-        SvgAsset icon,
-        string key,
-        Action? action)
-    {
-        if (!_buttonStates.TryGetValue(key, out var state))
-        {
-            state = new ModulesCommon.BoxState { Background = ThemeManager.Current.Panel };
-            _buttonStates[key] = state;
-        }
-
-        state.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode {
-            Flex = 0,
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            IsHovered = action is null ? null : state.Hovered,
-            OnClick = action,
-            Opacity = action is null ? 0.5f : 1.0f,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = new Insets(12, 8),
-                BorderRadius = 8,
-                BorderWidth = 0,
-                Spacing = 8,
-            },
-            Children =
-            [
-                new ImageNode(icon, 16, 16, ThemeManager.Current.Text),
-                new TextNode(label),
-            ],
-        };
-    }
 
 
     private bool AddUrl(string? value = null)

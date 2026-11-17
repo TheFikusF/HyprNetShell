@@ -58,6 +58,8 @@ build_native() {
     # Managed builds and AOT linking consume these established library paths.
     cp "$NATIVE_BUILD_DIR/libhypr_layer.so" "$NATIVE_DIR/build/libhypr_layer.so"
     cp "$NATIVE_BUILD_DIR/libhypr_layer.a" "$NATIVE_DIR/build/libhypr_layer.a"
+    cp "$NATIVE_BUILD_DIR/libhypr_qr.so" "$NATIVE_DIR/build/libhypr_qr.so"
+    cp "$NATIVE_BUILD_DIR/libhypr_qr.a" "$NATIVE_DIR/build/libhypr_qr.a"
     if [ -f "$NATIVE_BUILD_DIR/libhypr_audio.so" ]; then
         cp "$NATIVE_BUILD_DIR/libhypr_audio.so" "$NATIVE_DIR/build/libhypr_audio.so"
         cp "$NATIVE_BUILD_DIR/libhypr_audio.a" "$NATIVE_DIR/build/libhypr_audio.a"

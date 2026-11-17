@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -21,8 +22,12 @@ internal sealed class ClipboardHistoryService : IDisposable
         "text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "TEXT", "STRING",
     ];
 
+    // Never expire these hashes: a clipboard owner can serve a delayed capture.
+    private static readonly ConcurrentDictionary<string, byte> SuppressedHashes = new(StringComparer.Ordinal);
+
     private readonly Lock _gate = new();
     private readonly HistoryStore _history;
+    private readonly Func<byte[], CancellationToken, Task<bool>>? _copySensitive;
     private readonly List<ClipboardHistoryEntry> _entries = [];
     private readonly CancellationTokenSource _disposeCancellation = new();
     private readonly Task _watchTask;
@@ -33,10 +38,20 @@ internal sealed class ClipboardHistoryService : IDisposable
     public int Version => Volatile.Read(ref _version);
     internal long LastChangeTimestamp => Interlocked.Read(ref _lastChangeTimestamp);
 
-    public ClipboardHistoryService(HistoryStore history)
+    public ClipboardHistoryService(HistoryStore history, Func<byte[], CancellationToken, Task<bool>>? copySensitive = null)
     {
         _history = history;
-        _entries.AddRange(history.LoadClipboardEntries());
+        _copySensitive = copySensitive;
+        foreach (var entry in history.LoadClipboardEntries())
+        {
+            if (SuppressedHashes.ContainsKey(entry.Hash) || IsSensitiveText(entry.Data))
+            {
+                history.DeleteClipboardEntry(entry.MimeType, entry.Hash);
+                continue;
+            }
+
+            _entries.Add(entry);
+        }
         _lastChangeTimestamp = _entries.Count == 0
             ? 0
             : new DateTimeOffset(_entries.Max(static entry => entry.CapturedAt), TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -112,26 +127,78 @@ internal sealed class ClipboardHistoryService : IDisposable
     public async Task<bool> CopyTextAsync(string text, CancellationToken cancellationToken = default)
     {
         var data = Encoding.UTF8.GetBytes(text);
-        var copied = await TryWriteProcessAsync(
-                "wl-copy",
-                ["--type", "text/plain;charset=utf-8"],
-                data,
-                cancellationToken) ||
-            await TryWriteProcessAsync(
-                "xclip",
-                ["-selection", "clipboard"],
-                data,
-                cancellationToken);
-        if (copied)
+        try
         {
-            Interlocked.Exchange(ref _lastChangeTimestamp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        }
-        else if (!cancellationToken.IsCancellationRequested)
-        {
-            AppLogger.Warning("Clipboard", "Could not copy text with wl-copy or xclip");
-        }
+            var copied = await TryWriteProcessAsync(
+                    "wl-copy",
+                    ["--type", "text/plain;charset=utf-8"],
+                    data,
+                    cancellationToken) ||
+                await TryWriteProcessAsync(
+                    "xclip",
+                    ["-selection", "clipboard"],
+                    data,
+                    cancellationToken);
+            if (copied)
+            {
+                Interlocked.Exchange(ref _lastChangeTimestamp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            }
+            else if (!cancellationToken.IsCancellationRequested)
+            {
+                AppLogger.Warning("Clipboard", "Could not copy text with wl-copy or xclip");
+            }
 
-        return copied;
+            return copied;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(data);
+        }
+    }
+
+    public async Task<bool> CopySensitiveTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var data = Encoding.UTF8.GetBytes(text);
+        try
+        {
+            var hash = Convert.ToHexString(SHA256.HashData(data));
+            lock (_gate)
+            {
+                // Serialize registration and removal with AddEntry's persistence check.
+                SuppressedHashes.TryAdd(hash, 0);
+                for (var index = _entries.Count - 1; index >= 0; index--)
+                {
+                    var entry = _entries[index];
+                    if (entry.Hash != hash)
+                    {
+                        continue;
+                    }
+
+                    _history.DeleteClipboardEntry(entry.MimeType, entry.Hash);
+                    _entries.RemoveAt(index);
+                    Interlocked.Increment(ref _version);
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCancellation.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            var copied = _copySensitive is not null && await _copySensitive(data, timeout.Token);
+            if (copied)
+            {
+                Interlocked.Exchange(ref _lastChangeTimestamp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            }
+            else if (!cancellationToken.IsCancellationRequested)
+            {
+                AppLogger.Warning("Clipboard", "Could not publish sensitive clipboard text. Native Wayland data-control support is required; no ordinary-copy fallback was used.");
+            }
+
+            return copied;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(data);
+        }
     }
 
     public async Task<string?> ReadTextAsync(CancellationToken cancellationToken = default)
@@ -246,12 +313,23 @@ internal sealed class ClipboardHistoryService : IDisposable
         mimeType = mimeType.ToLowerInvariant();
         var isImage = mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
         var hash = Convert.ToHexString(SHA256.HashData(data));
-        var preview = isImage ? ImagePreview(mimeType, data.Length) : TextPreview(data);
+        var preview = isImage ? ImagePreview(mimeType, data.Length) : string.Empty;
         var image = isImage ? new EncodedImageData(mimeType, data) : null;
         var entry = new ClipboardHistoryEntry(0, mimeType, data, preview, image, hash, false, DateTime.UtcNow);
 
         lock (_gate)
         {
+            if (SuppressedHashes.ContainsKey(hash) || IsSensitiveText(data))
+            {
+                CryptographicOperations.ZeroMemory(data);
+                return;
+            }
+
+            if (!isImage)
+            {
+                entry = entry with { Preview = TextPreview(data) };
+            }
+
             var existingIndex = _entries.FindIndex(candidate =>
                 candidate.Hash == hash && candidate.MimeType.Equals(mimeType, StringComparison.OrdinalIgnoreCase));
             if (existingIndex >= 0)
@@ -286,6 +364,59 @@ internal sealed class ClipboardHistoryService : IDisposable
 
             Interlocked.Increment(ref _version);
         }
+    }
+
+    private static bool IsSensitiveText(ReadOnlySpan<byte> data)
+    {
+        if (data.Length is 6 or 8)
+        {
+            var digitsOnly = true;
+            foreach (var value in data)
+            {
+                if (value is < (byte)'0' or > (byte)'9')
+                {
+                    digitsOnly = false;
+                    break;
+                }
+            }
+
+            if (digitsOnly)
+            {
+                return true;
+            }
+        }
+
+        return ContainsAsciiIgnoreCase(data, "otpauth://"u8) ||
+            ContainsAsciiIgnoreCase(data, "otpauth-migration://"u8);
+    }
+
+    private static bool ContainsAsciiIgnoreCase(ReadOnlySpan<byte> data, ReadOnlySpan<byte> value)
+    {
+        for (var offset = 0; offset <= data.Length - value.Length; offset++)
+        {
+            var matched = true;
+            for (var index = 0; index < value.Length; index++)
+            {
+                var current = data[offset + index];
+                if (current is >= (byte)'A' and <= (byte)'Z')
+                {
+                    current += (byte)('a' - 'A');
+                }
+
+                if (current != value[index])
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? SelectMimeType(IReadOnlyList<string> types)

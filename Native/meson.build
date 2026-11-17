@@ -6,6 +6,15 @@ project(
 )
 
 cc = meson.get_compiler('c')
+# Both managed and AOT builds use the same checksum-verified quirc source.
+python = find_program('python3')
+run_command(python, files('../scripts/build-static-libraries.py'), '--quirc-only', check: true)
+quirc_root = meson.project_source_root() / 'build'
+quirc = cc.find_library('quirc', dirs: quirc_root, static: true)
+qr_includes = include_directories('build/quirc-542848dd6b9b0eaa9587bbf25b9bc67bd8a71fca/lib')
+shared_library('hypr_qr', 'hypr_qr.c', include_directories: qr_includes,
+    dependencies: quirc, link_args: ['-lm'], install: false)
+static_library('hypr_qr', 'hypr_qr.c', include_directories: qr_includes, install: false)
 wayland_client = dependency('wayland-client')
 wayland_egl = dependency('wayland-egl')
 egl = dependency('egl')

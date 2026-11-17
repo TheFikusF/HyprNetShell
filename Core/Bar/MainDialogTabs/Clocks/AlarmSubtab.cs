@@ -12,7 +12,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs.Clocks.Alarm;
 
 internal sealed class AlarmSubtab : IClocksSubtab
 {
-    private readonly ClockSubtabUi _ui = new();
+    private readonly Dictionary<string, ActionButton> _buttons = [];
     private readonly TextInputCoordinator _inputs;
     private readonly TextInputCoordinator.Input _alarmInput;
     private string _message = "";
@@ -34,7 +34,7 @@ internal sealed class AlarmSubtab : IClocksSubtab
         var tools = ClockToolsService.Shared;
         return ClockSubtabUi.Build([
             _inputs.Build(_alarmInput),
-            _ui.Button("Add alarm", () =>
+            ActionButton.Build(_buttons, "Add alarm", "Add alarm", () =>
             {
                 if (TimeOnly.TryParseExact(_alarmInput.Value, "HH:mm", out var time))
                 {
@@ -45,9 +45,11 @@ internal sealed class AlarmSubtab : IClocksSubtab
                 {
                     _message = "Enter a valid local time as HH:mm.";
                 }
-            }),
-            ..tools.Alarms.Select(alarm => _ui.Button(
-                $"{alarm.NextOccurrence:ddd dd MMM HH:mm} · Remove", () => tools.RemoveAlarm(alarm.Id))),
+            }, style: ClockSubtabUi.ButtonStyle),
+            ..tools.Alarms.Select(alarm => ActionButton.Build(_buttons,
+                $"{alarm.NextOccurrence:ddd dd MMM HH:mm} · Remove",
+                $"{alarm.NextOccurrence:ddd dd MMM HH:mm} · Remove", () => tools.RemoveAlarm(alarm.Id),
+                style: ClockSubtabUi.ButtonStyle)),
             new TextNode(_message)]);
     }
 }

@@ -165,12 +165,13 @@ internal sealed class ScreenshotController
             var (x, y, width, height) = ResolveCrop(image, request.Selection);
             if (request.Mode == ScreenshotMode.Ocr)
             {
-                var text = OcrService.TryRecognize(image, x, y, width, height);
+                var qrText = QrCodeService.TryRecognize(image, x, y, width, height);
+                var text = qrText ?? OcrService.TryRecognize(image, x, y, width, height);
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     services.ShowShellNotification(
-                        "OCR unavailable",
-                        "No text was recognized. Ensure libtesseract and English language data are installed.",
+                        "Nothing recognized",
+                        "No QR code or text was recognized. QR scanning requires libzbar; OCR requires libtesseract and English language data.",
                         "camera");
                     return;
                 }
@@ -180,7 +181,10 @@ internal sealed class ScreenshotController
                 {
                     throw new InvalidOperationException("The compositor does not provide native clipboard control.");
                 }
-                services.ShowShellNotification("Text copied", "Recognized text was copied to the clipboard.", "copy");
+                services.ShowShellNotification(
+                                    qrText is null ? "Text copied" : "QR code copied",
+                                    qrText is null ? "Recognized text was copied to the clipboard." : "Decoded QR content was copied to the clipboard.",
+                                    "copy");
                 return;
             }
 

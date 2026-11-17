@@ -6,6 +6,19 @@ internal static partial class NativeMethods
 {
     private const string HYPR_LAYER_LIBRARY = "hypr_layer";
 
+    [LibraryImport("hypr_qr")]
+    internal static partial IntPtr hypr_qr_scan(byte[] pixels, int width, int height);
+
+    [LibraryImport("hypr_qr")]
+    internal static partial void hypr_qr_destroy(IntPtr scanner);
+
+    [LibraryImport("hypr_qr")]
+    internal static partial int hypr_qr_count(IntPtr scanner);
+
+    [LibraryImport("hypr_qr")]
+    internal static partial int hypr_qr_decode(IntPtr scanner, int index, [Out] byte[] output,
+        int capacity, out uint eci, out int dataType);
+
     [LibraryImport(HYPR_LAYER_LIBRARY)]
     internal static partial IntPtr hypr_layer_create(int reservedHeight);
 
@@ -135,6 +148,9 @@ internal static partial class NativeMethods
         byte[] data,
         int dataLength,
         string mimeType);
+
+    [LibraryImport(HYPR_LAYER_LIBRARY)]
+    internal static partial int hypr_layer_set_sensitive_clipboard(IntPtr layer, byte[] data, int dataLength);
 
     [LibraryImport(HYPR_LAYER_LIBRARY)]
     internal static partial double hypr_layer_get_pointer_x(IntPtr layer, ulong outputId);

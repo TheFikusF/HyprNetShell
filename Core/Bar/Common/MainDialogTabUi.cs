@@ -14,32 +14,11 @@ internal static class MainDialogTabUi
         new TextNode(status, color: ThemeManager.Current.Text.MutedColor),
     };
 
-
-    public static BoxNode BuildButton(IDictionary<string, ModulesCommon.BoxState> states,
-        string text,
-        string key,
-        Action? action)
-    {
-        if (!states.TryGetValue(key, out var state))
-        {
-            state = new ModulesCommon.BoxState { Background = ThemeManager.Current.Panel };
-            states[key] = state;
-        }
-
-        state.UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode {
-            IsHovered = state.Hovered,
-            OnClick = action,
-            VerticalAlignment = ItemsAlignment.Center,
-            HorizontalAlignment = ItemsAlignment.Center,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                BorderRadius = 8,
-                BorderWidth = 0,
-                Padding = new Insets(10, 6),
-            },
-            Children = [new TextNode(text, 13, action is null ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text)],
-        };
-    }
+    public static ActionButton.ButtonStyle ButtonStyle => ActionButton.ButtonStyle.Default with {
+        DisabledOpacity = 1,
+        HoverWhenDisabled = true,
+        DisabledForeground = ThemeManager.Current.Text.MutedColor,
+    };
 
     public static Node BuildStatus(string? status) => string.IsNullOrWhiteSpace(status)
         ? new SpacerNode()

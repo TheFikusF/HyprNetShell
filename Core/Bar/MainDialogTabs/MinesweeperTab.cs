@@ -14,7 +14,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs;
 internal sealed class MinesweeperTab() : IMainDialogTab
 {
     private readonly MinesweeperGame _game = new();
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttonStates = [];
 
     private bool _flagMode;
     public string Id => "minesweeper";
@@ -102,8 +102,8 @@ internal sealed class MinesweeperTab() : IMainDialogTab
                             [
                                 new TextNode($"Mines: {MinesweeperGame.MineCount - _game.Flags}", color: ThemeManager.Current.Text.MutedColor),
                                 new TextNode($"Time: {_game.Seconds:0}s", color: ThemeManager.Current.Text.MutedColor),
-                                MainDialogTabUi.BuildButton(_buttonStates, "New game", "restart", Restart),
-                                MainDialogTabUi.BuildButton(_buttonStates, _flagMode ? "Click mode: flag" : "Click mode: reveal", "mode", () => _flagMode = !_flagMode),
+                                ActionButton.Build(_buttonStates, "restart", "New game", Restart, style: MainDialogTabUi.ButtonStyle),
+                                ActionButton.Build(_buttonStates, "mode", _flagMode ? "Click mode: flag" : "Click mode: reveal", () => _flagMode = !_flagMode, style: MainDialogTabUi.ButtonStyle),
                             ],
                         },
                         new BoxNode

@@ -12,7 +12,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs.Clocks.Timer;
 
 internal sealed class TimerSubtab : IClocksSubtab
 {
-    private readonly ClockSubtabUi _ui = new();
+    private readonly Dictionary<string, ActionButton> _buttons = [];
     private readonly ModulesCommon.BoxState _timerDisplayState = new();
     private readonly TextInputCoordinator _inputs;
     private readonly TextInputCoordinator.Input _timerInput;
@@ -46,9 +46,9 @@ internal sealed class TimerSubtab : IClocksSubtab
         List<Node> children =
             [BuildTimerDisplay(tools),
             new TextNode("Type up to six digits · HH:MM:SS · Enter to start", color: ThemeManager.Current.Text.MutedColor),
-            _ui.Button("Start new timer", StartTimer),
+            ActionButton.Build(_buttons, "Start new timer", "Start new timer", StartTimer, style: ClockSubtabUi.ButtonStyle),
             ..tools.TimerRemaining is not null ? [
-                _ui.Button(tools.TimerRunning ? "Pause" : "Resume", () =>
+                ActionButton.Build(_buttons, "run", tools.TimerRunning ? "Pause" : "Resume", () =>
                 {
                     if (tools.TimerRunning)
                     {
@@ -58,13 +58,13 @@ internal sealed class TimerSubtab : IClocksSubtab
                     {
                         tools.ResumeTimer();
                     }
-                }),
-                _ui.Button("Reset", () =>
+                }, style: ClockSubtabUi.ButtonStyle),
+                ActionButton.Build(_buttons, "Reset", "Reset", () =>
                 {
                     tools.ResetTimer();
                     _inputs.SetValue(_timerInput, "");
                     _inputs.Activate(_timerInput);
-                })] : ((List<Node>)[]) ];
+                }, style: ClockSubtabUi.ButtonStyle)] : ((List<Node>)[]) ];
 
         children.Add(new TextNode(_message));
         return ClockSubtabUi.Build(children.ToArray());

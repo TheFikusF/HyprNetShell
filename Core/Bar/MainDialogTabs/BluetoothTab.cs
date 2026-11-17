@@ -18,7 +18,7 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
     private readonly Lock _stateLock = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _rowStates = [];
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttonStates = [];
     private readonly Ref<float> _powerSwitchAnimation = new();
     private IReadOnlyList<BluetoothDeviceSnapshot> _devices = [];
     private BluetoothDeviceSnapshot? _pairDevice;
@@ -224,10 +224,9 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
 
             new BoxNode(new Style { Spacing = 16 }, verticalAlignment: ItemsAlignment.Center)
             {
-                MainDialogTabUi.BuildButton(_buttonStates,
+                ActionButton.Build(_buttonStates, "discover",
                     scanning ? "Discovering..." : "Discover",
-                    "discover",
-                    powered && !scanning && !busy ? ScheduleScan : null),
+                    ScheduleScan, isEnabled: powered && !scanning && !busy, style: MainDialogTabUi.ButtonStyle),
                 new BoxNode(2, 18) { Style = new Style { BackgroundColor = ThemeManager.Current.Border } },
                 new BoxNode
                 {
@@ -331,19 +330,14 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 new BoxNode(Style.Spacer, verticalAlignment: ItemsAlignment.Center)
                 {
                     device.Paired
-                        ? MainDialogTabUi.BuildButton(_buttonStates,
+                        ? ActionButton.Build(_buttonStates, $"connect:{device.Address}",
                             device.Connected ? "Disconnect" : "Connect",
-                            $"connect:{device.Address}",
-                            busy ? null : () => BeginConnectionChange(device, !device.Connected))
-                        : MainDialogTabUi.BuildButton(_buttonStates,
-                            "Pair",
-                            $"pair:{device.Address}",
-                            busy ? null : () => ShowPairPopup(device)),
+                            () => BeginConnectionChange(device, !device.Connected), isEnabled: !busy, style: MainDialogTabUi.ButtonStyle)
+                        : ActionButton.Build(_buttonStates, $"pair:{device.Address}", "Pair",
+                            () => ShowPairPopup(device), isEnabled: !busy, style: MainDialogTabUi.ButtonStyle),
 
-                    busy == false ? MainDialogTabUi.BuildButton(_buttonStates,
-                        "Forget",
-                        $"forget:{device.Address}",
-                        device.Paired && !busy ? () => BeginForget(device) : null) : null,
+                    busy == false ? ActionButton.Build(_buttonStates, $"forget:{device.Address}", "Forget",
+                        () => BeginForget(device), isEnabled: device.Paired && !busy, style: MainDialogTabUi.ButtonStyle) : null,
                 },
             ],
         };
@@ -366,11 +360,9 @@ internal sealed class BluetoothTab(BluetoothModuleService service) : IMainDialog
                 Style = Style.Spacer,
                 Children =
                 [
-                    MainDialogTabUi.BuildButton(_buttonStates, "Cancel", "pair-cancel", busy ? null : CancelPair),
-                    MainDialogTabUi.BuildButton(_buttonStates,
-                        busy ? "Pairing..." : "Pair",
-                        "pair-confirm",
-                        busy ? null : ConfirmPair),
+                    ActionButton.Build(_buttonStates, "pair-cancel", "Cancel", CancelPair, isEnabled: !busy, style: MainDialogTabUi.ButtonStyle),
+                    ActionButton.Build(_buttonStates, "pair-confirm", busy ? "Pairing..." : "Pair",
+                        ConfirmPair, isEnabled: !busy, style: MainDialogTabUi.ButtonStyle),
                 ],
             },
         ],

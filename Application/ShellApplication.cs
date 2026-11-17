@@ -92,7 +92,7 @@ internal sealed class ShellLoop : IDisposable
         int barHeight)
     {
         _layer = layer;
-        _services = new StatusBarServices(new WindowThumbnailBackend(layer));
+        _services = new StatusBarServices(new WindowThumbnailBackend(layer), layer.SetSensitiveClipboardAsync);
         _renderer = renderer;
         _performanceProfiler = performanceProfiler;
         _barHeight = barHeight;

@@ -23,6 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
     <Compile Remove="Core/**/*.cs" />
     <Compile Remove="GUI/**/*.cs" />
     <Compile Remove="Generators/**/*.cs" />
@@ -38,6 +39,9 @@
     <TrimmerRootAssembly Include="Ical.Net" />
     <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.a" />
     <DirectPInvoke Include="hypr_layer" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_qr.a" />
+    <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libquirc.a" />
+    <DirectPInvoke Include="hypr_qr" />
     <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.a" />
     <DirectPInvoke Include="hypr_audio" />
     <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libe_sqlite3.a" />
@@ -83,7 +87,7 @@
     <Error Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.a')" Text="NativeAOT requires the native audio backend. Install wireplumber-0.5 development files and rebuild Native." />
   </Target>
 
-  <Target Name="CopyStaticLibraryLicenses" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+  <Target Name="CopyStaticLibraryLicenses" AfterTargets="Publish">
     <ItemGroup>
       <StaticLibraryLicense Include="$(MSBuildProjectDirectory)/Native/build/static-licenses/**/*" />
     </ItemGroup>
@@ -92,13 +96,17 @@
 
   <Target Name="RemoveStaticallyLinkedNativeLibraries" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
     <ItemGroup>
-      <StaticallyLinkedNativeLibrary Include="$(PublishDir)libSkiaSharp.so;$(PublishDir)libHarfBuzzSharp.so;$(PublishDir)libe_sqlite3.so;$(PublishDir)libhypr_audio.so;$(PublishDir)libhypr_layer.so;$(PublishDir)Magick.Native*.so" />
+      <StaticallyLinkedNativeLibrary Include="$(PublishDir)libSkiaSharp.so;$(PublishDir)libHarfBuzzSharp.so;$(PublishDir)libe_sqlite3.so;$(PublishDir)libhypr_audio.so;$(PublishDir)libhypr_layer.so;$(PublishDir)libhypr_qr.so;$(PublishDir)Magick.Native*.so" />
     </ItemGroup>
     <Delete Files="@(StaticallyLinkedNativeLibrary)" />
   </Target>
 
   <Target Name="CopyOptionalAudioNativeLibrary" AfterTargets="Publish" Condition="'$(PublishAot)' != 'true' and Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')">
     <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyQrNativeLibraryOnPublish" AfterTargets="Publish" Condition="'$(PublishAot)' != 'true'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/libhypr_qr.so" DestinationFolder="$(PublishDir)" />
   </Target>
 
   <Target Name="RemovePublishDebugArtifacts" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
@@ -119,11 +127,13 @@
 
   <Target Name="CopyHyprLayerNativeLibrary" AfterTargets="Build">
     <ItemGroup>
+      <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_qr.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_qr.so')" />
       <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
       <HyprLayerNativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_audio.so')" />
     </ItemGroup>
 
     <Copy SourceFiles="@(HyprLayerNativeLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/Native/build/static-licenses/quirc/LICENSE" DestinationFolder="$(OutDir)licenses/quirc" SkipUnchangedFiles="true" Condition="Exists('$(MSBuildProjectDirectory)/Native/build/static-licenses/quirc/LICENSE')" />
 
     <Warning Text="Native/build/libhypr_layer.so was not found. Build it with: cd Native &amp;&amp; meson setup build &amp;&amp; meson compile -C build" Condition="!Exists('$(MSBuildProjectDirectory)/Native/build/libhypr_layer.so')" />
   </Target>

@@ -10,26 +10,11 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs.Clocks;
 
-internal sealed class ClockSubtabUi
+internal static class ClockSubtabUi
 {
-    private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
-
-    public BoxNode Button(string title, Action action)
-    {
-        var color = ThemeManager.Current.Panel;
-        var actionKey = title is "Pause" or "Resume" or "Start / resume" ? "run" : title;
-        var state = _buttonStates.GetState(actionKey, color).UpdateColor(color);
-        return new BoxNode {
-            OnClick = action,
-            IsHovered = state.Hovered,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = 12,
-                BorderRadius = 8,
-                BorderWidth = 0,
-            },
-            Children = [new TextNode(title)],
-        };
-    }
+    public static ActionButton.ButtonStyle ButtonStyle => ActionButton.ButtonStyle.Default with {
+        Padding = 12,
+    };
 
     public static Node Build(params Node[] children) => new BoxNode(new Style { Spacing = 12 }) {
         Direction = Direction.Vertical,

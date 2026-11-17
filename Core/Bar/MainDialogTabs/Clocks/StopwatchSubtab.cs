@@ -12,7 +12,7 @@ namespace HyprNetShell.Core.Bar.MainDialogTabs.Clocks.Stopwatch;
 
 internal sealed class StopwatchSubtab : IClocksSubtab
 {
-    private readonly ClockSubtabUi _ui = new();
+    private readonly Dictionary<string, ActionButton> _buttons = [];
     private readonly TextInputCoordinator _inputs;
 
     public StopwatchSubtab(TextInputCoordinator inputs)
@@ -27,7 +27,7 @@ internal sealed class StopwatchSubtab : IClocksSubtab
         var tools = ClockToolsService.Shared;
         return ClockSubtabUi.Build(
             new TextNode(ClockFormatting.FormatDuration(tools.StopwatchElapsed), 32),
-            _ui.Button(tools.StopwatchRunning ? "Pause" : "Start / resume", () =>
+            ActionButton.Build(_buttons, "run", tools.StopwatchRunning ? "Pause" : "Start / resume", () =>
             {
                 if (tools.StopwatchRunning)
                 {
@@ -37,8 +37,8 @@ internal sealed class StopwatchSubtab : IClocksSubtab
                 {
                     tools.StartStopwatch();
                 }
-            }),
-            _ui.Button("Reset", tools.ResetStopwatch),
+            }, style: ClockSubtabUi.ButtonStyle),
+            ActionButton.Build(_buttons, "Reset", "Reset", tools.ResetStopwatch, style: ClockSubtabUi.ButtonStyle),
             new TextNode(""));
     }
 }

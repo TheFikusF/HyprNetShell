@@ -18,6 +18,7 @@ internal sealed class CalendarTab : IMainDialogTab
     private readonly CalendarService _calendar;
 
     private readonly CalendarWidget _month;
+    private readonly ActionButton _refreshButton = new();
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
     private DateOnly _selectedDate = DateOnly.FromDateTime(DateTime.Today);
     private int _firstEventIndex;
@@ -102,11 +103,14 @@ internal sealed class CalendarTab : IMainDialogTab
                 ? $"Updated {updated:g} · {_calendar.ConfiguredSourceCount} source{(_calendar.ConfiguredSourceCount == 1 ? "" : "s")}"
                 : _calendar.ConfiguredSourceCount == 0 ? "Enable calendar sources in Settings" : "Not refreshed yet";
 
+        _refreshButton.Text = _calendar.IsRefreshing ? "Refreshing…" : "Refresh now";
+        _refreshButton.Icon = Icons.Reboot;
+        _refreshButton.Action = Refresh;
+        _refreshButton.IsEnabled = !_calendar.IsRefreshing;
         return new BoxNode(Style.Spacer, ItemsAlignment.Spread, ItemsAlignment.Center)
         {
             MainDialogTabUi.BuildSectionHeader("Calendar", status),
-            BuildButton(_calendar.IsRefreshing ? "Refreshing…" : "Refresh now", "refresh", Refresh,
-                _calendar.IsRefreshing),
+            _refreshButton.Build(),
         };
     }
 
@@ -168,28 +172,6 @@ internal sealed class CalendarTab : IMainDialogTab
         };
     }
 
-    private BoxNode BuildButton(string label, string key, Action action, bool disabled)
-    {
-        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(ThemeManager.Current.Panel);
-        return new BoxNode {
-            HorizontalAlignment = ItemsAlignment.Center,
-            VerticalAlignment = ItemsAlignment.Center,
-            IsHovered = disabled ? null : state.Hovered,
-            OnClick = disabled ? null : action,
-            Opacity = disabled ? 0.5f : 1,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = new Insets(12, 8),
-                BorderRadius = 8,
-                BorderWidth = 0,
-                Spacing = 8,
-            },
-            Children =
-            [
-                new ImageNode(Icons.Reboot, 16, 16, ThemeManager.Current.Text),
-                new TextNode(label),
-            ],
-        };
-    }
 
     private void SelectDate(DateOnly date)
     {

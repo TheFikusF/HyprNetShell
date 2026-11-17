@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build version-pinned Linux x64 SQLite, SkiaSharp and HarfBuzzSharp archives for NativeAOT."""
+"""Build pinned quirc and Linux x64 SQLite, SkiaSharp and HarfBuzzSharp archives."""
 
 import argparse
 import ast
@@ -16,6 +16,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "Native" / "build"
+QUIRC_REVISION = "542848dd6b9b0eaa9587bbf25b9bc67bd8a71fca"  # upstream v1.2
+QUIRC_SHA256 = "bae99cf0debe866f2286f8491e39ab84e9187ba865d949f5616e36a560c791c6"
 SKIA_REVISION = "bdd0c3a8eaba1afa7148f02bba3a07f94e682847"  # SkiaSharp v4.151.1
 SKIA_SHA256 = "0e58036bbe8395e54c54456914840bf3906d5f4df30be1d74eb01d02903ab476"
 SQLITE_VERSION = "3530300"  # SQLitePCLRaw 2.1.12 ships SQLite 3.53.3.
@@ -54,6 +56,31 @@ def update_versions(values):
     versions = json.loads(destination.read_text()) if destination.exists() else {}
     versions.update(values)
     destination.write_text(json.dumps(versions, indent=2) + "\n")
+
+
+def build_quirc():
+    archive = BUILD / f"quirc-{QUIRC_REVISION}.tar.gz"
+    download(f"https://codeload.github.com/dlbeer/quirc/tar.gz/{QUIRC_REVISION}",
+             archive, QUIRC_SHA256)
+    source = BUILD / f"quirc-{QUIRC_REVISION}"
+    if not source.exists():
+        extract_tar(archive, BUILD)
+    licenses = BUILD / "static-licenses" / "quirc"
+    licenses.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source / "LICENSE", licenses / "LICENSE")
+    output = BUILD / "libquirc.a"
+    inputs = [source / "lib" / name for name in ("quirc.c", "decode.c", "identify.c", "version_db.c")]
+    if not output.exists() or output.stat().st_mtime < max(
+            path.stat().st_mtime for path in [*inputs, Path(__file__)]):
+        objects = []
+        for path in inputs:
+            obj = BUILD / f"quirc-{path.stem}.o"
+            run(os.environ.get("CC", "cc"), "-O2", "-fPIC", "-std=c11",
+                "-c", str(path), "-o", str(obj))
+            objects.append(str(obj))
+        run("ar", "rcs", str(output), *objects)
+    update_versions({"quirc": "1.2", "quircRevision": QUIRC_REVISION,
+                     "quircSourceSha256": QUIRC_SHA256})
 
 
 def build_harfbuzz(jobs):
@@ -213,12 +240,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1))
     selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--quirc-only", action="store_true")
     selection.add_argument("--sqlite-only", action="store_true")
     selection.add_argument("--harfbuzz-only", action="store_true")
     args = parser.parse_args()
     if args.jobs <= 0:
         parser.error("--jobs must be positive")
     BUILD.mkdir(parents=True, exist_ok=True)
+    if args.quirc_only:
+        build_quirc()
+        return
+    if not args.sqlite_only and not args.harfbuzz_only:
+        build_quirc()
     if not args.harfbuzz_only:
         build_sqlite()
     if not args.sqlite_only:

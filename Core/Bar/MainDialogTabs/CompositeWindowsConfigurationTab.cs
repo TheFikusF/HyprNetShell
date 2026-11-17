@@ -16,6 +16,7 @@ internal sealed class CompositeWindowsConfigurationTab(
     TextInputCoordinator inputs) : IMainDialogTab
 {
     private readonly Dictionary<string, ModulesCommon.BoxState> _buttonStates = [];
+    private readonly Dictionary<string, ActionButton> _buttons = [];
     private int _selectedIndex;
     private bool _isNew;
     private string _id = "";
@@ -107,7 +108,7 @@ internal sealed class CompositeWindowsConfigurationTab(
             HorizontalAlignment = ItemsAlignment.Stretch,
             Style = Style.Spacer,
             Children = [.. configuration.Windows.Select(BuildWindowRow),
-                BuildButton("New window", Icons.Add, "new", StartNew)],
+                ActionButton.Build(_buttons, "new", "New window", StartNew, Icons.Add)],
         };
     }
 
@@ -184,12 +185,13 @@ internal sealed class CompositeWindowsConfigurationTab(
             Style = Style.Spacer,
             Children =
             [
-                BuildButton(
+                ActionButton.Build(_buttons, "tab-" + tab.Id,
                     selected ? $"{selectedIndex + 1}. {tab.Title}" : tab.Title,
-                    tab.Icon,
-                    "tab-" + tab.Id,
-                    () => ToggleTab(tab.Id),
-                    selected),
+                    () => ToggleTab(tab.Id), tab.Icon,
+                    style: ActionButton.ButtonStyle.Default with
+                    {
+                        Background = selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel,
+                    }, flex: 1),
                 ..BuildMoveButtons(tab.Id, selectedIndex),
             ],
         };
@@ -264,35 +266,15 @@ internal sealed class CompositeWindowsConfigurationTab(
             ..(!_isNew
                 ? new[]
                 {
-                    BuildButton("Launch", Icons.Play, "launch", () => openWindow(tabs.Resolve(_tabs))),
-                    BuildButton("Delete", Icons.Delete, "delete", Delete),
+                    ActionButton.Build(_buttons, "launch", "Launch", () => openWindow(tabs.Resolve(_tabs)), Icons.Play),
+                    ActionButton.Build(_buttons, "delete", "Delete", Delete, Icons.Delete),
                 }
                 : []),
-            BuildButton("Save", Icons.Save, "save", Save, true),
+            ActionButton.Build(_buttons, "save", "Save", Save, Icons.Save,
+                            style: ActionButton.ButtonStyle.Default with { Background = ThemeManager.Current.Active }),
         ],
     };
 
-    private BoxNode BuildButton(
-        string label,
-        SvgAsset icon,
-        string key,
-        Action action,
-        bool selected = false)
-    {
-        var state = _buttonStates.GetState(key, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
-        return new BoxNode {
-            VerticalAlignment = ItemsAlignment.Center,
-            IsHovered = state.Hovered,
-            OnClick = action,
-            Style = ModulesCommon.ModuleStyle(state.Background) with {
-                Padding = new Insets(12, 8),
-                BorderRadius = 8,
-                BorderWidth = 0,
-                Spacing = 8,
-            },
-            Children = [new ImageNode(icon, 16, 16, ThemeManager.Current.Text), new TextNode(label)],
-        };
-    }
 
     private void StartNew()
     {
