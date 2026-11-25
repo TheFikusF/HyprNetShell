@@ -14,6 +14,7 @@ internal sealed class MusicModuleService : IDisposable
     private const string PLAYER_PATH = "/org/mpris/MediaPlayer2";
     private const string PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player";
     private const string PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+    private const string QUOTED_METADATA_VALUE = """(?<quote>['"])(?<value>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>""";
 
     private static readonly HttpClient Http = new() {
         Timeout = TimeSpan.FromSeconds(2),
@@ -341,7 +342,7 @@ internal sealed class MusicModuleService : IDisposable
     {
         var match = Regex.Match(
             metadata,
-            $@"'{Regex.Escape(key)}'\s*:\s*<(?:(?:@s\s*)?'(?<value>(?:\\.|[^'])*)'|.*?""(?<value>[^""]*)"")>",
+            $@"'{Regex.Escape(key)}'\s*:\s*<\s*(?:@s\s+)?{QUOTED_METADATA_VALUE}\s*>",
             RegexOptions.Singleline);
         return match.Success ? UnescapeGVariantString(match.Groups["value"].Value) : "";
     }
@@ -350,7 +351,7 @@ internal sealed class MusicModuleService : IDisposable
     {
         var match = Regex.Match(
             metadata,
-            $@"'{Regex.Escape(key)}'\s*:\s*<\[\s*'(?<value>(?:\\.|[^'])*)'",
+            $@"'{Regex.Escape(key)}'\s*:\s*<\s*(?:@as\s+)?\[\s*{QUOTED_METADATA_VALUE}\s*(?=,|\])",
             RegexOptions.Singleline);
         return match.Success ? UnescapeGVariantString(match.Groups["value"].Value) : "";
     }
@@ -389,10 +390,7 @@ internal sealed class MusicModuleService : IDisposable
     }
 
     private static string UnescapeGVariantString(string value) =>
-        value
-            .Replace(@"\'", "'", StringComparison.Ordinal)
-            .Replace(@"\""", "\"", StringComparison.Ordinal)
-            .Replace(@"\\", @"\", StringComparison.Ordinal);
+        Regex.Replace(value, """\\(['"\\])""", static match => match.Groups[1].Value);
 
     private static async Task<string?> LocalImagePathAsync(string artUrl, CancellationToken cancellationToken)
     {

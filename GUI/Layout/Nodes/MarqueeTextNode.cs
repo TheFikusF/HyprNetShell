@@ -31,8 +31,8 @@ public class MarqueeTextNode : Node
         float? fontSize = null,
         Color? color = null)
     {
-        _text = text;
         _visibleCharacters = Math.Max(1, visibleCharacters);
+        _text = text.Length > _visibleCharacters ? text + new string(' ', GAP_CHARACTERS) : text;
         _fontSize = fontSize ?? ThemeManager.Current.Text.Size;
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(_fontSize);
         _color = color ?? ThemeManager.Current.Text.Color;
@@ -61,16 +61,8 @@ public class MarqueeTextNode : Node
             return _text;
         }
 
-        var gap = new string(' ', GAP_CHARACTERS);
-        var tape = _text + gap;
-        var offset = (int)(Environment.TickCount64 / 1000.0 * CHARACTERS_PER_SECOND) % tape.Length;
-        return string.Create(_visibleCharacters, (tape, offset), static (span, state) =>
-        {
-            var (source, start) = state;
-            for (var i = 0; i < span.Length; i++)
-            {
-                span[i] = source[(start + i) % source.Length];
-            }
-        });
+        var offset = (int)((long)(Environment.TickCount64 / 1000.0 * CHARACTERS_PER_SECOND) % _text.Length);
+        var firstLength = Math.Min(_visibleCharacters, _text.Length - offset);
+        return string.Concat(_text.AsSpan(offset, firstLength), _text.AsSpan(0, _visibleCharacters - firstLength));
     }
 }

@@ -353,6 +353,7 @@ internal sealed class ShellLoop : IDisposable
                 overview.HandleInput(output.PressedKey, output.TextInput, output.ControlPressed);
             }
         }
+
         if (dialogs.IsVisible && _dialogOwnerId is null)
         {
             _dialogOwnerId = inputOwnerId;
