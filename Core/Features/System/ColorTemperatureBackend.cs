@@ -4,33 +4,10 @@ using HyprNetShell.Core.Logging;
 
 namespace HyprNetShell.Core.Features.System;
 
+using Native = HyprNetShell.Native.Interop.DisplayNativeMethods;
+
 internal sealed class ColorTemperatureBackend : IDisposable
 {
-    private static class Native
-    {
-        private const string LIBRARY = "hypr_layer";
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr hypr_temperature_create();
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void hypr_temperature_destroy(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_temperature_poll(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_temperature_set_temperature(IntPtr handle, int kelvin);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_temperature_is_available(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_temperature_is_active(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr hypr_temperature_get_error(IntPtr handle);
-    }
 
     private sealed record Request(int Kelvin, CancellationToken Cancellation, TaskCompletionSource<bool> Completion);
     private sealed record State(bool Available, bool Active, int Temperature);

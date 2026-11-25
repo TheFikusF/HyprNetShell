@@ -2,6 +2,7 @@ using System.Diagnostics;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Configuration;
+using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.OnlineAccounts;
@@ -108,7 +109,8 @@ public sealed class StatusBarServices : IDisposable
     public OverviewController Overview { get; }
 
     public StatusBarServices(IWindowThumbnailBackend? windowThumbnailBackend = null,
-            Func<byte[], CancellationToken, Task<bool>>? copySensitive = null)
+        Func<byte[], CancellationToken, Task<bool>>? copySensitive = null,
+        DesktopAuthorization? authorization = null)
     {
         WindowThumbnails = new WindowThumbnailService(windowThumbnailBackend);
         History = new HistoryStore();
@@ -127,7 +129,7 @@ public sealed class StatusBarServices : IDisposable
         Audio = new AudioModuleService(PipeWireGraph);
         Privacy = new PrivacyModuleService(Audio, PipeWireGraph);
         Bluetooth = new BluetoothModuleService();
-        Battery = new BatteryModuleService();
+        Battery = new BatteryModuleService(authorization: authorization);
         SystemStats = new SystemStatsModuleService();
         Weather = new WeatherService(UrlLauncher);
         OnlineAccounts = new OnlineAccountsService(UrlLauncher);

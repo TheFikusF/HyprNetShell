@@ -15,13 +15,14 @@ public interface IDrawableModule
 }
 
 
-public sealed class StatusBar
+public sealed class StatusBar : IDisposable
 {
     private readonly int _barHeight;
 
     private readonly IRenderApi _renderer;
     private readonly NotificationService _notificationService;
     private readonly CenterModule _centerModule;
+    private readonly BatteryModule _batteryModule;
     private readonly PopupCoordinator _popupCoordinator = new();
     private readonly Insets _layoutInsets = new(6, 6, 0, 6);
     private readonly ICollection<IDrawableModule> _leftModules;
@@ -54,7 +55,7 @@ public sealed class StatusBar
             services.Bluetooth,
             services.Dialogs,
             services.Tabs, _popupCoordinator);
-        var batteryModule = new BatteryModule(
+        _batteryModule = new BatteryModule(
             services.Battery,
             services.DeviceBatteries, _popupCoordinator);
         var musicModule = new MusicModule(services.Music, _popupCoordinator);
@@ -89,10 +90,12 @@ public sealed class StatusBar
                 audioModule, displayControlsModule, bluetoothModule, networkModule),
             systemStatsModule,
             languageModule,
-            batteryModule,
+            _batteryModule,
             powerModule,
         ];
     }
+
+    public void Dispose() => _batteryModule.Dispose();
 
     public void Draw()
     {

@@ -2,6 +2,7 @@ using System.Text;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Services;
+using HyprNetShell.Native.Managed;
 using HyprNetShell.Rendering;
 
 namespace HyprNetShell.Application;

@@ -20,6 +20,7 @@ wayland_egl = dependency('wayland-egl')
 egl = dependency('egl')
 xkbcommon = dependency('xkbcommon')
 pam = dependency('pam')
+polkit_agent = dependency('polkit-agent-1')
 wireplumber = dependency('wireplumber-0.5', version: '>= 0.5.0', required: false)
 threads = dependency('threads')
 libm = cc.find_library('m', required: true)
@@ -108,6 +109,8 @@ hypr_layer_sources = [
     'hypr_temperature.c',
     'thumbnail_pool.c',
     'hypr_lock.c',
+    'hypr_polkit.c',
+    'hypr_su.c',
     layer_shell_header,
     layer_shell_code,
     session_lock_header,
@@ -120,6 +123,7 @@ hypr_layer_dependencies = [
     egl,
     xkbcommon,
     pam,
+    polkit_agent,
     threads,
     libm,
 ]

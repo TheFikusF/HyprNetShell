@@ -26,6 +26,8 @@ RDEPEND="
 	media-libs/mesa[egl(+)]
 	net-misc/socat
 	sys-apps/dbus
+	sys-apps/util-linux
+	sys-auth/polkit
 	sys-libs/pam
 	sys-libs/zlib
 	x11-libs/libxkbcommon

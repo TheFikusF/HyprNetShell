@@ -5,27 +5,10 @@ using HyprNetShell.Rendering;
 
 namespace HyprNetShell.Core.Features.System;
 
+using Native = HyprNetShell.Native.Interop.DisplayNativeMethods;
+
 internal sealed class WallpaperBackend : IDisposable
 {
-    private static class Native
-    {
-        private const string LIBRARY = "hypr_layer";
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr hypr_wallpaper_create();
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void hypr_wallpaper_destroy(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_wallpaper_poll(IntPtr handle);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int hypr_wallpaper_set_image(IntPtr handle, in byte rgba, int width, int height, int stride);
-
-        [DllImport(LIBRARY, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr hypr_wallpaper_get_error(IntPtr handle);
-    }
 
     private sealed record Request(string Path, CancellationToken Cancellation, TaskCompletionSource<bool> Completion);
 

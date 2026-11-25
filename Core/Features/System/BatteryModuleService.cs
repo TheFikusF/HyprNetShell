@@ -1,5 +1,6 @@
 using System.Globalization;
 using HyprNetShell.Core.Configuration;
+using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
@@ -9,7 +10,8 @@ using Tmds.DBus.Protocol;
 
 namespace HyprNetShell.Core.Features.System;
 
-internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataService, IDisposable
+internal sealed class BatteryModuleService(string device = "BAT0", DesktopAuthorization? authorization = null)
+    : IBarDataService, IDisposable
 {
     internal const int MINIMUM_CHARGE_LIMIT = 60;
     internal const int MAXIMUM_CHARGE_LIMIT = 100;
@@ -27,6 +29,8 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
     private static readonly TimeSpan PowerProfilesFallbackInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan DbusReconnectInterval = TimeSpan.FromSeconds(15);
 
+    private readonly string _chargeLimitPath = Path.Combine("/sys/class/power_supply", device, "charge_control_end_threshold");
+    private readonly SemaphoreSlim _chargeLimitWriteGate = new(1, 1);
     private readonly AppConfigurationStore _configuration = AppConfigurationStore.Shared;
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
@@ -41,12 +45,12 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
     private DateTime _nextBatteryRecoveryUtc = DateTime.MinValue;
     private DateTime _nextPowerProfilesFallbackUtc = DateTime.MinValue;
     private DateTime _nextDbusAttemptUtc = DateTime.MinValue;
-    private int? _savedChargeLimit;
+
     private int? _chargeLimit;
     private int _percentage;
     private string _status = "Unknown";
     private bool _batteryAvailable;
-    private bool _chargeLimitConfigLoaded;
+
     private bool _startupChargeLimitApplied;
     private Task? _batteryCallbackTask;
     private Task? _powerProfilesCallbackTask;
@@ -516,7 +520,6 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
 
     private void InitializeChargeLimit()
     {
-        int? startupChargeLimit = null;
         lock (_stateGate)
         {
             if (_startupChargeLimitApplied)
@@ -524,8 +527,7 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
                 return;
             }
 
-            var path = Path.Combine("/sys/class/power_supply", device, "charge_control_end_threshold");
-            var chargeLimitText = Read(path);
+            var chargeLimitText = Read(_chargeLimitPath);
             _chargeLimit = int.TryParse(
                 chargeLimitText,
                 NumberStyles.Integer,
@@ -535,74 +537,104 @@ internal sealed class BatteryModuleService(string device = "BAT0") : IBarDataSer
                 : null;
             _startupChargeLimitApplied = true;
 
-            if (_chargeLimit.HasValue)
+            if (_chargeLimit is { } currentLimit && _configuration.Snapshot.Battery.ChargeLimit is { } savedLimit)
             {
-                EnsureChargeLimitConfigLoaded();
-                if (_savedChargeLimit is { } savedChargeLimit)
+                var limit = Math.Clamp(savedLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT);
+                if (limit != currentLimit)
                 {
-                    _chargeLimit = savedChargeLimit;
-                    startupChargeLimit = savedChargeLimit;
+                    try
+                    {
+                        WriteChargeLimit(limit);
+                        _chargeLimit = limit;
+                    }
+                    catch (Exception exception)
+                    {
+                        AppLogger.Warning("Battery", $"Could not restore charge limit through {_chargeLimitPath}", exception);
+                    }
                 }
             }
 
             PublishSnapshotLocked();
         }
-
-        if (startupChargeLimit is { } limitToApply)
-        {
-            _ = ApplyChargeLimitAsync(limitToApply);
-        }
     }
 
-    internal void SetChargeLimit(int chargeLimit)
+    internal ChargeLimitSession? BeginChargeLimitSession()
     {
-        lock (_stateGate)
+        if (device != "BAT0" || Snapshot.ChargeLimit is null || authorization is null)
         {
-            if (_disposed || _chargeLimit is null)
-            {
-                return;
-            }
-
-            chargeLimit = Math.Clamp(chargeLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT);
-            _savedChargeLimit = chargeLimit;
-            _chargeLimitConfigLoaded = true;
-            _chargeLimit = chargeLimit;
-            PublishSnapshotLocked();
+            return null;
         }
 
-        PersistChargeLimit(chargeLimit);
-        _ = ApplyChargeLimitAsync(chargeLimit);
-    }
-
-    private void EnsureChargeLimitConfigLoaded()
-    {
-        if (_chargeLimitConfigLoaded)
-        {
-            return;
-        }
-
-        _savedChargeLimit = ReadChargeLimitConfig();
-        _chargeLimitConfigLoaded = true;
-    }
-
-    private int? ReadChargeLimitConfig() => _configuration.Snapshot.Battery.ChargeLimit is { } chargeLimit
-        ? Math.Clamp(chargeLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT)
-        : null;
-
-    private void PersistChargeLimit(int chargeLimit) =>
-        _configuration.Update(config => config.Battery.ChargeLimit = chargeLimit);
-
-    private async Task ApplyChargeLimitAsync(int chargeLimit)
-    {
-        var path = Path.Combine("/sys/class/power_supply", device, "charge_control_end_threshold");
         try
         {
-            await File.WriteAllTextAsync(path, chargeLimit.ToString(CultureInfo.InvariantCulture));
+            return authorization.BeginChargeLimitSession();
+        }
+        catch (ObjectDisposedException exception)
+        {
+            AppLogger.Warning("Battery", "Charge-limit authorization is unavailable; only direct writes are possible", exception);
+            return null;
+        }
+    }
+
+    internal async Task SetChargeLimitAsync(int chargeLimit, ChargeLimitSession? session, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+            var token = lifetime.Token;
+            await _chargeLimitWriteGate.WaitAsync(token);
+            try
+            {
+                if (IsDisposed() || Snapshot.ChargeLimit is null)
+                {
+                    return;
+                }
+
+                chargeLimit = Math.Clamp(chargeLimit, MINIMUM_CHARGE_LIMIT, MAXIMUM_CHARGE_LIMIT);
+                try
+                {
+                    await Task.Run(() => WriteChargeLimit(chargeLimit), token);
+                }
+                catch (UnauthorizedAccessException) when (session is not null && device == "BAT0" && File.Exists(_chargeLimitPath))
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!await session.SetLimitAsync(chargeLimit, token))
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            AppLogger.Warning("Battery", $"Authorized charge-limit write did not succeed through {_chargeLimitPath}");
+                        }
+
+                        return;
+                    }
+                }
+
+                lock (_stateGate)
+                {
+                    _chargeLimit = chargeLimit;
+                    PublishSnapshotLocked();
+                    _configuration.Update(config => config.Battery.ChargeLimit = chargeLimit);
+                }
+            }
+            finally
+            {
+                _chargeLimitWriteGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetime.IsCancellationRequested)
+        {
         }
         catch (Exception exception)
         {
-            AppLogger.Warning("Battery", $"Could not set charge limit through {path}", exception);
+            AppLogger.Warning("Battery", $"Could not set charge limit through {_chargeLimitPath}", exception);
         }
+    }
+
+    private void WriteChargeLimit(int chargeLimit)
+    {
+        using var stream = new FileStream(_chargeLimitPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+        using var writer = new StreamWriter(stream);
+        writer.Write(chargeLimit.ToString(CultureInfo.InvariantCulture));
     }
 
     internal void SetPowerProfile(string profile)

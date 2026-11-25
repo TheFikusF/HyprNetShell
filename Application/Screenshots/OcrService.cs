@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using HyprNetShell.Native.Managed;
 
 namespace HyprNetShell.Application.Screenshots;
 

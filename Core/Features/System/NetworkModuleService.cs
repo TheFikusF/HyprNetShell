@@ -15,6 +15,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
 {
     private const string NETWORK_MANAGER_BUS_NAME = "org.freedesktop.NetworkManager";
     private static readonly TimeSpan RecoveryInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan InteractiveOperationTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan SignalCoalesceDelay = TimeSpan.FromMilliseconds(150);
 
     private readonly object _stateLock = new();
@@ -338,7 +339,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
     }
 
     internal Task<WifiOperationResult> SetWifiEnabledAsync(bool enabled, CancellationToken cancellationToken) =>
-        RunNmcliAsync(["radio", "wifi", enabled ? "on" : "off"], null, TimeSpan.FromSeconds(4), cancellationToken);
+        RunNmcliAsync(["radio", "wifi", enabled ? "on" : "off"], null, InteractiveOperationTimeout, cancellationToken);
 
     internal async Task<WifiOperationResult> TurnOffTailscaleAsync()
     {
@@ -412,7 +413,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
                 ? ["device", "wifi", "connect", ssid]
                 : ["--ask", "device", "wifi", "connect", ssid],
             password,
-            TimeSpan.FromSeconds(15),
+            InteractiveOperationTimeout,
             cancellationToken);
 
     internal Task<WifiOperationResult> ForgetWifiAsync(
@@ -421,7 +422,7 @@ internal sealed class NetworkModuleService : IBarDataService, IDisposable
         RunNmcliAsync(
             ["connection", "delete", "id", connectionName],
             null,
-            TimeSpan.FromSeconds(8),
+            InteractiveOperationTimeout,
             cancellationToken);
 
     internal async Task<WifiPasswordResult> ReadWifiPasswordAsync(

@@ -1,6 +1,7 @@
 using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
+using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
@@ -10,11 +11,14 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class BatteryModule(
-    BatteryModuleService service,
-    DeviceBatteryService deviceBatteries,
-    PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class BatteryModule : IDrawableModule, IDisposable
 {
+    private const string POPUP_ID = "battery_module";
+
+    private readonly BatteryModuleService _service;
+    private readonly DeviceBatteryService _deviceBatteries;
+    private readonly PopupCoordinator _popupCoordinator;
+    private readonly NodeWithPopup _node;
     private readonly SegmentedSwitch _powerProfileSwitch = new();
     private readonly ModulesCommon.BoxState _chargeLimitDecreaseState = new();
     private readonly ModulesCommon.BoxState _chargeLimitIncreaseState = new();
@@ -34,17 +38,74 @@ internal sealed class BatteryModule(
         // new Gradient.Stop(0.66f, Color.FromRgb(0, 0, 0, 0.08f)),
         new Gradient.Stop(1.0f, Color.FromRgb(0, 0, 0, 0.45f)));
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "battery_module") {
-        HorizontalAlignment = ItemsAlignment.Center,
-    };
+    private ChargeLimitSession? _chargeLimitSession;
+    private CancellationTokenSource? _popupLifetime;
+    private Task? _chargeLimitWrite;
+    private bool _disposed;
+
+    private bool ChargeLimitWritePending => _chargeLimitWrite is { IsCompleted: false };
+
+    public BatteryModule(
+        BatteryModuleService service,
+        DeviceBatteryService deviceBatteries,
+        PopupCoordinator popupCoordinator)
+    {
+        _service = service;
+        _deviceBatteries = deviceBatteries;
+        _popupCoordinator = popupCoordinator;
+        _node = new NodeWithPopup(popupCoordinator, POPUP_ID) {
+            HorizontalAlignment = ItemsAlignment.Center,
+            // The authorization dialog can take hover away before the request completes.
+            GetShouldShowPopup = hovered => hovered ||
+                (_chargeLimitSession is not null && ChargeLimitWritePending && _popupCoordinator.IsOpen(POPUP_ID)),
+        };
+    }
 
     public Node Draw()
     {
-        var battery = service.Snapshot;
-        var devices = deviceBatteries.Snapshot;
-        return battery.Available
-            ? _node.Draw([BuildStateModule(battery)], () => BuildPopup(battery, devices))
-            : new SpacerNode();
+        var battery = _service.Snapshot;
+        if (_disposed || !battery.Available)
+        {
+            CloseChargeLimitSession();
+            return new SpacerNode();
+        }
+
+        if (battery.ChargeLimit is null || !_popupCoordinator.IsOpen(POPUP_ID) || !_node.ShouldShowPopup)
+        {
+            CloseChargeLimitSession();
+        }
+
+        var devices = _deviceBatteries.Snapshot;
+        return _node.Draw([BuildStateModule(battery)], () => BuildPopup(battery, devices));
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        CloseChargeLimitSession();
+        _node.ClosePopup();
+    }
+
+    private void CloseChargeLimitSession()
+    {
+        _popupLifetime?.Cancel();
+        _chargeLimitSession?.Dispose();
+        _chargeLimitSession = null;
+        _popupLifetime?.Dispose();
+        _popupLifetime = null;
+    }
+
+    private void AdjustChargeLimit(int delta)
+    {
+        if (_disposed || ChargeLimitWritePending || !_popupCoordinator.IsOpen(POPUP_ID) ||
+            !_node.ShouldShowPopup || _service.Snapshot is not { Available: true, ChargeLimit: { } limit })
+        {
+            return;
+        }
+
+        _popupLifetime ??= new CancellationTokenSource();
+        _chargeLimitSession ??= _service.BeginChargeLimitSession();
+        _chargeLimitWrite = _service.SetChargeLimitAsync(limit + delta, _chargeLimitSession, _popupLifetime.Token);
     }
 
     private BoxNode BuildStateModule(BatterySnapshot battery)
@@ -254,13 +315,14 @@ internal sealed class BatteryModule(
         ModulesCommon.BoxState buttonState,
         bool enabled)
     {
+        enabled = enabled && !ChargeLimitWritePending && _popupCoordinator.IsOpen(POPUP_ID) && _node.ShouldShowPopup;
         var state = buttonState.UpdateColor(ThemeManager.Current.Text.MutedColor);
         return new BoxNode() {
             HorizontalAlignment = ItemsAlignment.Center,
             VerticalAlignment = ItemsAlignment.Center,
             IsHovered = buttonState.Hovered,
             OnClick = enabled
-                ? () => service.SetChargeLimit(service.Snapshot.ChargeLimit.GetValueOrDefault() + delta)
+                ? () => AdjustChargeLimit(delta)
                 : null,
             Style = ModulesCommon.ModuleStyle(enabled ? state.Background : ThemeManager.Current.Panel) with {
                 Padding = 6,
@@ -286,7 +348,7 @@ internal sealed class BatteryModule(
                     new ImageNode(ProfileLabel(profile), 16, 16, ThemeManager.Current.Text)))
                 .ToArray(),
             powerProfiles.Active,
-            service.SetPowerProfile);
+            _service.SetPowerProfile);
     }
 
     private IEnumerable<Node> BuildDeviceBatterySection(IReadOnlyList<DeviceBatterySnapshot> devices)

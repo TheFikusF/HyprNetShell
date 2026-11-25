@@ -24,14 +24,18 @@
 
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
+
     <Compile Remove="Core/**/*.cs" />
     <Compile Remove="GUI/**/*.cs" />
     <Compile Remove="Generators/**/*.cs" />
     <Compile Remove="Rendering/**/*.cs" />
+    <Compile Remove="Native/Interop/**/*.cs" />
+    <Compile Remove="**/obj/**/*.cs;**/bin/**/*.cs" />
     <Compile Remove="scripts/test-thumbnail-cache/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="Native/Interop/HyprNetShell.Native.Interop.csproj" />
     <ProjectReference Include="Core/HyprNetShell.Core.csproj" />
   </ItemGroup>
 
@@ -51,6 +55,8 @@
     <NativeLibrary Include="$(MSBuildProjectDirectory)/Native/build/libHarfBuzzSharp.a" />
     <DirectPInvoke Include="libHarfBuzzSharp" />
     <LinkerArg Include="-lwireplumber-0.5" />
+    <LinkerArg Include="-lpolkit-agent-1" />
+    <LinkerArg Include="-lpolkit-gobject-1" />
     <LinkerArg Include="-lgio-2.0" />
     <LinkerArg Include="-lgobject-2.0" />
     <LinkerArg Include="-lglib-2.0" />

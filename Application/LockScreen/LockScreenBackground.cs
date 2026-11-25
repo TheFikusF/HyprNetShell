@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Text;
+using HyprNetShell.Native.Managed;
 using HyprNetShell.Rendering;
 
 namespace HyprNetShell.Application.LockScreen;

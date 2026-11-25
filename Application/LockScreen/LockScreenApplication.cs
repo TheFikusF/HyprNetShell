@@ -6,6 +6,7 @@ using HyprNetShell.Core.LockScreen;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Renderers;
+using HyprNetShell.Native.Managed;
 
 namespace HyprNetShell.Application.LockScreen;
 
@@ -31,7 +32,7 @@ internal static class LockScreenApplication
         }
     }
 
-    internal static void Start(HyprLayer layer, StatusBarServices services)
+    internal static Process? Start(HyprLayer layer, StatusBarServices services)
     {
         if (!File.Exists(PAM_POLICY_PATH))
         {
@@ -39,7 +40,7 @@ internal static class LockScreenApplication
                 "Lock screen unavailable",
                 $"Install the PAM policy at {PAM_POLICY_PATH} first.",
                 "lock");
-            return;
+            return null;
         }
 
         LockScreenBackground.Transfer? transfer = null;
@@ -65,14 +66,16 @@ internal static class LockScreenApplication
             startInfo.ArgumentList.Add("--lock");
             startInfo.ArgumentList.Add(transfer.Token);
 
-            using var process = Process.Start(startInfo)
+            var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Could not start the HyprNetShell lock process.");
             transfer = null;
+            return process;
         }
         catch (Exception exception)
         {
             AppLogger.Error("LockScreen", "Could not start the lock screen", exception);
             services.ShowShellNotification("Lock screen failed", exception.Message, "lock");
+            return null;
         }
         finally
         {

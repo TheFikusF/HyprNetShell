@@ -6,6 +6,7 @@ using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
+using HyprNetShell.Native.Interop;
 
 namespace HyprNetShell.Core.Features.System;
 

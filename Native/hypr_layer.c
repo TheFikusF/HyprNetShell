@@ -884,6 +884,7 @@ static void destroy_output(struct hypr_bar *bar)
 
     free(bar->output_name);
     free(bar->output_description);
+    explicit_bzero(bar->pending_text, sizeof(bar->pending_text));
     free(bar);
 }
 
@@ -1768,6 +1769,8 @@ static void queue_keyboard_input(struct hypr_layer *layer, struct hypr_bar *bar,
         bar->pending_text_length += length;
         bar->pending_text[bar->pending_text_length] = '\0';
     }
+
+    explicit_bzero(text, sizeof(text));
 }
 
 static void keyboard_key(void *data, struct wl_keyboard *keyboard,
@@ -4236,7 +4239,7 @@ int hypr_layer_take_text(hypr_layer *layer, uint64_t id, char *buffer,
     memcpy(buffer, bar->pending_text, (size_t)length);
     buffer[length] = '\0';
     bar->pending_text_length = 0;
-    bar->pending_text[0] = '\0';
+    explicit_bzero(bar->pending_text, sizeof(bar->pending_text));
     return length;
 }
 

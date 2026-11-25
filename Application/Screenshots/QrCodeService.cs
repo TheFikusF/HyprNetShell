@@ -1,5 +1,6 @@
 using System.Text;
 using HyprNetShell.Core.Logging;
+using HyprNetShell.Native.Managed;
 
 namespace HyprNetShell.Application.Screenshots;
 

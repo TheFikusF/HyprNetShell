@@ -38,13 +38,19 @@ Color temperature is controlled natively through Hyprland's CTM protocol; `hyprs
 
 The native range is 2000–6500 K; 6500 K is the identity transform (no color adjustment). Existing manual controls and the saved temperature schedule are preserved. HyprNetShell resets the color transform on shutdown. If the compositor does not support the required protocol or exclusive control cannot be acquired, color-temperature controls show as unavailable.
 
+## System authentication
+
+HyprNetShell registers a polkit agent for its login session and displays requests in its normal dialog UI. Stop and remove `hyprpolkitagent` (or any other polkit agent) from your Hyprland autostart before testing the built-in agent; polkit normally registers only one agent per session. NetworkManager still decides whether an operation needs authorization.
+
+On `BAT0`, the charge-limit slider tries a normal sysfs write first. If permission is denied, it can use util-linux `/usr/bin/su` to perform that one write. This requires a usable root password and a `su` PAM stack with one standard hidden password prompt. HyprNetShell does not run as root and does not install a privileged helper. The root password can be reused for up to 60 seconds while the battery popup remains open; closing that popup or starting the built-in lock screen clears it. Startup does not ask for the password. The lock screen keeps its existing PAM policy.
+
 ## Build and run
 
 You need:
 
 - Linux x86-64 and a running Hyprland session;
 - .NET 10 SDK, Clang, `pkg-config`, Meson, and Ninja;
-- development files for Wayland client/EGL, EGL/OpenGL, xkbcommon, and PAM, plus `wayland-scanner`;
+- development files for Wayland client/EGL, EGL/OpenGL, xkbcommon, PAM, and the polkit agent library, plus `wayland-scanner`;
 - GLib/GIO runtime libraries. WirePlumber 0.5 development files are optional for the native audio integration.
 
 Wayland protocol XML files are vendored; no separate `wlr-protocols` package is needed.

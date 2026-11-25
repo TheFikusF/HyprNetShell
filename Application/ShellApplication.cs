@@ -1,12 +1,16 @@
+using System.Diagnostics;
 using HyprNetShell.Application.Diagnostics;
 using HyprNetShell.Application.LockScreen;
 using HyprNetShell.Application.Screenshots;
 using HyprNetShell.Core.Bar;
+using HyprNetShell.Core.Bar.Dialogs;
+using HyprNetShell.Authorization;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
+using HyprNetShell.Native.Managed;
 
 namespace HyprNetShell.Application;
 
@@ -67,23 +71,29 @@ internal static class ShellApplication
 
 internal sealed class ShellLoop : IDisposable
 {
+    private sealed class SubmittedInputRegions
+    {
+        public readonly List<Rect> Regions = [];
+        public int Width;
+        public int Height;
+    }
+
     private readonly HyprLayer _layer;
     private readonly Renderer _renderer;
     private readonly PerformanceProfiler? _performanceProfiler;
     private readonly int _barHeight;
     private readonly StatusBarServices _services;
+    private readonly DesktopAuthorization _authorization;
+    private readonly AuthorizationDialogController _authorizationDialog;
     private readonly ScreenshotController _screenshots = new();
     private readonly Dictionary<ulong, StatusBar> _views = [];
     private readonly Dictionary<ulong, SubmittedInputRegions> _submittedInputRegions = [];
 
-    private sealed class SubmittedInputRegions
-    {
-        public int Width;
-        public int Height;
-        public readonly List<Rect> Regions = [];
-    }
+    private readonly Dictionary<ulong, LayoutInput> _barHoverInputs = [];
     private ulong? _focusedOutputId;
     private ulong? _dialogOwnerId;
+    private ulong? _authorizationOwnerId;
+    private Process? _lockProcess;
 
     internal ShellLoop(
         HyprLayer layer,
@@ -92,7 +102,27 @@ internal sealed class ShellLoop : IDisposable
         int barHeight)
     {
         _layer = layer;
-        _services = new StatusBarServices(new WindowThumbnailBackend(layer), layer.SetSensitiveClipboardAsync);
+        _authorization = new DesktopAuthorization(message => AppLogger.Warning("Authorization", message));
+        try
+        {
+            _services = new StatusBarServices(
+                new WindowThumbnailBackend(layer), layer.SetSensitiveClipboardAsync, authorization: _authorization);
+            try
+            {
+                _authorizationDialog = new AuthorizationDialogController(_services.Dialogs, _authorization);
+            }
+            catch
+            {
+                _services.Dispose();
+                throw;
+            }
+        }
+        catch
+        {
+            _authorization.Dispose();
+            throw;
+        }
+
         _renderer = renderer;
         _performanceProfiler = performanceProfiler;
         _barHeight = barHeight;
@@ -109,38 +139,51 @@ internal sealed class ShellLoop : IDisposable
 
     public void Dispose()
     {
-        _services.Overview.Close();
-        _layer.SetOverviewOverlay(0);
-        foreach (var view in _views.Values)
+        try
         {
-            DisposeIfNeeded(view);
+            _layer.SetKeyboardInteractiveBar(0);
+            _authorizationDialog.RevokeAll();
+            _services.Overview.Close();
+            _layer.SetOverviewOverlay(0);
+            foreach (var view in _views.Values)
+            {
+                DisposeIfNeeded(view);
+            }
+
+            foreach (var outputId in _views.Keys)
+            {
+                Layout.RemoveOutput(outputId);
+            }
+
+            _views.Clear();
+            _submittedInputRegions.Clear();
+            _barHoverInputs.Clear();
         }
-        foreach (var outputId in _views.Keys)
+        finally
         {
-            Layout.RemoveOutput(outputId);
+            try
+            {
+                _services.Dispose();
+            }
+            finally
+            {
+                _lockProcess?.Dispose();
+                _authorization.Dispose();
+            }
         }
-        _views.Clear();
-        _submittedInputRegions.Clear();
-        DisposeIfNeeded(_services);
     }
 
     private bool RunFrame()
     {
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.Frame);
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.ActiveFrame);
-        PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.Update);
-        var shouldContinue = _layer.Update();
-        PerformanceProfiler.End(_performanceProfiler, PerformancePhase.Update);
-        if (!shouldContinue)
+        if (!UpdateAndProcessInput())
         {
             PerformanceProfiler.End(_performanceProfiler, PerformancePhase.ActiveFrame);
             PerformanceProfiler.End(_performanceProfiler, PerformancePhase.Frame);
             return false;
         }
 
-        ReconcileViews();
-        var inputOwnerId = ResolveInputOwner();
-        ProcessInput(inputOwnerId);
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.PollThumbnails);
         _services.WindowThumbnails.Update();
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.PollThumbnails);
@@ -150,6 +193,43 @@ internal sealed class ShellLoop : IDisposable
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.ActiveFrame);
         CompleteFrame();
         return true;
+    }
+
+    private bool UpdateAndProcessInput()
+    {
+        // Classify input using the owner from before polling, even if this frame revokes the prompt.
+        var sensitiveOwnerId = _authorizationOwnerId;
+        var previousPromptId = _authorizationDialog.PromptId;
+        try
+        {
+            PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.Update);
+            var shouldContinue = _layer.Update(sensitiveOwnerId);
+            PerformanceProfiler.End(_performanceProfiler, PerformancePhase.Update);
+            if (!shouldContinue)
+            {
+                return false;
+            }
+
+            ReconcileViews();
+            if (_lockProcess is { HasExited: true })
+            {
+                _lockProcess.Dispose();
+                _lockProcess = null;
+            }
+
+            if (_lockProcess is null)
+            {
+                _authorizationDialog.Update();
+            }
+
+            var inputOwnerId = ResolveInputOwner();
+            ProcessInput(inputOwnerId, sensitiveOwnerId, previousPromptId);
+            return true;
+        }
+        finally
+        {
+            _layer.ClearSensitiveTextInput();
+        }
     }
 
     private void ReconcileViews()
@@ -170,6 +250,7 @@ internal sealed class ShellLoop : IDisposable
             DisposeIfNeeded(_views[removedId]);
             _views.Remove(removedId);
             _submittedInputRegions.Remove(removedId);
+            _barHoverInputs.Remove(removedId);
             Layout.RemoveOutput(removedId);
         }
 
@@ -186,6 +267,12 @@ internal sealed class ShellLoop : IDisposable
         if (_dialogOwnerId is ulong ownerId && !currentOutputIds.Contains(ownerId))
         {
             _dialogOwnerId = null;
+        }
+
+        if (_authorizationOwnerId is ulong authorizationOwner && !currentOutputIds.Contains(authorizationOwner))
+        {
+            _authorizationDialog.Cancel();
+            _authorizationOwnerId = null;
         }
     }
 
@@ -209,8 +296,39 @@ internal sealed class ShellLoop : IDisposable
         return compositorFocusedOutputId ?? pointerOutputId ?? _focusedOutputId ?? fallbackOutputId;
     }
 
-    private void ProcessInput(ulong? inputOwnerId)
+    private void ProcessInput(ulong? inputOwnerId, ulong? sensitiveOwnerId, ulong? previousPromptId)
     {
+        var dialogs = _services.Dialogs;
+        var overview = _services.Overview;
+        if (_authorizationDialog.IsOpen)
+        {
+            _authorizationOwnerId ??= inputOwnerId;
+            overview.Close();
+            _layer.SetScreenshotOverlay(0);
+            // Do not apply keystrokes collected before this prompt owned the keyboard.
+            if (previousPromptId == _authorizationDialog.PromptId &&
+                sensitiveOwnerId is ulong authorizationOwner && _authorizationOwnerId == authorizationOwner)
+            {
+                var ownerOutput = _layer.Outputs.FirstOrDefault(output => output.Id == authorizationOwner);
+                if (ownerOutput is not null)
+                {
+                    _authorizationDialog.HandleSensitiveInput(
+                        ownerOutput.PressedKey, _layer.SensitiveTextInput, ownerOutput.ControlPressed);
+                }
+            }
+
+            UpdateKeyboardOwner();
+            return;
+        }
+
+        _authorizationOwnerId = null;
+        if (sensitiveOwnerId is not null)
+        {
+            // Input was collected before releasing the authorization surface's keyboard focus.
+            UpdateKeyboardOwner();
+            return;
+        }
+
         _screenshots.TakeRequests(_services, inputOwnerId);
         foreach (var output in _layer.Outputs)
         {
@@ -219,10 +337,8 @@ internal sealed class ShellLoop : IDisposable
 
         _layer.SetScreenshotOverlay(_screenshots.SelectingOutputId ?? 0);
 
-        var overview = _services.Overview;
         var ownerOutputName = _layer.Outputs.FirstOrDefault(output => output.Id == inputOwnerId)?.Name;
         overview.ProcessPendingRequests(inputOwnerId, ownerOutputName);
-        var dialogs = _services.Dialogs;
         dialogs.ProcessPendingRequests();
         if (_screenshots.SelectingOutputId is not null || dialogs.IsVisible)
         {
@@ -255,12 +371,21 @@ internal sealed class ShellLoop : IDisposable
             }
         }
 
-        _layer.SetKeyboardInteractiveBar((_services.Overview.IsVisible ? _services.Overview.OwnerOutputId : null) ?? (dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0));
+        UpdateKeyboardOwner();
+    }
+
+    private void UpdateKeyboardOwner()
+    {
+        var owner = _authorizationDialog.IsOpen ? _authorizationOwnerId
+            : _screenshots.SelectingOutputId is not null ? null
+            : _services.Overview.IsVisible ? _services.Overview.OwnerOutputId
+            : _services.Dialogs.IsOpen ? _dialogOwnerId : null;
+        _layer.SetKeyboardInteractiveBar(owner ?? 0);
     }
 
     private void RenderOutputs()
     {
-        _layer.SetOverviewOverlay(_services.Overview.RenderOutputId ?? 0);
+        _layer.SetOverviewOverlay(_authorizationDialog.IsOpen ? 0 : _services.Overview.RenderOutputId ?? 0);
         foreach (var output in _layer.Outputs)
         {
             if (!_layer.MakeCurrent(output.Id))
@@ -274,7 +399,10 @@ internal sealed class ShellLoop : IDisposable
             }
 
             RenderOutput(output);
-            RenderScreenshotOverlay(output);
+            if (!_authorizationDialog.IsOpen)
+            {
+                RenderScreenshotOverlay(output);
+            }
         }
     }
 
@@ -285,16 +413,34 @@ internal sealed class ShellLoop : IDisposable
         _renderer.BeginFrame(output.Width, output.Height);
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.BeginRender);
 
-        Layout.Input = _services.Overview.IsVisible || _screenshots.SelectingOutputId is not null
+        var authorizationOpen = _authorizationDialog.IsOpen;
+        var barInput = _services.Overview.IsVisible || _screenshots.SelectingOutputId is not null
             ? LayoutInput.None : output.Input;
+        if (authorizationOpen)
+        {
+            // Hold bar hover in place while the real pointer is routed to the dialog.
+            barInput = _barHoverInputs.GetValueOrDefault(output.Id, LayoutInput.None);
+        }
+        else
+        {
+            _barHoverInputs[output.Id] = barInput with { PointerDown = false, PointerPressed = false, ScrollDelta = 0 };
+        }
+
+        Layout.Input = barInput;
         Layout.BeginInputRegionFrame(output.Id);
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.DrawBar);
         _views[output.Id].Draw();
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.DrawBar);
 
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.DrawDialog);
-        if (_dialogOwnerId == output.Id && _services.Dialogs.IsVisible)
+        var dialogOwnerId = authorizationOpen ? _authorizationOwnerId : _dialogOwnerId;
+        if (dialogOwnerId == output.Id && _services.Dialogs.IsVisible)
         {
+            if (authorizationOpen)
+            {
+                Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = output.Input);
+            }
+
             using var dialogLayout = new Layout(
                 _renderer,
                 _renderer.Width,
@@ -304,7 +450,7 @@ internal sealed class ShellLoop : IDisposable
         }
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.DrawDialog);
 
-        if (_services.Overview.RenderOutputId == output.Id)
+        if (!authorizationOpen && _services.Overview.RenderOutputId == output.Id)
         {
             Layout.DrawOnLayer(RenderLayer.Dialog, _ => Layout.Input = _services.Overview.IsVisible ? output.Input : LayoutInput.None);
             Layout.DrawOnLayer(RenderLayer.Dialog, renderer =>
@@ -376,18 +522,24 @@ internal sealed class ShellLoop : IDisposable
         _screenshots.ProcessPendingCapture(_layer, _services);
         if (_services.TryTakeLockScreenRequest())
         {
+            _authorizationDialog.RevokeAll();
             _services.Overview.Close();
             _layer.SetKeyboardInteractiveBar(0);
-            LockScreenApplication.Start(_layer, _services);
+            if (_lockProcess is null)
+            {
+                _lockProcess = LockScreenApplication.Start(_layer, _services);
+            }
         }
-
-        var dialogs = _services.Dialogs;
-        if (!dialogs.IsVisible)
+        else
         {
-            _dialogOwnerId = null;
+            if (!_authorizationDialog.IsOpen && !_services.Dialogs.IsVisible)
+            {
+                _dialogOwnerId = null;
+            }
+
+            UpdateKeyboardOwner();
         }
 
-        _layer.SetKeyboardInteractiveBar((_services.Overview.IsVisible ? _services.Overview.OwnerOutputId : null) ?? (dialogs.IsOpen ? _dialogOwnerId ?? 0 : 0));
         PerformanceProfiler.Begin(_performanceProfiler, PerformancePhase.PaceFrame);
         _layer.PaceFrame();
         PerformanceProfiler.End(_performanceProfiler, PerformancePhase.PaceFrame);

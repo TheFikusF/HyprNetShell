@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 
-namespace HyprNetShell;
+namespace HyprNetShell.Native.Managed;
 
 public enum SessionLockState
 {

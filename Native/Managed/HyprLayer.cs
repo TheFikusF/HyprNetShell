@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering.Primitives;
 
-namespace HyprNetShell;
+namespace HyprNetShell.Native.Managed;
 
 public sealed class HyprLayer : IDisposable
 {
@@ -20,14 +20,18 @@ public sealed class HyprLayer : IDisposable
 
     public const float TARGET_FRAMERATE = 60.0f;
     private const int OUTPUT_NAME_BUFFER_SIZE = 256;
+    private const int KEYBOARD_TEXT_BUFFER_SIZE = 128;
 
     private static readonly TimeSpan TargetFrameDuration = TimeSpan.FromSeconds(1.0 / TARGET_FRAMERATE);
 
-    private readonly object _clipboardLock = new();
+    private readonly Lock _clipboardLock = new();
     private readonly Queue<ClipboardRequest> _clipboardRequests = new();
     private readonly Dictionary<ulong, Output> _outputsById = [];
     private readonly List<Output> _outputs = [];
     private readonly ReadOnlyCollection<Output> _readOnlyOutputs;
+    private readonly byte[] _keyboardTextBytes = new byte[KEYBOARD_TEXT_BUFFER_SIZE];
+    private readonly char[] _sensitiveTextChars = new char[KEYBOARD_TEXT_BUFFER_SIZE];
+    private int _sensitiveTextLength;
     private bool _disposed;
     private PosixSignalRegistration? _sigIntRegistration;
     private PosixSignalRegistration? _sigTermRegistration;
@@ -38,12 +42,10 @@ public sealed class HyprLayer : IDisposable
     private ulong _topologySerial;
     private bool _hasTopologySerial;
 
+    internal ReadOnlySpan<char> SensitiveTextInput => _sensitiveTextChars.AsSpan(0, _sensitiveTextLength);
     internal IntPtr NativeHandle => _layer;
     public IReadOnlyList<Output> Outputs => _readOnlyOutputs;
-    public bool TopologyChanged
-    {
-        get; private set;
-    }
+    public bool TopologyChanged { get; private set; }
     public int ReturnCode => _layer == IntPtr.Zero ? _returnCode : NativeMethods.hypr_layer_has_error(_layer);
 
     public HyprLayer(int reservedHeight)
@@ -101,7 +103,7 @@ public sealed class HyprLayer : IDisposable
         }
         public string TextInput { get; internal set; } = "";
 
-        internal void UpdateInput(IntPtr layer)
+        internal int UpdateInput(IntPtr layer, byte[] textBuffer, Span<char> sensitiveText)
         {
             var hasPointer = NativeMethods.hypr_layer_pointer_inside(layer, Id) != 0;
             var pointerDown = hasPointer && NativeMethods.hypr_layer_pointer_button(layer, Id) != 0;
@@ -121,19 +123,45 @@ public sealed class HyprLayer : IDisposable
             PressedKey = NativeMethods.hypr_layer_take_key(layer, Id);
             ControlPressed = NativeMethods.hypr_layer_take_key_control(layer, Id) != 0;
 
-            var textBuffer = new byte[128];
-            var textLength = NativeMethods.hypr_layer_take_text(layer, Id, textBuffer, textBuffer.Length);
-            TextInput = textLength > 0
-                ? Encoding.UTF8.GetString(textBuffer, 0, Math.Min(textLength, textBuffer.Length))
-                : "";
             _lastPointerDown = pointerDown;
+            TextInput = "";
+            try
+            {
+                var textLength = NativeMethods.hypr_layer_take_text(layer, Id, textBuffer, textBuffer.Length);
+                if (textLength <= 0)
+                {
+                    return 0;
+                }
+
+                var textBytes = textBuffer.AsSpan(0, Math.Min(textLength, textBuffer.Length));
+                if (!sensitiveText.IsEmpty)
+                {
+                    return Encoding.UTF8.GetChars(textBytes, sensitiveText);
+                }
+
+                TextInput = Encoding.UTF8.GetString(textBytes);
+                return 0;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(textBuffer);
+            }
         }
     }
 
     public static IntPtr GetProcAddress(string name) => NativeMethods.hypr_layer_get_proc_address(name);
 
-    public bool Update()
+    public bool Update() => Update(null);
+
+    internal void ClearSensitiveTextInput()
     {
+        CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(_sensitiveTextChars.AsSpan()));
+        _sensitiveTextLength = 0;
+    }
+
+    internal bool Update(ulong? sensitiveOwnerId)
+    {
+        ClearSensitiveTextInput();
         _frameStartTimestamp = Stopwatch.GetTimestamp();
         if (_layer == IntPtr.Zero ||
             Volatile.Read(ref _shutdownRequested) != 0 ||
@@ -152,7 +180,14 @@ public sealed class HyprLayer : IDisposable
         ReconcileOutputs();
         foreach (var output in _outputs)
         {
-            output.UpdateInput(_layer);
+            if (output.Id == sensitiveOwnerId)
+            {
+                _sensitiveTextLength = output.UpdateInput(_layer, _keyboardTextBytes, _sensitiveTextChars);
+            }
+            else
+            {
+                output.UpdateInput(_layer, _keyboardTextBytes, Span<char>.Empty);
+            }
         }
 
         return true;
@@ -335,6 +370,7 @@ public sealed class HyprLayer : IDisposable
 
     public void Dispose()
     {
+        ClearSensitiveTextInput();
         lock (_clipboardLock)
         {
             _disposed = true;

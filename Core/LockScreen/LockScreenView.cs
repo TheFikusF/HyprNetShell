@@ -25,7 +25,7 @@ public sealed class LockScreenView()
         LockScreenStatus status,
         RawImageData? background)
     {
-        var bullets = new string('•', Math.Clamp(passwordLength, 0, 64));
+
         var statusText = status switch {
             LockScreenStatus.Authenticating => "Checking…",
             LockScreenStatus.Denied => "Authentication failed",
@@ -77,27 +77,7 @@ public sealed class LockScreenView()
                     Children =
                     [
                         new TextNode(Environment.UserName, ThemeManager.Current.Text.HeaderSize, ThemeManager.Current.Text.MutedColor),
-                        new BoxNode(360, 52)
-                        {
-                            HorizontalAlignment = ItemsAlignment.Center,
-                            VerticalAlignment = ItemsAlignment.Center,
-                            Style = ModulesCommon.ModuleStyle(Color.Black with { A = 0.48f }) with
-                            {
-                                BorderColor = status is LockScreenStatus.Denied or LockScreenStatus.Error
-                                    ? ThemeManager.Current.Critical
-                                    : ThemeManager.Current.Border,
-                                BorderRadius = 10,
-                                Padding = new Insets(12, 8),
-                                ShadowColor = null,
-                            },
-                            Children =
-                            [
-                                new TextNode(
-                                    bullets.Length == 0 ? "Password" : bullets,
-                                    20,
-                                    bullets.Length == 0 ? ThemeManager.Current.Text.MutedColor : ThemeManager.Current.Text)
-                            ],
-                        },
+                        PasswordFieldView.Build(passwordLength, status is LockScreenStatus.Denied or LockScreenStatus.Error),
                         new TextNode(statusText, color: statusColor),
                     ],
                 }            ]

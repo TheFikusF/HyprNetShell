@@ -68,15 +68,37 @@ public sealed class DialogService : IDisposable
     private readonly Dictionary<Type, WindowState> _windows = [];
     private readonly ConcurrentQueue<PendingDialogRequest> _pendingRequests = new();
     private WindowState? _activeWindow;
+    private WindowState? _priorityWindow;
     private bool _disposed;
 
-    public bool IsOpen => _activeWindow?.IsOpen == true;
-    public bool IsVisible => _activeWindow is { } state && (state.IsOpen || state.Opacity > 0.1f);
+    private WindowState? DisplayedWindow => _priorityWindow ?? _activeWindow;
+    public bool IsOpen => DisplayedWindow?.IsOpen == true;
+    public bool IsVisible => DisplayedWindow is { } state && (state.IsOpen || state.Opacity > 0.1f);
 
     internal void Register<T>(T window) where T : class, IDialogWindow
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _windows.Add(typeof(T), new WindowState(window));
+    }
+
+    internal void SetPriorityWindow<T>(bool isOpen) where T : class, IDialogWindow
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var state = GetState<T>();
+        if (isOpen && _priorityWindow is null)
+        {
+            _priorityWindow = state;
+            state.IsOpen = true;
+            state.Opacity = 1;
+            state.Window.OnOpened();
+        }
+        else if (!isOpen && ReferenceEquals(_priorityWindow, state))
+        {
+            _priorityWindow = null;
+            state.IsOpen = false;
+            state.Opacity = 0;
+            state.Window.OnClosed();
+        }
     }
 
     internal void Open<T>() where T : class, IDialogWindow
@@ -153,7 +175,7 @@ public sealed class DialogService : IDisposable
     public void ProcessPendingRequests()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        while (_pendingRequests.TryDequeue(out var request))
+        while (_priorityWindow is null && _pendingRequests.TryDequeue(out var request))
         {
             if (request.Close)
             {
@@ -187,13 +209,13 @@ public sealed class DialogService : IDisposable
     public void HandleInput(int pressedKey, string textInput, float scrollDelta, bool controlPressed)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_activeWindow is not { IsOpen: true } state)
+        if (DisplayedWindow is not { IsOpen: true } state)
         {
             return;
         }
 
         var input = new DialogInput(ToDialogKey(pressedKey, textInput), textInput, scrollDelta, controlPressed);
-        if (state.Window.HandleInput(input) == DialogInputResult.Close)
+        if (state.Window.HandleInput(input) == DialogInputResult.Close && _priorityWindow is null)
         {
             Close();
         }
@@ -202,7 +224,7 @@ public sealed class DialogService : IDisposable
     public Node Draw()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_activeWindow is not { } state)
+        if (DisplayedWindow is not { } state)
         {
             return new SpacerNode();
         }
@@ -264,7 +286,7 @@ public sealed class DialogService : IDisposable
         ? state
         : throw new InvalidOperationException($"Dialog window {type.Name} is not registered");
 
-    internal static DialogKey ToDialogKey(int key, string textInput) => key switch {
+    internal static DialogKey ToDialogKey(int key, ReadOnlySpan<char> textInput) => key switch {
         1 => DialogKey.Escape,
         14 => DialogKey.Backspace,
         15 => DialogKey.Tab,
@@ -304,5 +326,6 @@ public sealed class DialogService : IDisposable
 
         _windows.Clear();
         _activeWindow = null;
+        _priorityWindow = null;
     }
 }
