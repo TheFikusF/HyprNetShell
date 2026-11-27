@@ -41,7 +41,7 @@ public sealed class StatusBar : IDisposable
         var languageModule = new LanguageModule(
             services.Hyprland,
             services.Hyprctl, _popupCoordinator);
-        var systemStatsModule = new SystemStatsModule(services.SystemStats, _popupCoordinator);
+        var systemStatsModule = new SystemStatsModule(services.SystemStats, services.DriveHealth, _popupCoordinator);
         var networkModule = new NetworkModule(
             services.Network,
             services.Dialogs,

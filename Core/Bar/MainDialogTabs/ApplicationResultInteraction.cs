@@ -3,7 +3,7 @@ using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout.Nodes;
-using HyprNetShell.Rendering.Primitives;
+using HyprNetShell.Rendering;
 
 namespace HyprNetShell.Core.Bar.MainDialogTabs;
 
@@ -130,7 +130,8 @@ internal sealed class ApplicationResultInteraction()
         int index,
         bool selected,
         Action activateDefault,
-        Action<DesktopAction> activateAction)
+        Action<DesktopAction> activateAction,
+        SvgAsset? fallbackIcon = null)
     {
         var state = State(index);
         return ApplicationLauncherTab.BuildApplicationRow(
@@ -148,7 +149,7 @@ internal sealed class ApplicationResultInteraction()
                 _selectedColumn = ApplicationSelectionColumn.Actions;
                 state.ActionIndex = actionIndex;
                 activateAction(application.Actions[actionIndex]);
-            });
+            }, fallbackIcon);
     }
 
     private ApplicationButtonState State(int index) => _states.GetState(index, ThemeManager.Current.Panel);

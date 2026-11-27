@@ -3,11 +3,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -25,6 +27,7 @@ static const char PASSWORD_PROMPT[] = "Password: ";
 typedef struct
 {
     int master;
+    int output;
     pid_t pid;
     struct timespec deadline;
     size_t prompt_bytes;
@@ -36,7 +39,8 @@ typedef struct
     bool reaped;
 } su_auth;
 
-static int spawn_su(pid_t *pid, const char *slave_path, const char *command)
+static int spawn_su(pid_t *pid, const char *slave_path, const char *command,
+                    int output)
 {
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attr;
@@ -69,8 +73,8 @@ static int spawn_su(pid_t *pid, const char *slave_path, const char *command)
         posix_spawnattr_setsigdefault(&attr, &defaults) ||
         posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, slave_path,
                                          O_RDWR, 0) ||
-        posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO,
-                                         STDOUT_FILENO) ||
+        posix_spawn_file_actions_adddup2(
+            &actions, output >= 0 ? output : STDIN_FILENO, STDOUT_FILENO) ||
         posix_spawn_file_actions_adddup2(&actions, STDIN_FILENO,
                                          STDERR_FILENO) ||
         posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1) ||
@@ -80,7 +84,7 @@ static int spawn_su(pid_t *pid, const char *slave_path, const char *command)
     return error;
 }
 
-void *hypr_su_start(const char *command)
+static void *start_su(const char *command, bool capture)
 {
     if (command == NULL || *command == '\0')
     {
@@ -99,6 +103,13 @@ void *hypr_su_start(const char *command)
         return NULL;
     }
 
+    auth->output = capture ? memfd_create("hypr-su-output", MFD_CLOEXEC) : -1;
+    if (capture && auth->output < 0)
+    {
+        free(auth);
+        return NULL;
+    }
+
     auth->deadline.tv_sec += TIMEOUT_SECONDS;
     auth->master = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK);
     char slave_path[128];
@@ -111,7 +122,7 @@ void *hypr_su_start(const char *command)
     }
 
     bool started = slave >= 0 && fchmod(slave, S_IRUSR | S_IWUSR) == 0 &&
-                   spawn_su(&auth->pid, slave_path, command) == 0;
+                   spawn_su(&auth->pid, slave_path, command, auth->output) == 0;
     if (slave >= 0)
     {
         close(slave);
@@ -124,11 +135,58 @@ void *hypr_su_start(const char *command)
             close(auth->master);
         }
 
+        if (auth->output >= 0)
+        {
+            close(auth->output);
+        }
+
         free(auth);
         return NULL;
     }
 
     return auth;
+}
+
+void *hypr_su_start(const char *command)
+{
+    return start_su(command, false);
+}
+
+void *hypr_su_start_capture(const char *command)
+{
+    return start_su(command, true);
+}
+
+int hypr_su_copy_output(void *handle, char *buffer, size_t capacity)
+{
+    su_auth *auth = handle;
+    struct stat info;
+    if (auth == NULL || auth->result != 2 || auth->output < 0 ||
+        buffer == NULL || fstat(auth->output, &info) != 0 || info.st_size < 0 ||
+        (size_t)info.st_size > capacity || info.st_size > INT_MAX)
+    {
+        return -1;
+    }
+
+    size_t offset = 0;
+    while (offset < (size_t)info.st_size)
+    {
+        ssize_t count = pread(auth->output, buffer + offset,
+                              (size_t)info.st_size - offset, (off_t)offset);
+        if (count < 0 && errno == EINTR)
+        {
+            continue;
+        }
+
+        if (count <= 0)
+        {
+            return -1;
+        }
+
+        offset += (size_t)count;
+    }
+
+    return (int)offset;
 }
 
 static int fail(su_auth *auth)
@@ -318,6 +376,11 @@ void hypr_su_destroy(void *handle)
     if (auth->master >= 0)
     {
         fail(auth);
+    }
+
+    if (auth->output >= 0)
+    {
+        close(auth->output);
     }
 
     if (!auth->reaped)

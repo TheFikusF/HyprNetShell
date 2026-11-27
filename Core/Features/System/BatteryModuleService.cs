@@ -1,12 +1,12 @@
 using System.Globalization;
 using HyprNetShell.Core.Configuration;
-using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.Sni;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using Tmds.DBus.Protocol;
+using HyprNetShell.Native.Interop.Authorization;
 
 namespace HyprNetShell.Core.Features.System;
 

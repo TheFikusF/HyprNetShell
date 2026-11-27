@@ -4,6 +4,7 @@ using HyprNetShell.Core.Bar.Common;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.Core.Nodes;
+
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
@@ -12,14 +13,21 @@ using HyprNetShell.Rendering.Primitives;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
-internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupCoordinator popupCoordinator) : IDrawableModule
+internal sealed class SystemStatsModule(
+    SystemStatsModuleService service,
+    DriveHealthService driveHealth,
+    PopupCoordinator popupCoordinator) : IDrawableModule
 {
     private const int WIDTH = 75;
     private const int GRAPH_WIDTH = 400;
     private const int GRAPH_HEIGHT = 92;
+    private const string DISKS_TAB = "disks";
+    private const string DRIVES_TAB = "drives";
+    private const string POPUP_ID = "system_stats_module";
 
-    private readonly NodeWithPopup _node = new(popupCoordinator, "system_stats_module") {
+    private readonly NodeWithPopup _node = new(popupCoordinator, POPUP_ID) {
         HorizontalAlignment = ItemsAlignment.Center,
+        GetShouldShowPopup = hovered => hovered || (driveHealth.Checking && popupCoordinator.IsOpen(POPUP_ID)),
     };
 
     private readonly Gradient _cpuGradient = new(
@@ -43,6 +51,9 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         new Gradient.Stop(1f, Color.Red)
     );
 
+    private readonly SegmentedSwitch _storageTabSwitch = new();
+
+    private string _selectedStorageTab = DISKS_TAB;
     private Color _currentCpuColor;
     private Color _currentRamColor;
     private Color _currentTempColor;
@@ -131,7 +142,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
 
         return new BoxNode() {
             Direction = Direction.Vertical,
-            HorizontalAlignment = ItemsAlignment.Center,
+            HorizontalAlignment = ItemsAlignment.Stretch,
             Style = ModulesCommon.PopupStyle() with { Spacing = 8 },
             Children =
             [
@@ -178,7 +189,7 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
                         ModulesCommon.BuildTextWithIcon(Icons.ArrowUp, "Upload"),
                         new TextNode(FormatRate(stats.UploadBytesPerSecond), 14)
                     ]),
-                ..BuildDiskSection(stats.Disks),
+                ..BuildStorageSection(stats.Disks),
             ],
         };
     }
@@ -222,24 +233,110 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
         };
     }
 
-    private IEnumerable<Node> BuildDiskSection(IReadOnlyList<DiskUsageSnapshot> disks)
+    private IEnumerable<Node> BuildStorageSection(IReadOnlyList<DiskUsageSnapshot> disks)
     {
-        if (disks.Count == 0)
+        yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, GRAPH_WIDTH, 12);
+        yield return _storageTabSwitch.Build(
+            [
+                new SegmentedSwitch.Item(DISKS_TAB, "Disks"),
+                new SegmentedSwitch.Item(DRIVES_TAB, "Drives"),
+            ],
+            _selectedStorageTab,
+            SelectStorageTab);
+
+        if (_selectedStorageTab == DRIVES_TAB)
         {
+            if (driveHealth.Checking)
+            {
+                yield return new TextNode("Checking drive health…");
+            }
+
+            var drives = driveHealth.Snapshot;
+            if (drives is null || drives.Count == 0)
+            {
+                if (!driveHealth.Checking)
+                {
+                    yield return new TextNode("No drives found.");
+                }
+                yield break;
+            }
+
+            foreach (var drive in drives)
+            {
+                yield return BuildDriveRow(drive);
+            }
+
             yield break;
         }
 
-        yield return ModulesCommon.BuildDivider(ThemeManager.Current.Border, GRAPH_WIDTH, 12);
-        yield return new BoxNode(GRAPH_WIDTH) {
-            HorizontalAlignment = ItemsAlignment.Center,
-            Children = [ModulesCommon.BuildTextWithIcon(Icons.HardDrive, "Disks")],
-        };
+        if (disks.Count == 0)
+        {
+            yield return new TextNode("No mounted disks found.");
+        }
 
         foreach (var disk in disks)
         {
             yield return BuildDiskRow(disk);
         }
     }
+
+    private void SelectStorageTab(string selected)
+    {
+        if (selected != _selectedStorageTab && selected == DRIVES_TAB)
+        {
+            driveHealth.Check();
+        }
+
+        _selectedStorageTab = selected;
+    }
+
+    private static BoxNode BuildDriveRow(DriveHealthSnapshot drive)
+    {
+        var diagnostics = drive.Diagnostics;
+        var (label, color) = diagnostics.Health switch {
+            DriveHealth.Passed => ("SMART passed", ThemeManager.Current.Text.Color),
+            DriveHealth.Failing => ("SMART failing", ThemeManager.Current.Critical),
+            DriveHealth.Standby => ("In standby", ThemeManager.Current.Text.MutedColor),
+            _ => ("SMART unavailable", ThemeManager.Current.Text.MutedColor),
+        };
+        var muted = ThemeManager.Current.Text.MutedColor;
+        var rows = new List<Node> {
+            new BoxNode(GRAPH_WIDTH) {
+                HorizontalAlignment = ItemsAlignment.Spread,
+                Children = [new TextNode(drive.DevicePath), new TextNode(label, color: color)],
+            },
+        };
+        if (drive.SessionReadBytes.HasValue || drive.SessionWrittenBytes.HasValue)
+        {
+            rows.Add(new TextNode(FormatDriveIo("Since boot or attach", drive.SessionReadBytes, drive.SessionWrittenBytes), color: muted));
+        }
+
+        if (diagnostics.LifetimeReadBytes.HasValue || diagnostics.LifetimeWrittenBytes.HasValue)
+        {
+            rows.Add(new TextNode(FormatDriveIo("Lifetime", diagnostics.LifetimeReadBytes, diagnostics.LifetimeWrittenBytes), color: muted));
+        }
+
+        if (diagnostics.WearPercent is { } wear)
+        {
+            rows.Add(new TextNode($"SSD endurance used: {wear}%", color: wear >= 100 ? ThemeManager.Current.Warning : muted));
+        }
+
+        if (diagnostics.MediaErrors is { } errors)
+        {
+            rows.Add(new TextNode($"Lifetime media errors: {errors:N0}", color: errors > 0 ? ThemeManager.Current.Warning : muted));
+        }
+
+        return new BoxNode(GRAPH_WIDTH) {
+            Direction = Direction.Vertical,
+            Style = new Style { Spacing = 3 },
+            Children = rows,
+        };
+    }
+
+    private static string FormatDriveIo(string period, decimal? read, decimal? written) =>
+        $"{period}: {FormatOptionalBytes(read)} read / {FormatOptionalBytes(written)} written";
+
+    private static string FormatOptionalBytes(decimal? bytes) => bytes is { } value ? FormatBytes(value) : "—";
 
     private BoxNode BuildDiskRow(DiskUsageSnapshot disk)
     {
@@ -297,15 +394,14 @@ internal sealed class SystemStatsModule(SystemStatsModuleService service, PopupC
 
     private static string FormatRate(long bytesPerSecond) => $"{FormatBytes(bytesPerSecond)}/s";
 
-    private static string FormatBytes(long bytes)
+    private static string FormatBytes(decimal bytes)
     {
-        string[] units = ["B", "KiB", "MiB", "GiB", "TiB"];
-        var value = Math.Max(0, bytes);
+        string[] units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
         var unit = 0;
-        var display = (double)value;
-        while (display >= 1024.0 && unit < units.Length - 1)
+        var display = Math.Max(0, bytes);
+        while (display >= 1024 && unit < units.Length - 1)
         {
-            display /= 1024.0;
+            display /= 1024;
             unit++;
         }
 

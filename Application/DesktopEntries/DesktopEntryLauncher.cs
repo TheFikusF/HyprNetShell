@@ -62,7 +62,129 @@ internal static partial class DesktopEntryLauncher
         public string? Failure;
     }
 
-    private static unsafe bool LaunchAndWait(IntPtr appInfo, out string? failure)
+    public static int LaunchUri(string url, bool privateWindow)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.IsFile ||
+            (privateWindow && uri.Scheme is not ("http" or "https")))
+        {
+            return 1;
+        }
+
+        var app = Gio.g_app_info_get_default_for_uri_scheme(uri.Scheme);
+        if (app == IntPtr.Zero)
+        {
+            return 1;
+        }
+
+        var value = Marshal.StringToCoTaskMemUTF8(uri.AbsoluteUri);
+        var uris = Gio.g_list_prepend(IntPtr.Zero, value);
+        try
+        {
+            if (!privateWindow)
+            {
+                return LaunchAndWait(app, out _, uris) ? 0 : 1;
+            }
+
+            var action = FindPrivateAction(app) ?? FindInstalledPrivateAction(app, uri.Scheme);
+            return action is { } target ? LaunchExec(target.File, target.Action, uris) : 2;
+        }
+        finally
+        {
+            Gio.g_list_free(uris);
+            Marshal.FreeCoTaskMem(value);
+            Gio.g_object_unref(app);
+        }
+    }
+
+    private static (string File, string Action)? FindPrivateAction(IntPtr app)
+    {
+        if (Gio.g_type_check_instance_is_a(app, Gio.g_desktop_app_info_get_type()) == 0 ||
+            Marshal.PtrToStringUTF8(Gio.g_desktop_app_info_get_filename(app)) is not { } desktopFile)
+        {
+            return null;
+        }
+
+        var actions = Gio.g_desktop_app_info_list_actions(app);
+        for (var index = 0; actions != IntPtr.Zero; index++)
+        {
+            var action = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(actions, index * IntPtr.Size));
+            if (action is null)
+            {
+                break;
+            }
+
+            if (action.Contains("private", StringComparison.OrdinalIgnoreCase) ||
+                action.Contains("incognito", StringComparison.OrdinalIgnoreCase))
+            {
+                return (desktopFile, action);
+            }
+        }
+
+        return null;
+    }
+
+    private static (string File, string Action)? FindInstalledPrivateAction(IntPtr app, string scheme)
+    {
+        // Generated default-browser entries can omit actions from the installed entry.
+        var id = Marshal.PtrToStringUTF8(Gio.g_app_info_get_id(app));
+        if (id?.StartsWith("userapp-", StringComparison.Ordinal) != true || ResolveExecutable(app) is not { } executable)
+        {
+            return null;
+        }
+
+        var name = Marshal.PtrToStringUTF8(Gio.g_app_info_get_name(app));
+        var candidates = Gio.g_app_info_get_all_for_type($"x-scheme-handler/{scheme}");
+        try
+        {
+            for (var node = candidates; node != IntPtr.Zero; node = Marshal.ReadIntPtr(node, IntPtr.Size))
+            {
+                var candidate = Marshal.ReadIntPtr(node);
+                if (candidate != app && Marshal.PtrToStringUTF8(Gio.g_app_info_get_name(candidate)) == name &&
+                    FindPrivateAction(candidate) is { } action && ResolveExecutable(candidate) == executable)
+                {
+                    return action;
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            for (var node = candidates; node != IntPtr.Zero; node = Marshal.ReadIntPtr(node, IntPtr.Size))
+            {
+                Gio.g_object_unref(Marshal.ReadIntPtr(node));
+            }
+
+            Gio.g_list_free(candidates);
+        }
+    }
+
+    private static string? ResolveExecutable(IntPtr app)
+    {
+        var executable = Marshal.PtrToStringUTF8(Gio.g_app_info_get_executable(app));
+        if (string.IsNullOrEmpty(executable))
+        {
+            return null;
+        }
+
+        var path = Gio.g_find_program_in_path(executable);
+        if (path == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var filename = Path.GetFullPath(Marshal.PtrToStringUTF8(path)!);
+            return File.ResolveLinkTarget(filename, returnFinalTarget: true)?.FullName ?? filename;
+        }
+        finally
+        {
+            Gio.g_free(path);
+        }
+    }
+
+    private static unsafe bool LaunchAndWait(IntPtr appInfo, out string? failure, IntPtr uris = default)
     {
         var result = new LaunchResult();
         var handle = GCHandle.Alloc(result);
@@ -73,7 +195,7 @@ internal static partial class DesktopEntryLauncher
         {
             // The synchronous API only queues D-Bus activation and an async flush.
             // Keep a main context alive until GIO reports the activation reply/flush.
-            Gio.g_app_info_launch_uris_async(appInfo, IntPtr.Zero, IntPtr.Zero, cancellable,
+            Gio.g_app_info_launch_uris_async(appInfo, uris, IntPtr.Zero, cancellable,
                 &LaunchCompleted, GCHandle.ToIntPtr(handle));
             var timer = Stopwatch.StartNew();
             var cancelled = false;
@@ -112,7 +234,7 @@ internal static partial class DesktopEntryLauncher
         result.Completed = true;
     }
 
-    private static int LaunchExec(string desktopFile)
+    private static int LaunchExec(string desktopFile, string? action = null, IntPtr uris = default)
     {
         var keyFile = Gio.g_key_file_new();
         try
@@ -124,7 +246,8 @@ internal static partial class DesktopEntryLauncher
             }
 
             Gio.g_key_file_set_boolean(keyFile, "Desktop Entry", "DBusActivatable", 0);
-            var execPointer = Gio.g_key_file_get_string(keyFile, "Desktop Entry", "Exec", out error);
+            var execGroup = action is null ? "Desktop Entry" : $"Desktop Action {action}";
+            var execPointer = Gio.g_key_file_get_string(keyFile, execGroup, "Exec", out error);
             if (execPointer == IntPtr.Zero)
             {
                 Console.Error.WriteLine($"No Exec fallback for {desktopFile}: {ErrorMessage(error, "Missing Exec command")}");
@@ -139,11 +262,13 @@ internal static partial class DesktopEntryLauncher
                 try
                 {
                     var command = new StringBuilder();
+                    var hasUriField = false;
                     for (var i = 0; i < exec.Length; i++)
                     {
                         if (exec[i] == '%' && i + 1 < exec.Length)
                         {
                             var code = exec[++i];
+                            hasUriField |= code is 'u' or 'U' or 'f' or 'F';
                             if (code == 'k')
                             {
                                 // Escape literal percent signs for GIO's subsequent expansion.
@@ -159,6 +284,12 @@ internal static partial class DesktopEntryLauncher
                             command.Append(exec[i]);
                         }
                     }
+                    // A desktop action takes no URI argument; give its Exec a field for GIO to expand.
+                    if (action is not null && !hasUriField)
+                    {
+                        command.Append(" %u");
+                    }
+
                     Gio.g_key_file_set_string(keyFile, "Desktop Entry", "Exec", command.ToString());
                 }
                 finally
@@ -179,11 +310,15 @@ internal static partial class DesktopEntryLauncher
             }
             try
             {
-                if (LaunchAndWait(fallback, out var failure))
+                if (LaunchAndWait(fallback, out var failure, uris))
                 {
                     return 0;
                 }
-                Console.Error.WriteLine($"Exec fallback failed for desktop entry {desktopFile}: {failure}");
+                if (action is null)
+                {
+                    Console.Error.WriteLine($"Exec fallback failed for desktop entry {desktopFile}: {failure}");
+                }
+
                 return 1;
             }
             finally
@@ -237,6 +372,41 @@ internal static partial class DesktopEntryLauncher
     private static partial class Gio
     {
         [LibraryImport("gio-2.0", StringMarshalling = StringMarshalling.Utf8)]
+        internal static partial IntPtr g_app_info_get_default_for_uri_scheme(string scheme);
+
+        [LibraryImport("gio-2.0", StringMarshalling = StringMarshalling.Utf8)]
+        internal static partial IntPtr g_app_info_get_all_for_type(string contentType);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial IntPtr g_app_info_get_id(IntPtr appInfo);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial IntPtr g_app_info_get_name(IntPtr appInfo);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial IntPtr g_app_info_get_executable(IntPtr appInfo);
+
+        [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
+        internal static partial IntPtr g_find_program_in_path(string executable);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial nuint g_desktop_app_info_get_type();
+
+        [LibraryImport("gobject-2.0")]
+        internal static partial int g_type_check_instance_is_a(IntPtr instance, nuint type);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial IntPtr g_desktop_app_info_get_filename(IntPtr appInfo);
+
+        [LibraryImport("gio-2.0")]
+        internal static partial IntPtr g_desktop_app_info_list_actions(IntPtr appInfo);
+
+        [LibraryImport("glib-2.0")]
+        internal static partial IntPtr g_list_prepend(IntPtr list, IntPtr value);
+
+        [LibraryImport("glib-2.0")]
+        internal static partial void g_list_free(IntPtr list);
+        [LibraryImport("gio-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial IntPtr g_desktop_app_info_new_from_filename(
             string filename);
 
@@ -268,28 +438,40 @@ internal static partial class DesktopEntryLauncher
 
         [LibraryImport("glib-2.0")]
         internal static partial IntPtr g_main_context_new();
+
         [LibraryImport("glib-2.0")]
         internal static partial void g_main_context_push_thread_default(IntPtr context);
+
         [LibraryImport("glib-2.0")]
         internal static partial void g_main_context_pop_thread_default(IntPtr context);
+
         [LibraryImport("glib-2.0")]
         internal static partial int g_main_context_iteration(IntPtr context, int mayBlock);
+
         [LibraryImport("glib-2.0")]
         internal static partial void g_main_context_unref(IntPtr context);
+
         [LibraryImport("glib-2.0")]
         internal static partial IntPtr g_key_file_new();
+
         [LibraryImport("glib-2.0")]
         internal static partial void g_key_file_unref(IntPtr keyFile);
+
         [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial int g_key_file_load_from_file(IntPtr keyFile, string filename, int flags, out IntPtr error);
+
         [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial void g_key_file_set_boolean(IntPtr keyFile, string group, string key, int value);
+
         [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial IntPtr g_key_file_get_string(IntPtr keyFile, string group, string key, out IntPtr error);
+
         [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial void g_key_file_set_string(IntPtr keyFile, string group, string key, string value);
+
         [LibraryImport("glib-2.0", StringMarshalling = StringMarshalling.Utf8)]
         internal static partial IntPtr g_shell_quote(string value);
+
         [LibraryImport("glib-2.0")]
         internal static partial void g_free(IntPtr value);
 

@@ -2,7 +2,6 @@ using System.Diagnostics;
 using HyprNetShell.Core.Bar.Dialogs;
 using HyprNetShell.Core.Bar.MainDialogTabs;
 using HyprNetShell.Core.Configuration;
-using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.Hyprland;
 using HyprNetShell.Core.Features.KdeConnect;
 using HyprNetShell.Core.Features.OnlineAccounts;
@@ -15,6 +14,7 @@ using HyprNetShell.Core.Overview;
 using HyprNetShell.Core.Platform;
 using HyprNetShell.Core.Services;
 using HyprNetShell.Rendering;
+using HyprNetShell.Native.Interop.Authorization;
 
 namespace HyprNetShell.Core.Bar;
 
@@ -91,6 +91,7 @@ public sealed class StatusBarServices : IDisposable
     internal BatteryModuleService Battery { get; }
     internal DeviceBatteryService DeviceBatteries { get; }
     internal SystemStatsModuleService SystemStats { get; }
+    internal DriveHealthService DriveHealth { get; }
     internal WeatherService Weather { get; }
     internal CalendarService Calendar { get; }
     internal ClockToolsService ClockTools { get; }
@@ -131,6 +132,7 @@ public sealed class StatusBarServices : IDisposable
         Bluetooth = new BluetoothModuleService();
         Battery = new BatteryModuleService(authorization: authorization);
         SystemStats = new SystemStatsModuleService();
+        DriveHealth = new DriveHealthService(authorization);
         Weather = new WeatherService(UrlLauncher);
         OnlineAccounts = new OnlineAccountsService(UrlLauncher);
         Calendar = new CalendarService(OnlineAccounts);
@@ -184,6 +186,7 @@ public sealed class StatusBarServices : IDisposable
             new(Bluetooth, RecoveryInterval),
             new(Battery, RecoveryInterval),
             new(SystemStats, FastSampleInterval),
+
             new(Tray, TrayRefreshInterval),
             new(Calendar, CalendarRefreshInterval, TimeSpan.FromSeconds(40)),
             new(ChatGptUsage, ChatGptUsageRefreshInterval, TimeSpan.FromSeconds(10)),
@@ -372,6 +375,7 @@ public sealed class StatusBarServices : IDisposable
         Calendar.Dispose();
         OnlineAccounts.Dispose();
         Weather.Dispose();
+        DriveHealth.Dispose();
         Battery.Dispose();
         Bluetooth.Dispose();
         Privacy.Dispose();

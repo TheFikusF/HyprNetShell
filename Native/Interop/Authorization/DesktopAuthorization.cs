@@ -4,23 +4,33 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace HyprNetShell.Authorization;
+namespace HyprNetShell.Native.Interop.Authorization;
 
 public sealed record AuthorizationPrompt(ulong Id, string Message, int PasswordLength);
 
 public sealed class DesktopAuthorization : IDisposable
 {
-    private sealed record ChargeRequest(ChargeLimitSession Session, nint Handle, CancellationToken Token)
+    private abstract record SuRequest(nint Handle, CancellationToken Token)
+    {
+        public bool Submitted { get; set; }
+    }
+
+    private sealed record ChargeRequest(ChargeLimitSession Session, nint Handle, CancellationToken Token) : SuRequest(Handle, Token)
     {
         public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public bool Submitted { get; set; }
         public bool FreshCredential { get; set; }
     }
 
+    private sealed record SmartRequest(nint Handle, CancellationToken Token) : SuRequest(Handle, Token)
+    {
+        public TaskCompletionSource<string?> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
 
     private const int PASSWORD_CAPACITY = 256;
     private const int POLL_INTERVAL_MS = 25;
     private const int LEASE_SECONDS = 60;
+    private const int SMART_OUTPUT_CAPACITY = 1024 * 1024;
+    private const int MAX_SMART_DEVICES = 16;
 
     private readonly Lock _gate = new();
     private readonly byte[] _edit = GC.AllocateArray<byte>(PASSWORD_CAPACITY, pinned: true);
@@ -29,7 +39,7 @@ public sealed class DesktopAuthorization : IDisposable
     private readonly Action<string> _logWarning;
     private readonly Timer _timer;
     private AuthorizationPrompt? _prompt;
-    private ChargeRequest? _request;
+    private SuRequest? _request;
     private ChargeLimitSession? _leaseOwner;
     private long _leaseStart;
     private ulong _nextId;
@@ -169,11 +179,32 @@ public sealed class DesktopAuthorization : IDisposable
                 return;
             }
 
+            if (request is SmartRequest)
+            {
+                try
+                {
+                    request.Submitted = AuthorizationNative.AnswerSu(request.Handle, ref _edit[0]) == 1;
+                }
+                finally
+                {
+                    ClearPrompt();
+                }
+
+                if (!request.Submitted)
+                {
+                    _logWarning("The native su process did not accept the SMART authorization response.");
+                    FinishCharge(false);
+                }
+
+                return;
+            }
+
             ClearLease();
             _edit.AsSpan(0, _editBytes).CopyTo(_chargeCredential);
             ClearPrompt();
-            request.FreshCredential = true;
-            SendChargeCredential(request);
+            var charge = (ChargeRequest)request;
+            charge.FreshCredential = true;
+            SendChargeCredential(charge);
         }
     }
 
@@ -278,11 +309,57 @@ public sealed class DesktopAuthorization : IDisposable
                 return Task.FromResult(false);
             }
 
-            _request = new ChargeRequest(session, handle, cancellationToken);
+            var request = new ChargeRequest(session, handle, cancellationToken);
+            _request = request;
             _timer.Change(0, POLL_INTERVAL_MS);
-            return _request.Completion.Task;
+            return request.Completion.Task;
         }
     }
+
+    internal Task<string?> ReadSmartAsync(IReadOnlyList<string> devices, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Task.FromCanceled<string?>(cancellationToken);
+            }
+
+            if (_disposed || _request is not null || devices.Count is < 1 or > MAX_SMART_DEVICES || devices.Any(device => !IsSmartDevicePath(device)))
+            {
+                _logWarning("Cannot start SMART authorization: another request is active or the device list is invalid.");
+                return Task.FromResult<string?>(null);
+            }
+
+            try
+            {
+                // Only validated device names enter the shell command. Keep each JSON document and its
+                // smartctl exit status separate without treating an unhealthy drive as a su failure.
+                var command = string.Join("; ", devices.Select(device =>
+                    $"/usr/bin/smartctl -j -i -H -A -l devstat -n standby,99 -- {device} 2>/dev/null; printf '\\036%d\\036' \"$?\""));
+                var handle = AuthorizationNative.StartSuCapture(command);
+                if (handle != 0)
+                {
+                    var request = new SmartRequest(handle, cancellationToken);
+                    _request = request;
+                    _timer.Change(0, POLL_INTERVAL_MS);
+                    return request.Completion.Task;
+                }
+            }
+            catch (Exception exception) when (IsInteropUnavailable(exception))
+            {
+                _logWarning("Cannot start SMART authorization: the native su capture ABI is unavailable.");
+                return Task.FromResult<string?>(null);
+            }
+
+            _logWarning("Cannot start SMART authorization with /usr/bin/su.");
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    private static bool IsSmartDevicePath(string device) =>
+        device.StartsWith("/dev/", StringComparison.Ordinal) && device.Length is > 5 and <= 80 &&
+        device[5..].All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-');
 
     internal void EndSession(ChargeLimitSession session)
     {
@@ -294,7 +371,7 @@ public sealed class DesktopAuthorization : IDisposable
                 ClearLease();
             }
 
-            if (_request?.Session == session)
+            if (_request is ChargeRequest charge && charge.Session == session)
             {
                 FinishCharge(false);
             }
@@ -348,7 +425,7 @@ public sealed class DesktopAuthorization : IDisposable
         }
     }
 
-    private void PollCharge(ChargeRequest request)
+    private void PollCharge(SuRequest request)
     {
         if (request.Token.IsCancellationRequested)
         {
@@ -362,13 +439,15 @@ public sealed class DesktopAuthorization : IDisposable
                 return;
             case 1 when !request.Submitted:
                 ExpireLease();
-                if (_leaseOwner == request.Session)
+                if (request is ChargeRequest charge && _leaseOwner == charge.Session)
                 {
-                    SendChargeCredential(request);
+                    SendChargeCredential(charge);
                 }
                 else if (_prompt is null)
                 {
-                    ShowPrompt("Enter the root password to change the BAT0 charge limit.");
+                    ShowPrompt(request is SmartRequest
+                                            ? "Enter the root password to read drive SMART diagnostics."
+                                            : "Enter the root password to change the BAT0 charge limit.");
                 }
 
                 return;
@@ -376,7 +455,9 @@ public sealed class DesktopAuthorization : IDisposable
                 FinishCharge(true);
                 return;
             default:
-                _logWarning("Charge-limit authorization or BAT0 threshold write failed or timed out.");
+                _logWarning(request is SmartRequest
+                                    ? "SMART authorization or diagnostics failed or timed out."
+                                    : "Charge-limit authorization or BAT0 threshold write failed or timed out.");
                 FinishCharge(false);
                 return;
         }
@@ -411,26 +492,64 @@ public sealed class DesktopAuthorization : IDisposable
         }
 
         var canceled = request.Token.IsCancellationRequested;
+        if (request is SmartRequest smart)
+        {
+            var output = smart.Completion;
+            string? text = null;
+            try
+            {
+                if (success && !canceled)
+                {
+                    var buffer = new byte[SMART_OUTPUT_CAPACITY];
+                    var length = AuthorizationNative.CopySuOutput(request.Handle, ref buffer[0], (nuint)buffer.Length);
+                    if (length > 0)
+                    {
+                        text = Encoding.UTF8.GetString(buffer, 0, length);
+                    }
+                    else
+                    {
+                        _logWarning("Could not read captured SMART diagnostics from su.");
+                    }
+                }
+            }
+            finally
+            {
+                _request = null;
+                AuthorizationNative.DestroySu(request.Handle);
+                if (canceled)
+                {
+                    output.TrySetCanceled(request.Token);
+                }
+                else
+                {
+                    output.TrySetResult(text);
+                }
+            }
+
+            return;
+        }
+
+        var charge = (ChargeRequest)request;
         // Replaying the lease or succeeding without a password never renews it.
-        if (!canceled && success && request.FreshCredential && request.Submitted)
+        if (!canceled && success && charge.FreshCredential && charge.Submitted)
         {
             _leaseStart = Stopwatch.GetTimestamp();
-            _leaseOwner = request.Session;
+            _leaseOwner = charge.Session;
         }
-        else if ((!success || canceled) && (request.FreshCredential || _leaseOwner == request.Session))
+        else if ((!success || canceled) && (charge.FreshCredential || _leaseOwner == charge.Session))
         {
             ClearLease();
         }
 
         _request = null;
-        AuthorizationNative.DestroySu(request.Handle);
+        AuthorizationNative.DestroySu(charge.Handle);
         if (canceled)
         {
-            request.Completion.TrySetCanceled(request.Token);
+            charge.Completion.TrySetCanceled(charge.Token);
         }
         else
         {
-            request.Completion.TrySetResult(success);
+            charge.Completion.TrySetResult(success);
         }
     }
 

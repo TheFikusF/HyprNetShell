@@ -4,13 +4,13 @@ using HyprNetShell.Application.LockScreen;
 using HyprNetShell.Application.Screenshots;
 using HyprNetShell.Core.Bar;
 using HyprNetShell.Core.Bar.Dialogs;
-using HyprNetShell.Authorization;
 using HyprNetShell.Core.Logging;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Renderers;
 using HyprNetShell.Rendering.Primitives;
 using HyprNetShell.Native.Managed;
+using HyprNetShell.Native.Interop.Authorization;
 
 namespace HyprNetShell.Application;
 

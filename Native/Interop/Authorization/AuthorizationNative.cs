@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace HyprNetShell.Authorization;
+namespace HyprNetShell.Native.Interop.Authorization;
 
 internal static partial class AuthorizationNative
 {
@@ -26,6 +26,14 @@ internal static partial class AuthorizationNative
     [LibraryImport(LIBRARY, EntryPoint = "hypr_su_start", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial nint StartSu(string command);
+
+    [LibraryImport(LIBRARY, EntryPoint = "hypr_su_start_capture", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial nint StartSuCapture(string command);
+
+    [LibraryImport(LIBRARY, EntryPoint = "hypr_su_copy_output")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int CopySuOutput(nint handle, ref byte buffer, nuint capacity);
 
     [LibraryImport(LIBRARY, EntryPoint = "hypr_su_poll")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

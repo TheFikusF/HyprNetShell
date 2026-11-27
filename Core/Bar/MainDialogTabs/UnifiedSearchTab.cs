@@ -23,6 +23,31 @@ internal sealed class UnifiedSearchTab(
     Func<IReadOnlyList<UnifiedSearchTab.WindowResult>>? windows = null,
     Action<string>? focusWindow = null) : IMainDialogTab, IDisposable
 {
+    internal sealed record WindowResult(
+        string Address,
+        string Title,
+        string Description,
+        string ClassName = "",
+        string InitialClassName = "");
+
+    private enum ResultKind
+    {
+        Application,
+        Window,
+        Calculation,
+        BrowserSearch,
+        Link,
+
+    }
+
+    private sealed record SearchResult(
+        ResultKind Kind,
+        string Title,
+        string Description,
+        string Value,
+        DesktopApplication? Application = null,
+        WindowResult? Window = null);
+
     private const int FUZZY_SCORE_CUTOFF = 35;
 
     private const int MAXIMUM_APPLICATION_RESULTS = 8;
@@ -34,7 +59,7 @@ internal sealed class UnifiedSearchTab(
     private readonly TextInputCoordinator.Input _queryInput = inputs.Create(
         "",
         "",
-        "Search apps, type =1+2, or ?web search...",
+        "Search apps, paste a link, type =1+2, or ?web search...",
         4096,
         alwaysActive: true);
 
@@ -47,13 +72,11 @@ internal sealed class UnifiedSearchTab(
     private int _visibleItemCount = BoundedListUi.DEFAULT_VISIBLE_ITEM_COUNT;
     private IReadOnlyList<WindowResult> _windows = [];
 
-    internal sealed record WindowResult(
-            string Address,
-            string Title,
-            string Description,
-            string ClassName = "",
-            string InitialClassName = "");
     internal bool HasQuery => _queryInput.Value.Length > 0;
+    public string Id => "unified-search";
+    public string Title => "Search";
+    public SvgAsset Icon => Icons.Search;
+
     internal void ClearQuery() => inputs.SetValue(_queryInput, "", notify: true);
     internal void Deactivate()
     {
@@ -87,10 +110,6 @@ internal sealed class UnifiedSearchTab(
                 : [inputs.Build(_queryInput)],
         };
     }
-
-    public string Id => "unified-search";
-    public string Title => "Search";
-    public SvgAsset Icon => Icons.Search;
 
     public void Activate()
     {
@@ -151,6 +170,12 @@ internal sealed class UnifiedSearchTab(
             case ResultKind.BrowserSearch:
                 OpenBrowserSearch(result.Value);
                 break;
+            case ResultKind.Link:
+                var privateWindow = result.Application is { } linkRow &&
+                    _applicationResults.SelectedAction(_selectedIndex, linkRow) is not null;
+                _activating = true;
+                _ = LaunchLinkAsync(result.Value, privateWindow);
+                break;
         }
     }
 
@@ -205,13 +230,13 @@ internal sealed class UnifiedSearchTab(
                 {
                     _selectedIndex = index;
                     ActivateSelection();
-                });
+                }, result.Kind == ResultKind.Link ? Icons.Globe : null);
         }
 
         var state = _buttonStates.GetState(index, ThemeManager.Current.Panel).UpdateColor(selected ? ThemeManager.Current.Active : ThemeManager.Current.Panel);
         var fallbackIcon = result.Kind switch {
             ResultKind.Calculation => Icons.Calculator,
-            ResultKind.BrowserSearch => Icons.Globe,
+            ResultKind.BrowserSearch or ResultKind.Link => Icons.Globe,
             _ => Icons.Application,
         };
 
@@ -319,6 +344,22 @@ internal sealed class UnifiedSearchTab(
             return;
         }
 
+        if (UrlLauncher.TryParseLink(query, out var link))
+        {
+            var isWebsite = UrlLauncher.IsWebsite(link);
+            var title = isWebsite ? "Open website" : "Open link";
+            var description = isWebsite ? link.Host : $"Use the default app for {link.Scheme} links";
+            var actionRow = isWebsite
+                ? new DesktopApplication("", title, description, null, "",
+                    [new DesktopAction("private", "Open in a private window", null, "")])
+                : null;
+            _results = [new(ResultKind.Link, title, description, link.AbsoluteUri, actionRow)];
+            _firstIndex = 0;
+            _selectedIndex = 0;
+            _applicationResults.Reset();
+            return;
+        }
+
         var results = new List<SearchResult>();
         var calculatorOnly = query.StartsWith('=');
         var browserOnly = query.StartsWith('?');
@@ -417,6 +458,19 @@ internal sealed class UnifiedSearchTab(
         }
     }
 
+    private async Task LaunchLinkAsync(string url, bool privateWindow)
+    {
+        try
+        {
+            await urlLauncher.TryOpenLinkAsync(url, privateWindow,
+                () => !_disposed && inputs.IsActive(_queryInput));
+        }
+        finally
+        {
+            _activating = false;
+        }
+    }
+
     private static bool LooksLikeCalculation(string query) =>
         query.Length > 0 &&
         query.Any(char.IsDigit) &&
@@ -434,21 +488,4 @@ internal sealed class UnifiedSearchTab(
         inputs.Configure(_queryInput);
         _catalog.Dispose();
     }
-
-    private enum ResultKind
-    {
-        Application,
-        Window,
-        Calculation,
-        BrowserSearch,
-    }
-
-    private sealed record SearchResult(
-        ResultKind Kind,
-        string Title,
-        string Description,
-        string Value,
-        DesktopApplication? Application = null,
-        WindowResult? Window = null);
-
 }

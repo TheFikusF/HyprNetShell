@@ -1,19 +1,20 @@
 using HyprNetShell.GUI;
 using HyprNetShell.Core.Assets;
 using HyprNetShell.Core.Bar.Common;
-using HyprNetShell.Authorization;
 using HyprNetShell.Core.Features.System;
 using HyprNetShell.Core.Models;
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
 using HyprNetShell.Rendering.Primitives;
+using HyprNetShell.Native.Interop.Authorization;
 
 namespace HyprNetShell.Core.Bar.Modules;
 
 internal sealed class BatteryModule : IDrawableModule, IDisposable
 {
     private const string POPUP_ID = "battery_module";
+    private const int BATTERY_TRACK_WIDTH = 74;
 
     private readonly BatteryModuleService _service;
     private readonly DeviceBatteryService _deviceBatteries;
@@ -122,7 +123,7 @@ internal sealed class BatteryModule : IDrawableModule, IDisposable
                 HorizontalAlignment = ItemsAlignment.Start,
                 Children =
                 [
-                    new BoxNode(74, 14 + 5 + 5)
+                    new BoxNode(BATTERY_TRACK_WIDTH, 14 + 5 + 5)
                     {
                         IgnoreLayout = true,
                         Left = (int)ThemeManager.Current.Border.Width,
@@ -132,7 +133,7 @@ internal sealed class BatteryModule : IDrawableModule, IDisposable
                         }
                     },
                     BuildBatteryFill(battery.IsCharging, percentage),
-                    new BoxNode(74, 14 + 5 + 5)
+                    new BoxNode(BATTERY_TRACK_WIDTH, 14 + 5 + 5)
                     {
                         IgnoreLayout = true,
                         Direction = Direction.Horizontal,
@@ -153,6 +154,7 @@ internal sealed class BatteryModule : IDrawableModule, IDisposable
                         IgnoreLayout = true,
                         GradientDirection = GradientDirection.Horizontal,
                     },
+                    ..BuildChargeLimitMarker(battery.ChargeLimit),
                     new GradientBoxNode(_batteryOverlayGradient, 80, 14 + 5 + 5)
                     {
                         IgnoreLayout = true,
@@ -201,9 +203,32 @@ internal sealed class BatteryModule : IDrawableModule, IDisposable
         };
     }
 
+    private static IEnumerable<Node> BuildChargeLimitMarker(int? chargeLimit)
+    {
+        if (chargeLimit is not (> 0 and < 100))
+        {
+            yield break;
+        }
+
+        var dashStyle = new Style { BackgroundColor = Color.FromRgb(255, 255, 255, 0.7f) };
+        yield return new BoxNode(1, 18) {
+            IgnoreLayout = true,
+            Left = (int)ThemeManager.Current.Border.Width + BATTERY_TRACK_WIDTH * chargeLimit.Value / 100,
+            Direction = Direction.Vertical,
+            Style = new Style { Spacing = 2 },
+            Children =
+            [
+                new BoxNode(1, 3) { Style = dashStyle },
+                new BoxNode(1, 3) { Style = dashStyle },
+                new BoxNode(1, 3) { Style = dashStyle },
+                new BoxNode(1, 3) { Style = dashStyle },
+            ],
+        };
+    }
+
     private BoxNode BuildBatteryFill(bool isCharging, float percentage)
     {
-        var width = (int)(74 * (percentage / 100));
+        var width = (int)(BATTERY_TRACK_WIDTH * (percentage / 100));
         var color = _batteryGradient.Evaluate(percentage / 100);
         // if (isCharging)
         // {
@@ -225,7 +250,7 @@ internal sealed class BatteryModule : IDrawableModule, IDisposable
 
     private BoxNode BuildBatteryBlock(bool isCharging, float percentage, int index)
     {
-        const int BLOCK_WIDTH = (74 - (2 * 2) - (2 * 3)) / 4;
+        const int BLOCK_WIDTH = (BATTERY_TRACK_WIDTH - (2 * 2) - (2 * 3)) / 4;
         percentage /= 100;
         var color = _batteryGradient.Evaluate(percentage);
         percentage = MathF.Max(MathF.Min((percentage * 4) - index, 1), 0);

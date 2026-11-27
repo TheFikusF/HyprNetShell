@@ -1,9 +1,9 @@
 using HyprNetShell.Core.Bar.Common;
-using HyprNetShell.Authorization;
 
 using HyprNetShell.GUI.Layout;
 using HyprNetShell.GUI.Layout.Nodes;
 using HyprNetShell.Rendering;
+using HyprNetShell.Native.Interop.Authorization;
 
 namespace HyprNetShell.Core.Bar.Dialogs;
 

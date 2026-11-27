@@ -159,7 +159,8 @@ internal sealed class ApplicationLauncherTab(
         ApplicationSelectionColumn selectedColumn,
         ApplicationButtonState entryState,
         AppIconResolver icons, Action activateDefault,
-        Action<int> activateAction)
+        Action<int> activateAction,
+        SvgAsset? fallbackIcon = null)
     {
         var actionsSelected = selected &&
                               application.Actions.Count > 0 &&
@@ -192,7 +193,7 @@ internal sealed class ApplicationLauncherTab(
                     [
                         iconPath is not null
                             ? new ImageNode(iconPath, 38, 38)
-                            : new ImageNode(Icons.Application, 38, 38, ThemeManager.Current.Text),
+                            : new ImageNode(fallbackIcon ?? Icons.Application, 38, 38, ThemeManager.Current.Text),
                         new BoxNode
                         {
                             Direction = Direction.Vertical,

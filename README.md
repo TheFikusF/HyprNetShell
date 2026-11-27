@@ -44,6 +44,8 @@ HyprNetShell registers a polkit agent for its login session and displays request
 
 On `BAT0`, the charge-limit slider tries a normal sysfs write first. If permission is denied, it can use util-linux `/usr/bin/su` to perform that one write. This requires a usable root password and a `su` PAM stack with one standard hidden password prompt. HyprNetShell does not run as root and does not install a privileged helper. The root password can be reused for up to 60 seconds while the battery popup remains open; closing that popup or starting the built-in lock screen clears it. Startup does not ask for the password. The lock screen keeps its existing PAM policy.
 
+Selecting **Drives** in **System Info** runs one SMART check using `smartctl` (from `smartmontools`). If device access is denied, the same authentication popup asks for the root password and runs a fixed read-only query through `/usr/bin/su`. The password is not cached for SMART, and the widget does not poll or prompt in the background. Select **Disks**, then **Drives** again to refresh. Linux read/write counters are available even if SMART cannot be read.
+
 ## Build and run
 
 You need:
